@@ -185,16 +185,23 @@ const styles = StyleSheet.create({
 ### Component Structure
 
 ```
-components/
-├── ui/                    # Base components
-│   ├── Button.tsx
-│   ├── Card.tsx
-│   ├── Input.tsx
+src/
+├── app/                  # Expo Router routes
+├── components/
+│   ├── ui/                # Base components
+│   │   ├── Button.tsx
+│   │   ├── Card.tsx
+│   │   ├── Input.tsx
+│   │   └── index.ts
+│   ├── onboarding/        # Feature-specific
+│   │   ├── WelcomeScreen.tsx
+│   │   └── DietaryTags.tsx
 │   └── index.ts
-├── onboarding/           # Feature-specific
-│   ├── WelcomeScreen.tsx
-│   └── DietaryTags.tsx
-└── index.ts
+├── contexts/
+├── hooks/
+├── theme/
+├── types/
+└── utils/
 ```
 
 ---
@@ -294,7 +301,7 @@ const ANIMATION = {
 | Utils      | kebab-case                | `format-date.ts`     |
 | Types      | kebab-case                | `types/meal.ts`      |
 | Constants  | SCREAMING_SNAKE (in file) | `API_URL`            |
-| Folders    | kebab-case                | `components/ui/`     |
+| Folders    | kebab-case                | `src/components/ui/` |
 
 ---
 

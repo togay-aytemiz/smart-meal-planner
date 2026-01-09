@@ -83,13 +83,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
             throw new Error('User is not authenticated');
         }
 
+        const sanitizedData = removeUndefined(data);
+
         await firestore()
             .collection('Users')
             .doc(firebaseUser.uid)
             .set(
                 {
                     onboardingCompleted: true,
-                    onboarding: data,
+                    onboarding: sanitizedData,
                     updatedAt: firestore.FieldValue.serverTimestamp(),
                     createdAt: firestore.FieldValue.serverTimestamp(),
                 },
@@ -104,6 +106,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
             {children}
         </UserContext.Provider>
     );
+}
+
+function removeUndefined<T>(value: T): T {
+    if (Array.isArray(value)) {
+        return value.map((item) => removeUndefined(item)) as T;
+    }
+
+    if (value && typeof value === 'object') {
+        const entries = Object.entries(value as Record<string, unknown>)
+            .filter(([, entryValue]) => entryValue !== undefined)
+            .map(([key, entryValue]) => [key, removeUndefined(entryValue)]);
+        return Object.fromEntries(entries) as T;
+    }
+
+    return value;
 }
 
 export function useUser() {

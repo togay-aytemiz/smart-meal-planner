@@ -16,11 +16,12 @@ export interface HouseholdMember {
 }
 
 export interface RoutineDay {
-    type: 'office' | 'remote' | 'gym' | 'school' | 'home' | 'off';
+    type: 'office' | 'remote' | 'gym' | 'school' | 'off';
     gymTime?: 'morning' | 'afternoon' | 'evening' | 'none';
     officeMealToGo?: 'yes' | 'no';
     officeBreakfastAtHome?: 'yes' | 'no';
     schoolBreakfast?: 'yes' | 'no';
+    remoteMeals?: ('breakfast' | 'lunch' | 'dinner')[];
 }
 
 export interface WeeklyRoutine {
@@ -94,8 +95,8 @@ const initialState: OnboardingState = {
             wednesday: { type: 'office', gymTime: 'none' },
             thursday: { type: 'office', gymTime: 'none' },
             friday: { type: 'office', gymTime: 'none' },
-            saturday: { type: 'home', gymTime: 'none' },
-            sunday: { type: 'home', gymTime: 'none' },
+            saturday: { type: 'remote', gymTime: 'none' },
+            sunday: { type: 'remote', gymTime: 'none' },
         },
     },
 };

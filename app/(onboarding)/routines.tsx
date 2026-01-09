@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, Platform, UIManager, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, Platform, UIManager, Animated, Easing, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef } from 'react';
@@ -19,12 +19,15 @@ const DAYS = [
     { key: 'sunday', label: 'Paz' },
 ] as const;
 
+const { width } = Dimensions.get('window');
+const ROUTINE_CARD_SIZE = Math.floor((width - (spacing.lg * 2) - (spacing.sm * 2)) / 3) - spacing.sm;
+const DETAIL_SECTION_GAP = spacing.md;
+
 const ROUTINE_TYPES = [
     { key: 'office', label: 'Ofis', emoji: '🏢' },
-    { key: 'remote', label: 'Evden', emoji: '🏠' },
+    { key: 'remote', label: 'Ev', emoji: '🏠' },
     { key: 'gym', label: 'Spor', emoji: '💪' },
     { key: 'school', label: 'Okul', emoji: '📚' },
-    { key: 'home', label: 'Ev', emoji: '🏡' },
     { key: 'off', label: 'Tatil', emoji: '🌴' },
 ] as const;
 
@@ -36,8 +39,8 @@ const DEFAULT_ROUTINE: WeeklyRoutine = {
     wednesday: { type: 'office', gymTime: 'none' },
     thursday: { type: 'office', gymTime: 'none' },
     friday: { type: 'office', gymTime: 'none' },
-    saturday: { type: 'home', gymTime: 'none' },
-    sunday: { type: 'home', gymTime: 'none' },
+    saturday: { type: 'remote', gymTime: 'none' },
+    sunday: { type: 'remote', gymTime: 'none' },
 };
 
 export default function RoutinesScreen() {
@@ -100,16 +103,17 @@ export default function RoutinesScreen() {
     const updateDayRoutine = (type: RoutineDay['type']) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         animateLayout();
+        const currentDay = currentRoutine[selectedDay];
+        const nextDay: RoutineDay = {
+            ...currentDay,
+            type,
+        };
+        if (type === 'gym' && !nextDay.gymTime) {
+            nextDay.gymTime = 'none';
+        }
         const newRoutine = {
             ...currentRoutine,
-            [selectedDay]: {
-                ...currentRoutine[selectedDay],
-                type,
-                gymTime: type === 'gym' ? currentRoutine[selectedDay].gymTime ?? 'none' : currentRoutine[selectedDay].gymTime,
-                officeMealToGo: type === 'office' ? currentRoutine[selectedDay].officeMealToGo : currentRoutine[selectedDay].officeMealToGo,
-                officeBreakfastAtHome: type === 'office' ? currentRoutine[selectedDay].officeBreakfastAtHome : currentRoutine[selectedDay].officeBreakfastAtHome,
-                schoolBreakfast: type === 'school' ? currentRoutine[selectedDay].schoolBreakfast : currentRoutine[selectedDay].schoolBreakfast,
-            },
+            [selectedDay]: nextDay,
         };
         updateMemberRoutine(newRoutine);
     };
@@ -121,6 +125,14 @@ export default function RoutinesScreen() {
             [selectedDay]: { ...currentRoutine[selectedDay], ...details },
         };
         updateMemberRoutine(newRoutine);
+    };
+
+    const toggleRemoteMeal = (meal: 'breakfast' | 'lunch' | 'dinner') => {
+        const currentMeals = currentRoutine[selectedDay].remoteMeals ?? [];
+        const nextMeals = currentMeals.includes(meal)
+            ? currentMeals.filter(item => item !== meal)
+            : [...currentMeals, meal];
+        updateDayDetails({ remoteMeals: nextMeals });
     };
 
     const handleContinue = () => {
@@ -256,82 +268,140 @@ export default function RoutinesScreen() {
                                     ]}
                                     onPress={() => updateDayRoutine(routine.key)}
                                 >
-                                    <Text style={styles.routineEmoji}>{routine.emoji}</Text>
-                                    <Text style={[
-                                        styles.routineLabel,
-                                        currentRoutine[selectedDay].type === routine.key && styles.routineLabelSelected,
-                                    ]}>
-                                        {routine.label}
-                                    </Text>
+                                    <View style={styles.routineContent}>
+                                        <Text style={styles.routineEmoji}>{routine.emoji}</Text>
+                                        <Text style={[
+                                            styles.routineLabel,
+                                            currentRoutine[selectedDay].type === routine.key && styles.routineLabelSelected,
+                                        ]}>
+                                            {routine.label}
+                                        </Text>
+                                    </View>
                                 </TouchableOpacity>
                             ))}
                         </View>
                         {currentRoutine[selectedDay].type === 'gym' && (
                             <View style={styles.detailSection}>
-                                <Text style={styles.detailTitle}>Spor hangi saat?</Text>
-                                <View style={styles.tagRow}>
-                                    <SelectableTag
-                                        label="Sabah"
-                                        selected={currentRoutine[selectedDay].gymTime === 'morning'}
-                                        onPress={() => updateDayDetails({ gymTime: 'morning' })}
-                                    />
-                                    <SelectableTag
-                                        label="Öğleden sonra"
-                                        selected={currentRoutine[selectedDay].gymTime === 'afternoon'}
-                                        onPress={() => updateDayDetails({ gymTime: 'afternoon' })}
-                                    />
-                                    <SelectableTag
-                                        label="Akşam"
-                                        selected={currentRoutine[selectedDay].gymTime === 'evening'}
-                                        onPress={() => updateDayDetails({ gymTime: 'evening' })}
-                                    />
+                                <View style={styles.detailItemLast}>
+                                    <Text style={styles.detailTitle}>Spor hangi saat?</Text>
+                                    <View style={styles.tagRow}>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Sabah"
+                                                selected={currentRoutine[selectedDay].gymTime === 'morning'}
+                                                onPress={() => updateDayDetails({ gymTime: 'morning' })}
+                                            />
+                                        </View>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Öğleden sonra"
+                                                selected={currentRoutine[selectedDay].gymTime === 'afternoon'}
+                                                onPress={() => updateDayDetails({ gymTime: 'afternoon' })}
+                                            />
+                                        </View>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Akşam"
+                                                selected={currentRoutine[selectedDay].gymTime === 'evening'}
+                                                onPress={() => updateDayDetails({ gymTime: 'evening' })}
+                                            />
+                                        </View>
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+                        {currentRoutine[selectedDay].type === 'remote' && (
+                            <View style={styles.detailSection}>
+                                <View style={styles.detailItemLast}>
+                                    <Text style={styles.detailTitle}>Evde hangi öğünleri yiyorsun?</Text>
+                                    <View style={styles.tagRow}>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Sabah"
+                                                selected={currentRoutine[selectedDay].remoteMeals?.includes('breakfast') ?? false}
+                                                onPress={() => toggleRemoteMeal('breakfast')}
+                                            />
+                                        </View>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Öğle"
+                                                selected={currentRoutine[selectedDay].remoteMeals?.includes('lunch') ?? false}
+                                                onPress={() => toggleRemoteMeal('lunch')}
+                                            />
+                                        </View>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Akşam"
+                                                selected={currentRoutine[selectedDay].remoteMeals?.includes('dinner') ?? false}
+                                                onPress={() => toggleRemoteMeal('dinner')}
+                                            />
+                                        </View>
+                                    </View>
                                 </View>
                             </View>
                         )}
                         {currentRoutine[selectedDay].type === 'office' && (
                             <View style={styles.detailSection}>
-                                <Text style={styles.detailTitle}>Ofise yemek götürüyor musun?</Text>
-                                <View style={styles.tagRow}>
-                                    <SelectableTag
-                                        label="Evet"
-                                        selected={currentRoutine[selectedDay].officeMealToGo === 'yes'}
-                                        onPress={() => updateDayDetails({ officeMealToGo: 'yes' })}
-                                    />
-                                    <SelectableTag
-                                        label="Hayır"
-                                        selected={currentRoutine[selectedDay].officeMealToGo === 'no'}
-                                        onPress={() => updateDayDetails({ officeMealToGo: 'no' })}
-                                    />
+                                <View style={styles.detailItem}>
+                                    <Text style={styles.detailTitle}>Ofise yemek götürüyor musun?</Text>
+                                    <View style={styles.tagRow}>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Evet"
+                                                selected={currentRoutine[selectedDay].officeMealToGo === 'yes'}
+                                                onPress={() => updateDayDetails({ officeMealToGo: 'yes' })}
+                                            />
+                                        </View>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Hayır"
+                                                selected={currentRoutine[selectedDay].officeMealToGo === 'no'}
+                                                onPress={() => updateDayDetails({ officeMealToGo: 'no' })}
+                                            />
+                                        </View>
+                                    </View>
                                 </View>
-                                <Text style={styles.detailTitle}>Kahvaltı evde mi?</Text>
-                                <View style={styles.tagRow}>
-                                    <SelectableTag
-                                        label="Evet"
-                                        selected={currentRoutine[selectedDay].officeBreakfastAtHome === 'yes'}
-                                        onPress={() => updateDayDetails({ officeBreakfastAtHome: 'yes' })}
-                                    />
-                                    <SelectableTag
-                                        label="Hayır"
-                                        selected={currentRoutine[selectedDay].officeBreakfastAtHome === 'no'}
-                                        onPress={() => updateDayDetails({ officeBreakfastAtHome: 'no' })}
-                                    />
+                                <View style={styles.detailItemLast}>
+                                    <Text style={styles.detailTitle}>Kahvaltı evde mi?</Text>
+                                    <View style={styles.tagRow}>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Evet"
+                                                selected={currentRoutine[selectedDay].officeBreakfastAtHome === 'yes'}
+                                                onPress={() => updateDayDetails({ officeBreakfastAtHome: 'yes' })}
+                                            />
+                                        </View>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Hayır"
+                                                selected={currentRoutine[selectedDay].officeBreakfastAtHome === 'no'}
+                                                onPress={() => updateDayDetails({ officeBreakfastAtHome: 'no' })}
+                                            />
+                                        </View>
+                                    </View>
                                 </View>
                             </View>
                         )}
                         {currentRoutine[selectedDay].type === 'school' && (
                             <View style={styles.detailSection}>
-                                <Text style={styles.detailTitle}>Sabah kahvaltısı var mı?</Text>
-                                <View style={styles.tagRow}>
-                                    <SelectableTag
-                                        label="Evet"
-                                        selected={currentRoutine[selectedDay].schoolBreakfast === 'yes'}
-                                        onPress={() => updateDayDetails({ schoolBreakfast: 'yes' })}
-                                    />
-                                    <SelectableTag
-                                        label="Hayır"
-                                        selected={currentRoutine[selectedDay].schoolBreakfast === 'no'}
-                                        onPress={() => updateDayDetails({ schoolBreakfast: 'no' })}
-                                    />
+                                <View style={styles.detailItemLast}>
+                                    <Text style={styles.detailTitle}>Sabah kahvaltısı var mı?</Text>
+                                    <View style={styles.tagRow}>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Evet"
+                                                selected={currentRoutine[selectedDay].schoolBreakfast === 'yes'}
+                                                onPress={() => updateDayDetails({ schoolBreakfast: 'yes' })}
+                                            />
+                                        </View>
+                                        <View style={styles.tagItem}>
+                                            <SelectableTag
+                                                label="Hayır"
+                                                selected={currentRoutine[selectedDay].schoolBreakfast === 'no'}
+                                                onPress={() => updateDayDetails({ schoolBreakfast: 'no' })}
+                                            />
+                                        </View>
+                                    </View>
                                 </View>
                             </View>
                         )}
@@ -364,7 +434,7 @@ const styles = StyleSheet.create({
     title: {
         ...typography.h2,
         color: colors.textPrimary,
-        marginBottom: spacing.xs,
+        marginBottom: 2,
     },
     subtitle: {
         ...typography.body,
@@ -449,17 +519,26 @@ const styles = StyleSheet.create({
     sectionLabel: {
         ...typography.label,
         color: colors.textPrimary,
-        marginBottom: spacing.sm,
+        marginBottom: 0,
     },
     routineGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: spacing.sm,
-        marginBottom: spacing.xl,
+        marginBottom: DETAIL_SECTION_GAP,
     },
     detailSection: {
-        marginBottom: spacing.lg,
-        gap: spacing.sm,
+        marginTop: 0,
+        marginBottom: 0,
+        gap: 0,
+    },
+    detailItem: {
+        marginBottom: DETAIL_SECTION_GAP,
+        gap: spacing.xs,
+    },
+    detailItemLast: {
+        marginBottom: 0,
+        gap: spacing.xs,
     },
     detailTitle: {
         ...typography.label,
@@ -468,17 +547,26 @@ const styles = StyleSheet.create({
     tagRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: spacing.sm,
+    },
+    tagItem: {
+        marginRight: spacing.xs,
+        marginBottom: spacing.xs,
     },
     routineOption: {
-        width: '31%',
-        aspectRatio: 1,
+        flexBasis: '31%',
+        flexGrow: 1,
+        height: ROUTINE_CARD_SIZE,
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: radius.lg,
         backgroundColor: colors.surface,
         borderWidth: 1.5,
         borderColor: colors.border,
+    },
+    routineContent: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: 1,
     },
     routineOptionSelected: {
         borderColor: colors.primary,
@@ -526,7 +614,8 @@ const styles = StyleSheet.create({
     },
     // Adding container for visual separation if needed
     routineSection: {
-        marginTop: spacing.sm,
+        marginTop: 0,
+        gap: spacing.xs,
     },
     daySelectorWrapper: {
         position: 'relative',

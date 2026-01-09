@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUser } from './user-context';
 
 // Types
 export interface OnboardingProfile {
@@ -175,6 +176,7 @@ export const TOTAL_STEPS = 16;
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
     const [state, dispatch] = useReducer(onboardingReducer, initialState);
+    const { completeOnboarding } = useUser();
 
     // Load saved state on mount
     useEffect(() => {
@@ -217,6 +219,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     };
 
     const finishOnboarding = async () => {
+        try {
+            await completeOnboarding(state.data);
+        } catch (error) {
+            console.error('Failed to save onboarding data:', error);
+        }
         dispatch({ type: 'COMPLETE_ONBOARDING' });
     };
 

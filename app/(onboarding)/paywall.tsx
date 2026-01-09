@@ -41,7 +41,6 @@ export default function PaywallScreen() {
                 <View style={styles.header}>
                     <Text style={styles.title}>En iyi haline{'\n'}merhaba de.</Text>
                     <Text style={styles.subtitle}>
-                        Premium üyeler hedeflerine %65 daha hızlı ulaşıyor.
                     </Text>
                 </View>
 
@@ -159,7 +158,7 @@ const styles = StyleSheet.create({
     },
     header: {
         marginTop: spacing.sm,
-        marginBottom: spacing.xl,
+        marginBottom: spacing.sm,
     },
     title: {
         ...typography.h1,

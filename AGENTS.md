@@ -26,6 +26,9 @@ Her yanıt şu formatta olmalı:
 - Welcome screen UI tamamlandı
 - Navigation flow ayarlandı
 
+### Önerilen Sonraki Adımlar
+- Dietary requirements ekranına geçilebilir
+- Animasyonlar eklenebilir
 
 ### Commit
 `feat(onboarding): add welcome screen with value proposition`

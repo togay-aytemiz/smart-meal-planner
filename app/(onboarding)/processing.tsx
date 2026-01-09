@@ -90,19 +90,20 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
-        justifyContent: 'center',
+        // Removed justifyContent: 'center' to allow consistent top spacing
         alignItems: 'center',
     },
     content: {
         alignItems: 'center',
         paddingHorizontal: spacing.xl,
+        marginTop: '40%', // Push down slightly but not vertically centered
     },
     iconContainer: {
         width: 120,
         height: 120,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: spacing.xl,
+        marginBottom: spacing.md,
     },
     centerIcon: {
         position: 'absolute',

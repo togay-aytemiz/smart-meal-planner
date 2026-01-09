@@ -180,7 +180,19 @@ Inspired by Ollie.ai's clean interface:
 - Amazon Fresh integration
 - Local grocery delivery
 
-### 7. Notifications & Reminders
+### 7. Inventory Management (New)
+183: 
+184: #### Photo Scanning
+185: - Capture photos of fridge or pantry shelves
+186: - AI extraction of ingredients (Image Processing)
+187: - Auto-population of digital pantry
+188: 
+189: #### Digital Pantry
+190: - Track available ingredients
+191: - Prioritize recipes using existing stock (Waste Reduction)
+192: - Manual add/edit capabilities
+193: 
+194: ### 8. Notifications & Reminders
 
 #### Meal Planning
 - Weekly planning reminder (Sunday evening default)

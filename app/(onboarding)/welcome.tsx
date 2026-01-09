@@ -27,6 +27,9 @@ export default function WelcomeScreen() {
 
     useFocusEffect(
         useCallback(() => {
+            // Ensure step is 1 so header hides
+            dispatch({ type: 'SET_STEP', payload: 1 });
+
             // Reset values
             fadeAnim.setValue(0);
             slideAnim.setValue(30);

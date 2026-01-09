@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
         paddingBottom: 120,
     },
     header: {
-        marginTop: spacing.xl,
+        marginTop: spacing.sm,
         marginBottom: spacing.xl,
     },
     title: {

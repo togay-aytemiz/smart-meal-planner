@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     },
     header: {
         marginBottom: spacing.xl,
-        marginTop: spacing.xl,
+        marginTop: spacing.sm,
     },
     title: {
         ...typography.h2,

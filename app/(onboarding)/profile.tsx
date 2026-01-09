@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         paddingHorizontal: spacing.lg,
-        paddingTop: spacing.xl,
+        paddingTop: spacing.sm,
     },
     header: {
         marginBottom: spacing.xl,

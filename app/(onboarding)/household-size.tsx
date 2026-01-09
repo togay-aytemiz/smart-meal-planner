@@ -33,7 +33,15 @@ export default function HouseholdSizeScreen() {
         dispatch({ type: 'SET_STEP', payload: 4 });
 
         if (count === 1) {
-            // Skip member roles for single person
+            // Create default member for single person
+            const defaultMember = {
+                id: '1',
+                name: state.data.profile?.name || 'Ben',
+                role: 'self',
+                routines: undefined // Will be init by Routines screen
+            };
+            // @ts-ignore
+            dispatch({ type: 'SET_MEMBERS', payload: [defaultMember] });
             router.push('/(onboarding)/routines');
         } else {
             router.push('/(onboarding)/member-roles');
@@ -131,7 +139,7 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         paddingHorizontal: spacing.lg,
-        paddingTop: spacing.xl,
+        paddingTop: spacing.sm,
     },
     header: {
         marginBottom: spacing.xxl,

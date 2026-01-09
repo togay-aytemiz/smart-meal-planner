@@ -30,8 +30,8 @@ function OnboardingHeader() {
         }
     }, [state.currentStep]);
 
-    // Hide header on welcome screen
-    if (state.currentStep === 1) {
+    // Hide header on welcome screen (1) and scan screen (15)
+    if (state.currentStep === 1 || state.currentStep === 15) {
         return null;
     }
 

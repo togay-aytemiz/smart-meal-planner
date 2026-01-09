@@ -57,12 +57,6 @@ export default function DietaryScreen() {
         router.push('/(onboarding)/cuisine');
     };
 
-    const handleSkip = () => {
-        dispatch({ type: 'SET_DIETARY', payload: { restrictions: [], allergies: [] } });
-        dispatch({ type: 'SET_STEP', payload: 7 });
-        router.push('/(onboarding)/cuisine');
-    };
-
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -121,13 +115,6 @@ export default function DietaryScreen() {
                     fullWidth
                     size="large"
                 />
-                <Button
-                    title="Şimdilik geç"
-                    onPress={handleSkip}
-                    variant="ghost"
-                    fullWidth
-                    size="medium"
-                />
             </View>
         </SafeAreaView>
     );
@@ -143,7 +130,7 @@ const styles = StyleSheet.create({
     },
     content: {
         paddingHorizontal: spacing.lg,
-        paddingTop: spacing.xl,
+        paddingTop: spacing.sm,
         paddingBottom: spacing.lg,
     },
     header: {

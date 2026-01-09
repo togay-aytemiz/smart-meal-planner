@@ -29,23 +29,23 @@ export default function ReadyScreen() {
             // 1. Success Circle Pop
             Animated.spring(scaleAnim, {
                 toValue: 1,
-                tension: 50,
-                friction: 7,
+                tension: 80, // Faster spring
+                friction: 6,
                 useNativeDriver: true,
             }),
             // 2. Text Fade In
             Animated.timing(fadeAnim, {
                 toValue: 1,
-                duration: 400,
+                duration: 300, // Faster Fade
                 useNativeDriver: true,
             }),
-            // 3. Staggered Cards
-            Animated.stagger(150, [
-                Animated.timing(card1Anim, { toValue: 1, duration: 500, useNativeDriver: true }),
-                Animated.timing(card2Anim, { toValue: 1, duration: 500, useNativeDriver: true }),
-                Animated.timing(card3Anim, { toValue: 1, duration: 500, useNativeDriver: true }),
-                Animated.timing(card4Anim, { toValue: 1, duration: 500, useNativeDriver: true }),
-                Animated.timing(card5Anim, { toValue: 1, duration: 500, useNativeDriver: true }),
+            // 3. Staggered Cards (Faster)
+            Animated.stagger(50, [ // 150ms -> 50ms stagger
+                Animated.timing(card1Anim, { toValue: 1, duration: 300, useNativeDriver: true }),
+                Animated.timing(card2Anim, { toValue: 1, duration: 300, useNativeDriver: true }),
+                Animated.timing(card3Anim, { toValue: 1, duration: 300, useNativeDriver: true }),
+                Animated.timing(card4Anim, { toValue: 1, duration: 300, useNativeDriver: true }),
+                Animated.timing(card5Anim, { toValue: 1, duration: 300, useNativeDriver: true }),
             ])
         ]).start();
     }, []);
@@ -195,8 +195,8 @@ const styles = StyleSheet.create({
     },
     successContainer: {
         alignItems: 'center',
-        marginBottom: spacing.xl,
-        marginTop: spacing.md,
+        marginBottom: spacing.lg,
+        marginTop: spacing.sm, // Reduced from md
     },
     successCircle: {
         width: 120,

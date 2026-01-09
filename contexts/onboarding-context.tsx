@@ -146,6 +146,7 @@ interface OnboardingContextType {
     dispatch: React.Dispatch<OnboardingAction>;
     nextStep: () => void;
     prevStep: () => void;
+    finishOnboarding: () => Promise<void>;
     totalSteps: number;
 }
 
@@ -164,8 +165,8 @@ const OnboardingContext = createContext<OnboardingContextType | null>(null);
 // 11. Analysis (Reveal)
 // 12. Paywall
 // 13. Auth
-// 14. Kickstart
-export const TOTAL_STEPS = 14;
+// 14: Kickstart, 15: Scan, 16: Inventory
+export const TOTAL_STEPS = 16;
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
     const [state, dispatch] = useReducer(onboardingReducer, initialState);
@@ -210,8 +211,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const finishOnboarding = async () => {
+        dispatch({ type: 'COMPLETE_ONBOARDING' });
+    };
+
     return (
-        <OnboardingContext.Provider value={{ state, dispatch, nextStep, prevStep, totalSteps: TOTAL_STEPS }}>
+        <OnboardingContext.Provider value={{ state, dispatch, nextStep, prevStep, finishOnboarding, totalSteps: TOTAL_STEPS }}>
             {children}
         </OnboardingContext.Provider>
     );

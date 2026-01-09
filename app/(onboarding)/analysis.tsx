@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     header: {
         alignItems: 'center',
         marginBottom: spacing.xl,
-        marginTop: spacing.xl,
+        marginTop: spacing.sm,
     },
     title: {
         ...typography.h2,

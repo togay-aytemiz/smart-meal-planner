@@ -1,5 +1,5 @@
 import { TextInput, View, Text, StyleSheet, TextInputProps, Animated } from 'react-native';
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
@@ -10,7 +10,10 @@ interface InputProps extends TextInputProps {
     helperText?: string;
 }
 
-export default function Input({ label, error, helperText, style, ...props }: InputProps) {
+const InputComponent = (
+    { label, error, helperText, style, ...props }: InputProps,
+    ref: React.Ref<TextInput>
+) => {
     const [isFocused, setIsFocused] = useState(false);
     const borderAnim = useRef(new Animated.Value(0)).current;
     const shadowAnim = useRef(new Animated.Value(0)).current;
@@ -51,6 +54,7 @@ export default function Input({ label, error, helperText, style, ...props }: Inp
                 ]}
             >
                 <TextInput
+                    ref={ref}
                     style={[styles.input, style]}
                     placeholderTextColor={colors.textMuted}
                     onFocus={() => setIsFocused(true)}
@@ -63,7 +67,12 @@ export default function Input({ label, error, helperText, style, ...props }: Inp
             {helperText && !error && <Text style={styles.helper}>{helperText}</Text>}
         </View>
     );
-}
+};
+
+const Input = React.forwardRef(InputComponent);
+Input.displayName = 'Input';
+
+export default Input;
 
 const styles = StyleSheet.create({
     container: {

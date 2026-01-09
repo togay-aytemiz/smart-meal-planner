@@ -57,12 +57,23 @@ export default function KickstartScreen() {
                     size="large"
                 />
                 <Button
+                    title="Manuel Ekle"
+                    onPress={() => {
+                        nextStep();
+                        router.push({ pathname: '/(onboarding)/inventory', params: { mode: 'manual' } });
+                    }}
+                    variant="secondary"
+                    fullWidth
+                    size="medium"
+                    style={{ marginTop: spacing.sm }}
+                />
+                <Button
                     title="Daha Sonra"
                     onPress={handleSkip}
                     variant="ghost"
                     fullWidth
                     size="medium"
-                    style={{ marginTop: spacing.sm }}
+                    style={{ marginTop: spacing.xs }}
                 />
             </View>
         </SafeAreaView>

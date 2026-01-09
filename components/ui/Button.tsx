@@ -15,6 +15,7 @@ interface ButtonProps {
     loading?: boolean;
     style?: ViewStyle;
     textStyle?: TextStyle;
+    icon?: React.ReactNode;
 }
 
 export default function Button({
@@ -27,6 +28,7 @@ export default function Button({
     loading = false,
     style,
     textStyle,
+    icon,
 }: ButtonProps) {
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -85,7 +87,10 @@ export default function Button({
                 {loading ? (
                     <ActivityIndicator color={variant === 'primary' ? colors.textInverse : colors.primary} />
                 ) : (
-                    <Text style={textStyles}>{title}</Text>
+                    <>
+                        {icon}
+                        <Text style={textStyles}>{title}</Text>
+                    </>
                 )}
             </TouchableOpacity>
         </Animated.View>
@@ -94,9 +99,11 @@ export default function Button({
 
 const styles = StyleSheet.create({
     base: {
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: radius.full,
+        gap: spacing.xs,
     },
 
     // Variants

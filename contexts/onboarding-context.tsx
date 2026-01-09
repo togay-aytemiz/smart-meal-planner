@@ -17,7 +17,10 @@ export interface HouseholdMember {
 
 export interface RoutineDay {
     type: 'office' | 'remote' | 'gym' | 'school' | 'home' | 'off';
-    gymTime?: 'morning' | 'evening' | 'none';
+    gymTime?: 'morning' | 'afternoon' | 'evening' | 'none';
+    officeMealToGo?: 'yes' | 'no';
+    officeBreakfastAtHome?: 'yes' | 'no';
+    schoolBreakfast?: 'yes' | 'no';
 }
 
 export interface WeeklyRoutine {

@@ -5,19 +5,25 @@
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "./*"
+        "src/*"
       ],
       "@/components/*": [
-        "components/*"
+        "src/components/*"
       ],
       "@/hooks/*": [
-        "hooks/*"
+        "src/hooks/*"
       ],
       "@/utils/*": [
-        "utils/*"
+        "src/utils/*"
       ],
       "@/types/*": [
-        "types/*"
+        "src/types/*"
+      ],
+      "@/contexts/*": [
+        "src/contexts/*"
+      ],
+      "@/theme/*": [
+        "src/theme/*"
       ]
     }
   },

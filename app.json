@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "studio.agent.smart-meal-planner",
+      "bundleIdentifier": "studio.agent.smart-meal-planner.ios",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
@@ -25,14 +25,20 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.smartmealplanner.app",
+      "googleServicesFile": "./google-services.json",
+      "package": "studio.agent.smart_meal_planner.android"
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "root": "src/app"
+        }
+      ],
       "@react-native-firebase/app"
     ],
     "experiments": {

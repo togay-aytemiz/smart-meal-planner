@@ -134,6 +134,12 @@ export const radius = {
 };
 ```
 
+### Layout Rules
+- **Header Spacing**: Navigasyon barı olan sayfalarda `paddingTop` ekleme. Layout zaten boşluk bırakıyor.
+- **Content Padding**: `paddingHorizontal: spacing.lg` standarttır.
+- **Top Margin**: Sayfa başlıklarında `marginTop` kullanma, `spacing.sm` veya 0 yeterli.
+
+
 ---
 
 ## Component Rules
@@ -256,6 +262,7 @@ export function useMealPlan() {
 - Jarring transitions
 - Multiple competing CTAs
 - Placeholder images - Her zaman gerçek veya generated
+- **Emoji kullanımı** - Welcome ekranında ve genel UI tasarımında emoji yerine profesyonel ikonlar (vector-icons) kullanılmalı.
 
 ### Animation Guidelines
 

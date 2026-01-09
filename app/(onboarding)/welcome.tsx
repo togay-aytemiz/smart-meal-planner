@@ -1,67 +1,188 @@
-import { View, Text, StyleSheet, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, Animated, Easing, Dimensions, ScrollView } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCallback, useRef } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { spacing } from '../../theme/spacing';
+import { spacing, radius } from '../../theme/spacing';
+import * as Haptics from 'expo-haptics';
+
+const { width, height } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
     const router = useRouter();
     const { dispatch } = useOnboarding();
 
+    // Animations
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const slideAnim = useRef(new Animated.Value(30)).current;
+
+    // Staggered entry for list items
+    const item1Anim = useRef(new Animated.Value(0)).current;
+    const item2Anim = useRef(new Animated.Value(0)).current;
+    const item3Anim = useRef(new Animated.Value(0)).current;
+
+    useFocusEffect(
+        useCallback(() => {
+            // Reset values
+            fadeAnim.setValue(0);
+            slideAnim.setValue(30);
+            item1Anim.setValue(0);
+            item2Anim.setValue(0);
+            item3Anim.setValue(0);
+
+            // Main content entry
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 800,
+                    useNativeDriver: true,
+                    easing: Easing.out(Easing.cubic),
+                }),
+                Animated.timing(slideAnim, {
+                    toValue: 0,
+                    duration: 800,
+                    useNativeDriver: true,
+                    easing: Easing.out(Easing.cubic),
+                }),
+            ]).start();
+
+            // Staggered items
+            Animated.stagger(200, [
+                Animated.timing(item1Anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+                Animated.timing(item2Anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+                Animated.timing(item3Anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+            ]).start();
+        }, [])
+    );
+
     const handleStart = () => {
-        dispatch({ type: 'SET_STEP', payload: 2 });
-        router.push('/(onboarding)/profile');
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        // Exit animation similar to reference "transitional" feel
+        Animated.parallel([
+            Animated.timing(fadeAnim, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true,
+            }),
+            Animated.timing(slideAnim, {
+                toValue: -20, // Slide up slightly on exit
+                duration: 300,
+                useNativeDriver: true,
+            }),
+        ]).start(() => {
+            dispatch({ type: 'SET_STEP', payload: 2 });
+            router.push('/(onboarding)/profile');
+        });
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
-                {/* Hero Illustration Placeholder */}
-                <View style={styles.illustrationContainer}>
-                    <View style={styles.illustration}>
-                        <Text style={styles.illustrationEmoji}>🥗</Text>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+            >
+                <Animated.View
+                    style={[
+                        styles.header,
+                        {
+                            opacity: fadeAnim,
+                            transform: [{ translateY: slideAnim }]
+                        }
+                    ]}
+                >
+                    {/* Hero Icon */}
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="chef-hat" size={48} color={colors.primary} />
                     </View>
-                </View>
 
-                {/* Value Proposition */}
-                <View style={styles.textContainer}>
                     <Text style={styles.title}>Akıllı Yemek Planlama</Text>
                     <Text style={styles.subtitle}>
-                        Rutinlerinize göre kişiselleştirilmiş haftalık yemek planları ile
-                        "Akşam ne yemek yapsam?" stresinden kurtulun.
+                        "Akşam ne pişirsem?" derdine son verin, sağlıklı yaşama adım atın.
                     </Text>
-                </View>
 
-                {/* Features */}
-                <View style={styles.features}>
-                    <FeatureItem emoji="📅" text="Rutinlerinize göre planlama" />
-                    <FeatureItem emoji="👨‍👩‍👧‍👦" text="Tüm aile için özelleştirme" />
-                    <FeatureItem emoji="🤖" text="Yapay zeka destekli öneriler" />
-                </View>
-            </View>
+                    {/* Social Proof */}
+                    <View style={styles.socialProofContainer}>
+                        <View style={styles.avatarStack}>
+                            {[1, 2, 3].map((_, i) => (
+                                <View key={i} style={[styles.avatarStats, { zIndex: 3 - i, marginLeft: i > 0 ? -12 : 0 }]}>
+                                    <MaterialCommunityIcons name="account" size={16} color={colors.textSecondary} />
+                                </View>
+                            ))}
+                        </View>
+                        <View style={styles.proofTextContainer}>
+                            <Text style={styles.proofTitle}>50,000+ Aile</Text>
+                            <Text style={styles.proofSubtitle}>bu yolculuğa katıldı</Text>
+                        </View>
+                    </View>
+                </Animated.View>
 
-            {/* CTA */}
-            <View style={styles.footer}>
+                {/* Feature List */}
+                <View style={styles.featuresList}>
+                    <FeatureRow
+                        anim={item1Anim}
+                        icon="calendar-clock"
+                        title="Rutinlerinize Göre Plan"
+                        desc="Ofis, ev veya tatil günlerinize göre otomatik ayarlanan dinamik listeler."
+                    />
+                    <FeatureRow
+                        anim={item2Anim}
+                        icon="account-group"
+                        title="Tüm Aile İçin Uyumlu"
+                        desc="Eşiniz, çocuklarınız ve evdeki herkes için ortak, sevilen tarifler."
+                    />
+                    <FeatureRow
+                        anim={item3Anim}
+                        icon="brain"
+                        title="Yapay Zeka Destekli"
+                        desc="Damak tadınıza ve tercihlerinize göre sürekli öğrenen kişisel asistan."
+                    />
+                </View>
+            </ScrollView>
+
+
+            {/* Footer */}
+            <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
                 <Button
-                    title="Başlayalım"
+                    title="Yolculuğa Başla"
                     onPress={handleStart}
                     fullWidth
                     size="large"
+                    style={styles.startButton}
                 />
-            </View>
+            </Animated.View>
         </SafeAreaView>
     );
 }
 
-function FeatureItem({ emoji, text }: { emoji: string; text: string }) {
+function FeatureRow({ icon, title, desc, anim }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; title: string; desc: string; anim: Animated.Value }) {
     return (
-        <View style={styles.featureItem}>
-            <Text style={styles.featureEmoji}>{emoji}</Text>
-            <Text style={styles.featureText}>{text}</Text>
-        </View>
+        <Animated.View
+            style={[
+                styles.featureRow,
+                {
+                    opacity: anim,
+                    transform: [{
+                        translateX: anim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [20, 0]
+                        })
+                    }]
+                }
+            ]}
+        >
+            <View style={styles.featureIcon}>
+                <MaterialCommunityIcons name={icon} size={24} color={colors.primary} />
+            </View>
+            <View style={styles.featureContent}>
+                <Text style={styles.featureTitle}>{title}</Text>
+                <Text style={styles.featureDesc}>{desc}</Text>
+            </View>
+        </Animated.View>
     );
 }
 
@@ -70,63 +191,139 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
-    content: {
+    mainContent: {
         flex: 1,
-        paddingHorizontal: spacing.lg,
+    },
+    scrollContent: {
+        paddingHorizontal: spacing.xl,
+        paddingTop: spacing.md,
+        paddingBottom: 100,
+    },
+    header: {
+        alignItems: 'center',
+        marginBottom: spacing.xxl,
+    },
+    iconContainer: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: colors.surface,
+        alignItems: 'center',
         justifyContent: 'center',
-    },
-    illustrationContainer: {
-        alignItems: 'center',
-        marginBottom: spacing.xl,
-    },
-    illustration: {
-        width: 160,
-        height: 160,
-        borderRadius: 80,
-        backgroundColor: colors.primaryLight + '20',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    illustrationEmoji: {
-        fontSize: 80,
-    },
-    textContainer: {
-        alignItems: 'center',
-        marginBottom: spacing.xl,
+        marginBottom: spacing.lg,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 24,
+        elevation: 10,
     },
     title: {
         ...typography.h1,
+        fontSize: 28,
         color: colors.textPrimary,
         textAlign: 'center',
-        marginBottom: spacing.sm,
+        marginBottom: spacing.md,
     },
     subtitle: {
         ...typography.body,
         color: colors.textSecondary,
         textAlign: 'center',
-        lineHeight: 26,
+        lineHeight: 24,
     },
-    features: {
-        gap: spacing.md,
+    featuresList: {
+        gap: spacing.xl,
     },
-    featureItem: {
+    featureRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    featureIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 16, // Squircle
+        backgroundColor: colors.surface,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.border,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    featureContent: {
+        flex: 1,
+    },
+    featureTitle: {
+        ...typography.label,
+        fontSize: 16,
+        color: colors.textPrimary,
+        marginBottom: 4,
+        display: 'flex',
+    },
+    featureDesc: {
+        ...typography.caption,
+        fontSize: 14,
+        color: colors.textSecondary,
+        lineHeight: 20,
+    },
+    footer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.xl,
+        paddingTop: spacing.md,
+        backgroundColor: colors.background, // To cover scroll content
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
+    startButton: {
+        height: 56,
+        borderRadius: radius.full,
+    },
+    socialProofContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: colors.surface,
-        padding: spacing.md,
-        borderRadius: 12,
-        gap: spacing.md,
-    },
-    featureEmoji: {
-        fontSize: 24,
-    },
-    featureText: {
-        ...typography.body,
-        color: colors.textPrimary,
-        flex: 1,
-    },
-    footer: {
+        paddingVertical: spacing.sm,
         paddingHorizontal: spacing.lg,
-        paddingBottom: spacing.lg,
+        borderRadius: radius.full,
+        marginTop: spacing.lg,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    avatarStack: {
+        flexDirection: 'row',
+        marginRight: spacing.md,
+    },
+    avatarStats: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#F3F4F6',
+        borderWidth: 2,
+        borderColor: '#FFFFFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    proofTextContainer: {
+        justifyContent: 'center',
+    },
+    proofTitle: {
+        ...typography.caption,
+        fontWeight: '700',
+        color: colors.primary,
+    },
+    proofSubtitle: {
+        ...typography.caption,
+        fontSize: 11,
+        color: colors.textSecondary,
     },
 });

@@ -30,11 +30,23 @@ export default function MemberRolesScreen() {
     const householdSize = state.data.householdSize || 2;
 
     const [members, setMembers] = useState<Partial<HouseholdMember>[]>(() => {
+        if (state.data.members && state.data.members.length > 0) {
+            const existing: Partial<HouseholdMember>[] = [...state.data.members];
+            if (householdSize > existing.length) {
+                for (let i = existing.length; i < householdSize; i++) {
+                    existing.push({ id: String(i + 1), name: '' });
+                }
+            } else if (householdSize < existing.length) {
+                return existing.slice(0, householdSize);
+            }
+            return existing;
+        }
+
         const initial: Partial<HouseholdMember>[] = [
             { id: '1', name: state.data.profile?.name || '', role: 'self' },
         ];
         for (let i = 1; i < householdSize; i++) {
-            initial.push({ id: String(i + 1), name: '', role: undefined });
+            initial.push({ id: String(i + 1), name: '' });
         }
         return initial;
     });

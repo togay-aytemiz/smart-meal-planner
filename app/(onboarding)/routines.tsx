@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, Platform, UIManager, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef } from 'react';
@@ -45,6 +45,9 @@ export default function RoutinesScreen() {
     const { state, dispatch } = useOnboarding();
     const [activeMemberIndex, setActiveMemberIndex] = useState(0);
     const [selectedDay, setSelectedDay] = useState<DayKey>('monday');
+    const [isOptionsVisible, setIsOptionsVisible] = useState(false);
+    const [hasInteracted, setHasInteracted] = useState(false);
+    const handAnim = useRef(new Animated.Value(0)).current;
     const scrollViewRef = useRef<ScrollView>(null);
 
     // Get members from state
@@ -59,6 +62,27 @@ export default function RoutinesScreen() {
             UIManager.setLayoutAnimationEnabledExperimental(true);
         }
     }, []);
+
+    useEffect(() => {
+        if (!hasInteracted) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(handAnim, {
+                        toValue: 10,
+                        duration: 1000,
+                        useNativeDriver: true,
+                        easing: Easing.inOut(Easing.ease),
+                    }),
+                    Animated.timing(handAnim, {
+                        toValue: 0,
+                        duration: 1000,
+                        useNativeDriver: true,
+                        easing: Easing.inOut(Easing.ease),
+                    }),
+                ])
+            ).start();
+        }
+    }, [hasInteracted]);
 
     const animateLayout = () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -105,8 +129,8 @@ export default function RoutinesScreen() {
                 <Text style={styles.title}>Haftalık Rutinler</Text>
                 <Text style={styles.subtitle}>
                     {members.length > 1
-                        ? `${activeMember.name} için haftalık rutini belirleyin`
-                        : 'Haftalık rutininizi belirleyin'}
+                        ? `${activeMember.name} için değişiklik yapmak istediğiniz günlere tıklayın`
+                        : 'Değişiklik yapmak istediğiniz günlere tıklayın'}
                 </Text>
             </View>
 
@@ -125,6 +149,7 @@ export default function RoutinesScreen() {
                                     styles.memberTab,
                                     activeMemberIndex === index && styles.memberTabActive
                                 ]}
+                                activeOpacity={1}
                                 onPress={() => {
                                     animateLayout();
                                     setActiveMemberIndex(index);
@@ -150,71 +175,82 @@ export default function RoutinesScreen() {
                 showsVerticalScrollIndicator={false}
             >
                 {/* Day Selector */}
-                <View style={styles.daySelector}>
-                    {DAYS.map((day) => (
-                        <TouchableOpacity
-                            key={day.key}
-                            style={[
-                                styles.dayButton,
-                                selectedDay === day.key && styles.dayButtonSelected,
-                            ]}
-                            onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                setSelectedDay(day.key);
-                            }}
-                        >
-                            <Text style={[
-                                styles.dayLabel,
-                                selectedDay === day.key && styles.dayLabelSelected,
-                            ]}>
-                                {day.label}
-                            </Text>
-                            <Text style={styles.dayEmoji}>
-                                {ROUTINE_TYPES.find(r => r.key === currentRoutine[day.key].type)?.emoji}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-
-                {/* Routine Type Grid */}
-                <Text style={styles.sectionLabel}>
-                    {DAYS.find(d => d.key === selectedDay)?.label} günü için seçin:
-                </Text>
-                <View style={styles.routineGrid}>
-                    {ROUTINE_TYPES.map((routine) => (
-                        <TouchableOpacity
-                            key={routine.key}
-                            style={[
-                                styles.routineOption,
-                                currentRoutine[selectedDay].type === routine.key && styles.routineOptionSelected,
-                            ]}
-                            onPress={() => updateDayRoutine(routine.key)}
-                        >
-                            <Text style={styles.routineEmoji}>{routine.emoji}</Text>
-                            <Text style={[
-                                styles.routineLabel,
-                                currentRoutine[selectedDay].type === routine.key && styles.routineLabelSelected,
-                            ]}>
-                                {routine.label}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-
-                {/* Summary */}
-                <View style={styles.summaryCard}>
-                    <Text style={styles.summaryTitle}>Haftalık Özet - {activeMember.name}</Text>
-                    <View style={styles.summaryGrid}>
+                <View style={styles.daySelectorWrapper}>
+                    <View style={styles.daySelector}>
                         {DAYS.map((day) => (
-                            <View key={day.key} style={styles.summaryItem}>
-                                <Text style={styles.summaryDay}>{day.label}</Text>
-                                <Text style={styles.summaryEmoji}>
+                            <TouchableOpacity
+                                key={day.key}
+                                style={[
+                                    styles.dayButton,
+                                    selectedDay === day.key && styles.dayButtonSelected,
+                                ]}
+                                onPress={() => {
+                                    if (!hasInteracted) setHasInteracted(true);
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    animateLayout();
+                                    if (selectedDay === day.key) {
+                                        setIsOptionsVisible(!isOptionsVisible);
+                                    } else {
+                                        setSelectedDay(day.key);
+                                        setIsOptionsVisible(true);
+                                    }
+                                }}
+                            >
+                                <Text style={[
+                                    styles.dayLabel,
+                                    selectedDay === day.key && styles.dayLabelSelected,
+                                ]}>
+                                    {day.label}
+                                </Text>
+                                <Text style={styles.dayEmoji}>
                                     {ROUTINE_TYPES.find(r => r.key === currentRoutine[day.key].type)?.emoji}
                                 </Text>
-                            </View>
+                            </TouchableOpacity>
                         ))}
                     </View>
+
+                    {!hasInteracted && (
+                        <Animated.View
+                            style={[
+                                styles.hintContainer,
+                                { transform: [{ translateY: handAnim }] }
+                            ]}
+                            pointerEvents="none"
+                        >
+                            <Text style={styles.hintEmoji}>👆</Text>
+                            <Text style={styles.hintText}>Değiştirmek için tıkla</Text>
+                        </Animated.View>
+                    )}
                 </View>
+
+                {/* Routine Type Grid - Accordion */}
+                {isOptionsVisible && (
+                    <View style={styles.routineSection}>
+                        <Text style={styles.sectionLabel}>
+                            {DAYS.find(d => d.key === selectedDay)?.label} günü için seçin:
+                        </Text>
+                        <View style={styles.routineGrid}>
+                            {ROUTINE_TYPES.map((routine) => (
+                                <TouchableOpacity
+                                    key={routine.key}
+                                    style={[
+                                        styles.routineOption,
+                                        currentRoutine[selectedDay].type === routine.key && styles.routineOptionSelected,
+                                    ]}
+                                    onPress={() => updateDayRoutine(routine.key)}
+                                >
+                                    <Text style={styles.routineEmoji}>{routine.emoji}</Text>
+                                    <Text style={[
+                                        styles.routineLabel,
+                                        currentRoutine[selectedDay].type === routine.key && styles.routineLabelSelected,
+                                    ]}>
+                                        {routine.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                )}
             </ScrollView>
 
             <View style={styles.footer}>
@@ -264,15 +300,17 @@ const styles = StyleSheet.create({
         position: 'relative',
     },
     memberTabActive: {
-        // Active state style if needed
+        opacity: 1,
     },
     memberTabText: {
         ...typography.label,
         color: colors.textSecondary,
+        opacity: 0.7,
     },
     memberTabTextActive: {
         color: colors.primary,
-        fontWeight: '600',
+        fontWeight: '700',
+        opacity: 1,
     },
     activeIndicator: {
         position: 'absolute',
@@ -381,13 +419,45 @@ const styles = StyleSheet.create({
         color: colors.textMuted,
         marginBottom: 4,
     },
-    summaryEmoji: {
-        fontSize: 20,
-    },
     footer: {
         paddingHorizontal: spacing.lg,
         paddingBottom: spacing.lg,
         paddingTop: spacing.sm,
         backgroundColor: colors.background,
+    },
+    // Adding container for visual separation if needed
+    routineSection: {
+        marginTop: spacing.sm,
+    },
+    daySelectorWrapper: {
+        position: 'relative',
+        marginBottom: spacing.lg,
+    },
+    hintContainer: {
+        position: 'absolute',
+        top: 60, // Position below the first day button
+        left: 0,
+        alignItems: 'flex-start', // Start from left to align with Monday
+        paddingLeft: 12, // Align roughly with center of first button (44px/2 - emoji/2)
+        zIndex: 10,
+    },
+    hintEmoji: {
+        fontSize: 24,
+        marginLeft: 2, // Fine tune alignment
+    },
+    hintText: {
+        ...typography.caption,
+        color: colors.primary,
+        fontWeight: '600',
+        marginTop: -4,
+        backgroundColor: colors.surface,
+        paddingHorizontal: spacing.xs,
+        paddingVertical: 2,
+        borderRadius: radius.sm,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
     },
 });

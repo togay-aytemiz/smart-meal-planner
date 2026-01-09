@@ -42,18 +42,23 @@ export default function HouseholdSizeScreen() {
 
     // Generate person icons based on count
     const renderPeopleIcons = () => {
+        // Max 5 icons to keep in one line
+        const maxIcons = 5;
+        const showCount = Math.min(count, maxIcons);
         const icons = [];
-        for (let i = 0; i < Math.min(count, 6); i++) {
+
+        for (let i = 0; i < showCount; i++) {
             icons.push(
                 <Text key={i} style={styles.personIcon}>
                     👤
                 </Text>
             );
         }
-        if (count > 6) {
+
+        if (count > maxIcons) {
             icons.push(
                 <Text key="more" style={styles.moreText}>
-                    +{count - 6}
+                    +{count - maxIcons}
                 </Text>
             );
         }
@@ -148,7 +153,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        flexWrap: 'wrap',
+        // flexWrap: 'wrap', // Keeping single line as requested
         gap: spacing.sm,
         paddingHorizontal: spacing.lg,
     },

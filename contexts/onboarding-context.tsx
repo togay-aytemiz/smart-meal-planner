@@ -104,7 +104,22 @@ function onboardingReducer(state: OnboardingState, action: OnboardingAction): On
         case 'SET_PROFILE':
             return { ...state, data: { ...state.data, profile: action.payload } };
         case 'SET_HOUSEHOLD_SIZE':
-            return { ...state, data: { ...state.data, householdSize: action.payload } };
+            const newSize = action.payload;
+            let currentMembers = state.data.members || [];
+
+            // If new size is smaller than current members list, trim it
+            if (currentMembers.length > newSize) {
+                currentMembers = currentMembers.slice(0, newSize);
+            }
+
+            return {
+                ...state,
+                data: {
+                    ...state.data,
+                    householdSize: newSize,
+                    members: currentMembers
+                }
+            };
         case 'SET_MEMBERS':
             return { ...state, data: { ...state.data, members: action.payload } };
         case 'SET_ROUTINES':
@@ -136,7 +151,21 @@ interface OnboardingContextType {
 
 const OnboardingContext = createContext<OnboardingContextType | null>(null);
 
-export const TOTAL_STEPS = 9;
+// 1. Welcome
+// 2. Profile
+// 3. Household Size
+// 4. Member Roles
+// 5. Routines
+// 6. Dietary
+// 7. Cuisine
+// 8. Cooking
+// 9. Ready (Review)
+// 10. Processing
+// 11. Analysis (Reveal)
+// 12. Paywall
+// 13. Auth
+// 14. Kickstart
+export const TOTAL_STEPS = 14;
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
     const [state, dispatch] = useReducer(onboardingReducer, initialState);

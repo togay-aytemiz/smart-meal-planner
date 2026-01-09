@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     base: {
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: radius.md,
+        borderRadius: radius.full,
     },
 
     // Variants

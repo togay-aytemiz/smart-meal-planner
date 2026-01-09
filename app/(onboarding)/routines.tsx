@@ -20,7 +20,7 @@ const DAYS = [
 ] as const;
 
 const { width } = Dimensions.get('window');
-const ROUTINE_CARD_SIZE = Math.floor((width - (spacing.lg * 2) - (spacing.sm * 2)) / 3) - spacing.sm;
+const ROUTINE_CARD_SIZE = Math.floor((width - (spacing.lg * 2) - (spacing.sm * 2)) / 3) - spacing.md;
 const DETAIL_SECTION_GAP = spacing.md;
 
 const ROUTINE_TYPES = [
@@ -111,6 +111,7 @@ export default function RoutinesScreen() {
         if (type === 'gym' && !nextDay.gymTime) {
             nextDay.gymTime = 'none';
         }
+        nextDay.excludeFromPlan = type === 'off';
         const newRoutine = {
             ...currentRoutine,
             [selectedDay]: nextDay,
@@ -283,7 +284,7 @@ export default function RoutinesScreen() {
                         {currentRoutine[selectedDay].type === 'gym' && (
                             <View style={styles.detailSection}>
                                 <View style={styles.detailItemLast}>
-                                    <Text style={styles.detailTitle}>Spor hangi saat?</Text>
+                                    <Text style={styles.detailTitle}>Ne zaman spora gidiyorsun?</Text>
                                     <View style={styles.tagRow}>
                                         <View style={styles.tagItem}>
                                             <SelectableTag
@@ -362,7 +363,7 @@ export default function RoutinesScreen() {
                                     </View>
                                 </View>
                                 <View style={styles.detailItemLast}>
-                                    <Text style={styles.detailTitle}>Kahvaltı evde mi?</Text>
+                                    <Text style={styles.detailTitle}>Kahvaltını evde mi yapıyorsun?</Text>
                                     <View style={styles.tagRow}>
                                         <View style={styles.tagItem}>
                                             <SelectableTag
@@ -385,7 +386,7 @@ export default function RoutinesScreen() {
                         {currentRoutine[selectedDay].type === 'school' && (
                             <View style={styles.detailSection}>
                                 <View style={styles.detailItemLast}>
-                                    <Text style={styles.detailTitle}>Sabah kahvaltısı var mı?</Text>
+                                    <Text style={styles.detailTitle}>Okul günlerinde kahvaltı yapılıyor mu?</Text>
                                     <View style={styles.tagRow}>
                                         <View style={styles.tagItem}>
                                             <SelectableTag
@@ -401,6 +402,18 @@ export default function RoutinesScreen() {
                                                 onPress={() => updateDayDetails({ schoolBreakfast: 'no' })}
                                             />
                                         </View>
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+                        {currentRoutine[selectedDay].type === 'off' && (
+                            <View style={styles.detailSection}>
+                                <View style={styles.detailItemLast}>
+                                    <View style={styles.infoBanner}>
+                                        <Text style={styles.infoEmoji}>ℹ️</Text>
+                                        <Text style={styles.infoText}>
+                                            Bu gün evde yemek yapılmayacak olarak işaretlendi. Planlama bu günü hariç tutacak.
+                                        </Text>
                                     </View>
                                 </View>
                             </View>
@@ -539,6 +552,22 @@ const styles = StyleSheet.create({
     detailItemLast: {
         marginBottom: 0,
         gap: spacing.xs,
+    },
+    infoBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.primaryLight + '15',
+        padding: spacing.md,
+        borderRadius: radius.md,
+        gap: spacing.sm,
+    },
+    infoEmoji: {
+        fontSize: 18,
+    },
+    infoText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        flex: 1,
     },
     detailTitle: {
         ...typography.label,

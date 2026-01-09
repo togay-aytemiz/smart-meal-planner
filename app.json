@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.smartmealplanner.app"
+      "bundleIdentifier": "studio.agent.smart-meal-planner"
     },
     "android": {
       "adaptiveIcon": {

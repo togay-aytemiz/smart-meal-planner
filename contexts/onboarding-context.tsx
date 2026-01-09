@@ -22,6 +22,7 @@ export interface RoutineDay {
     officeBreakfastAtHome?: 'yes' | 'no';
     schoolBreakfast?: 'yes' | 'no';
     remoteMeals?: ('breakfast' | 'lunch' | 'dinner')[];
+    excludeFromPlan?: boolean;
 }
 
 export interface WeeklyRoutine {

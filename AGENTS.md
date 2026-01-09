@@ -7,7 +7,7 @@ Her yanıt şu formatta olmalı:
 ```
 ### Yapılanlar
 - [Türkçe bullet 1]
-- [Türkçe bullet 2]  
+- [Türkçe bullet 2]
 - [Türkçe bullet 3 - opsiyonel]
 
 ### Önerilen Sonraki Adımlar (opsiyonel)
@@ -19,15 +19,13 @@ Her yanıt şu formatta olmalı:
 ```
 
 **Örnek:**
+
 ```
 ### Yapılanlar
 - Onboarding ekranları için temel layout oluşturuldu
 - Welcome screen UI tamamlandı
 - Navigation flow ayarlandı
 
-### Önerilen Sonraki Adımlar
-- Dietary requirements ekranına geçilebilir
-- Animasyonlar eklenebilir
 
 ### Commit
 `feat(onboarding): add welcome screen with value proposition`
@@ -38,18 +36,20 @@ Her yanıt şu formatta olmalı:
 ## Tech Stack Rules
 
 ### ✅ Use
-| Category | Technology |
-|----------|------------|
-| Framework | React Native + Expo |
-| Navigation | Expo Router |
-| State Management | Context API + useReducer |
-| Local Storage | AsyncStorage |
-| Styling | StyleSheet.create() |
-| Backend | Firebase (Auth, Firestore, Storage) |
-| AI Integration | OpenAI / Claude API via Firebase Functions |
-| Icons | expo/vector-icons veya custom SVG |
+
+| Category         | Technology                                 |
+| ---------------- | ------------------------------------------ |
+| Framework        | React Native + Expo                        |
+| Navigation       | Expo Router                                |
+| State Management | Context API + useReducer                   |
+| Local Storage    | AsyncStorage                               |
+| Styling          | StyleSheet.create()                        |
+| Backend          | Firebase (Auth, Firestore, Storage)        |
+| AI Integration   | OpenAI / Claude API via Firebase Functions |
+| Icons            | expo/vector-icons veya custom SVG          |
 
 ### ❌ Don't Use
+
 - ~~Zustand~~ → Context API kullan
 - ~~NativeWind / Tailwind~~ → StyleSheet kullan
 - ~~Redux~~ → Context + useReducer yeterli
@@ -93,18 +93,18 @@ Her yanıt şu formatta olmalı:
 // fonts.ts
 export const typography = {
   // Headings
-  h1: { fontSize: 32, fontWeight: '700', lineHeight: 40 },
-  h2: { fontSize: 24, fontWeight: '600', lineHeight: 32 },
-  h3: { fontSize: 20, fontWeight: '600', lineHeight: 28 },
-  
+  h1: { fontSize: 32, fontWeight: "700", lineHeight: 40 },
+  h2: { fontSize: 24, fontWeight: "600", lineHeight: 32 },
+  h3: { fontSize: 20, fontWeight: "600", lineHeight: 28 },
+
   // Body
-  body: { fontSize: 16, fontWeight: '400', lineHeight: 24 },
-  bodySmall: { fontSize: 14, fontWeight: '400', lineHeight: 20 },
-  
+  body: { fontSize: 16, fontWeight: "400", lineHeight: 24 },
+  bodySmall: { fontSize: 14, fontWeight: "400", lineHeight: 20 },
+
   // UI
-  button: { fontSize: 16, fontWeight: '600', lineHeight: 24 },
-  caption: { fontSize: 12, fontWeight: '500', lineHeight: 16 },
-  label: { fontSize: 14, fontWeight: '500', lineHeight: 20 },
+  button: { fontSize: 16, fontWeight: "600", lineHeight: 24 },
+  caption: { fontSize: 12, fontWeight: "500", lineHeight: 16 },
+  label: { fontSize: 14, fontWeight: "500", lineHeight: 20 },
 };
 ```
 
@@ -135,10 +135,10 @@ export const radius = {
 ```
 
 ### Layout Rules
+
 - **Header Spacing**: Navigasyon barı olan sayfalarda `paddingTop` ekleme. Layout zaten boşluk bırakıyor.
 - **Content Padding**: `paddingHorizontal: spacing.lg` standarttır.
 - **Top Margin**: Sayfa başlıklarında `marginTop` kullanma, `spacing.sm` veya 0 yeterli.
-
 
 ---
 
@@ -155,7 +155,7 @@ export const radius = {
 
 ```typescript
 // ✅ DOĞRU
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from "react-native";
 
 export default function MyComponent() {
   return (
@@ -169,12 +169,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#FAFAF9',
+    backgroundColor: "#FAFAF9",
   },
   title: {
     fontSize: 24,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: "600",
+    color: "#1F2937",
   },
 });
 ```
@@ -200,15 +200,13 @@ components/
 
 ```typescript
 // contexts/MealPlanContext.tsx
-import { createContext, useContext, useReducer, ReactNode } from 'react';
+import { createContext, useContext, useReducer, ReactNode } from "react";
 
 interface State {
   // state type
 }
 
-type Action = 
-  | { type: 'SET_MEALS'; payload: Meal[] }
-  | { type: 'CLEAR' };
+type Action = { type: "SET_MEALS"; payload: Meal[] } | { type: "CLEAR" };
 
 const MealPlanContext = createContext<{
   state: State;
@@ -217,7 +215,7 @@ const MealPlanContext = createContext<{
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case 'SET_MEALS':
+    case "SET_MEALS":
       return { ...state, meals: action.payload };
     default:
       return state;
@@ -235,7 +233,7 @@ export function MealPlanProvider({ children }: { children: ReactNode }) {
 
 export function useMealPlan() {
   const context = useContext(MealPlanContext);
-  if (!context) throw new Error('useMealPlan must be used within provider');
+  if (!context) throw new Error("useMealPlan must be used within provider");
   return context;
 }
 ```
@@ -275,7 +273,7 @@ const ANIMATION = {
     slow: 400,
   },
   easing: {
-    default: 'ease-out',
+    default: "ease-out",
     spring: { damping: 15, stiffness: 150 },
   },
 };
@@ -285,15 +283,15 @@ const ANIMATION = {
 
 ## File Naming
 
-| Type | Convention | Example |
-|------|------------|---------|
-| Components | kebab-case | `welcome-screen.tsx` |
-| Hooks | kebab-case + use prefix | `use-onboarding.ts` |
-| Contexts | kebab-case + context | `auth-context.tsx` |
-| Utils | kebab-case | `format-date.ts` |
-| Types | kebab-case | `types/meal.ts` |
-| Constants | SCREAMING_SNAKE (in file) | `API_URL` |
-| Folders | kebab-case | `components/ui/` |
+| Type       | Convention                | Example              |
+| ---------- | ------------------------- | -------------------- |
+| Components | kebab-case                | `welcome-screen.tsx` |
+| Hooks      | kebab-case + use prefix   | `use-onboarding.ts`  |
+| Contexts   | kebab-case + context      | `auth-context.tsx`   |
+| Utils      | kebab-case                | `format-date.ts`     |
+| Types      | kebab-case                | `types/meal.ts`      |
+| Constants  | SCREAMING_SNAKE (in file) | `API_URL`            |
+| Folders    | kebab-case                | `components/ui/`     |
 
 ---
 
@@ -336,6 +334,7 @@ Types:
 ```
 
 **Examples:**
+
 ```
 feat(onboarding): add dietary requirements screen
 fix(calendar): resolve date picker crash on Android

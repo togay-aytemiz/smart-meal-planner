@@ -5,7 +5,8 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
 import { useState } from 'react';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { functions } from '../../config/firebase';
+import { httpsCallable } from 'firebase/functions';
 
 export default function CookbookScreen() {
     const [loading, setLoading] = useState(false);
@@ -18,7 +19,6 @@ export default function CookbookScreen() {
         setResponse(null);
 
         try {
-            const functions = getFunctions();
             const testFunction = httpsCallable(functions, 'testGemini');
 
             const result = await testFunction({

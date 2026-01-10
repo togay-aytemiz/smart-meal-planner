@@ -8,17 +8,21 @@
 **Platform:** iOS & Android (React Native / Expo)
 
 ### Vision
-A personalized AI-enabled meal planning mobile app that understands each family member's unique routines, preferences, and schedules to automate weekly meal planning while reducing the mental load of daily food decisions.
+An Ollie-inspired AI meal planner that learns each household member's preferences, generates weekly menus, builds grocery lists, and lets users refine plans via chat while reducing the mental load of daily food decisions.
 
 ### Problem Statement
 Meal planning is a daily cognitive burden that compounds across family members with different schedules. Parents juggle gym times, office days, remote work, preschool pickups, and nanny schedules—all while trying to answer "What's for dinner?" The mental load of coordinating meals around varying routines is exhausting and time-consuming.
 
 ### Solution
 An intelligent meal planner that:
-- Learns each family member's routines and preferences
-- Automatically generates personalized weekly meal plans
-- Adapts in real-time to schedule changes
-- Reduces decision fatigue through AI-powered suggestions
+- Learns each family member's routines, dislikes, and pantry constraints
+- Generates weekly menus up to the upcoming Sunday
+- Produces grocery lists based on menus and inventory
+- Lets users modify plans via chat and remembers feedback
+
+### Ollie-Inspired Experience
+- How it works: collect preferences → generate menu + grocery list → user approves → adjustments via chat
+- Core strengths to mirror: automated meal planning, smart grocery lists, and a clear approval loop
 
 ---
 
@@ -60,6 +64,7 @@ An intelligent meal planner that:
 - Food preferences (likes/dislikes)
 - Cuisine preferences
 - Cooking skill level
+- Pantry-only preference (optional)
 
 ### Household Preferences
 - Cooking time preferences (quick vs. elaborate)
@@ -71,27 +76,26 @@ An intelligent meal planner that:
 
 ## Core Features
 
-### 1. Dashboard / Home Screen
+### Tab Navigation
+- **My Menu:** Today, tomorrow, and the rest of the week (up to Sunday)
+- **Groceries:** Weekly shopping list (menu + pantry)
+- **Cookbook:** Saved AI recipes (favorites)
+- **Settings/Profile:** Preferences, household, and AI memory
 
-#### Weekly Calendar View
-Inspired by Ollie.ai's clean interface:
+### 1. My Menu (Menu Feed)
 
-- **Calendar Grid:** Visual 7-day week view with breakfast, lunch, dinner slots
-- **Day Cards:** Expandable cards showing:
-  - Planned meals
-  - Relevant family member schedules
-  - Quick-swap meal options
-- **Today Focus:** Prominent "Today" section with:
-  - Current day's meals
-  - Schedule context (who's home, what routines)
-  - Quick actions
+#### Weekly Menu View
+- **Range:** Today through Sunday (max 7 days)
+- **Cards:** Daily menu cards with hero image
+- **Actions:** Replace, approve (chat modifications post-MVP)
+- **Courses:** Minimum 3-course menu per day (ex: soup/main/salad or equivalent)
 
 #### Schedule Context Bar
 - Visual indicators showing each family member's status for the day
 - Icons for: gym, office, remote, school, home
 - Helps understand meal requirements at a glance
 
-### 2. AI Meal Recommendation Engine
+### 2. AI Meal Recommendation Engine (MVP)
 
 #### Core Capabilities
 - **Routine-Aware Planning:** 
@@ -109,10 +113,12 @@ Inspired by Ollie.ai's clean interface:
 - **Personalization Layers:**
   - Global household preferences
   - Individual dietary needs
+  - Ingredient dislikes/avoid list (per user)
+  - Pantry-only mode (when enabled, Post-MVP)
   - Time-based constraints
   - Energy/nutrition goals
 
-### 3. Weekly Meal Plan Generator
+### 3. Weekly Meal Plan Generator (MVP)
 
 #### Auto-Planning Flow
 1. AI analyzes upcoming week's schedules
@@ -124,7 +130,7 @@ Inspired by Ollie.ai's clean interface:
    - Variety and nutrition
 
 #### Override & Customization
-- **Swap Meals:** Easy one-tap meal replacement
+- **Swap Meals:** One-tap replacement or chat-based changes
 - **Lock Favorites:** Pin preferred meals to specific days
 - **Regenerate:** Request new suggestions for any meal
 - **Manual Entry:** Add custom meals or recipes
@@ -149,11 +155,14 @@ Inspired by Ollie.ai's clean interface:
 ### 5. Recipe Discovery & Management
 
 #### Recipe Features
-- AI-generated recipes tailored to family
+- AI-generated recipes tailored to family (MVP)
+- AI-generated hero image per recipe (Post-MVP)
 - Step-by-step cooking instructions
 - Serving size adjustments
 - Nutritional information
 - Prep/cook time estimates
+- Dedicated recipe detail page (Ingredients / Instructions / Nutrition)
+- Favorite/save to Cookbook
 
 #### Customization
 - Save favorite recipes
@@ -168,6 +177,8 @@ Inspired by Ollie.ai's clean interface:
 - Organized by store sections
 - Quantity calculations based on servings
 - Ingredient consolidation
+- Pantry-aware subtraction
+- Manual add/edit items
 
 #### Integration Options
 - Export to shopping apps
@@ -181,18 +192,23 @@ Inspired by Ollie.ai's clean interface:
 - Local grocery delivery
 
 ### 7. Inventory Management (New)
-183: 
-184: #### Photo Scanning
-185: - Capture photos of fridge or pantry shelves
-186: - AI extraction of ingredients (Image Processing)
-187: - Auto-population of digital pantry
-188: 
-189: #### Digital Pantry
-190: - Track available ingredients
-191: - Prioritize recipes using existing stock (Waste Reduction)
-192: - Manual add/edit capabilities
-193: 
-194: ### 8. Notifications & Reminders
+
+#### Photo Scanning
+- Capture photos of fridge or pantry shelves
+- AI extraction of ingredients (Image Processing)
+- Auto-population of digital pantry
+
+#### Digital Pantry
+- Track available ingredients
+- Prioritize recipes using existing stock (Waste Reduction)
+- Manual add/edit capabilities
+
+### 8. Chat Assistant (Recipe + Planning) (Post-MVP)
+- Contextual chat attached to recipe and menu cards
+- Accepts modifications (replace ingredient, avoid ingredient, adjust servings)
+- Updates user memory and future prompt parameters
+
+### 9. Notifications & Reminders
 
 #### Meal Planning
 - Weekly planning reminder (Sunday evening default)
@@ -223,6 +239,11 @@ Inspired by Ollie.ai's clean interface:
 - **Functions:** Firebase Cloud Functions (AI API calls)
 - **AI Engine:** OpenAI / Claude API via Cloud Functions
 
+### Recipe & AI Memory Storage
+- **Recipes:** Store AI-generated recipes in Firestore for reuse and cost savings
+- **Images:** Generate and store recipe images in Firebase Storage (Post-MVP)
+- **User Memory:** Persist dislikes, swaps, and pantry-only preference to condition prompts (Post-MVP)
+
 ### Data Storage
 - **Local:** AsyncStorage for offline access
 - **Cloud:** Firestore for user profiles, preferences, meal history
@@ -238,8 +259,8 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 - **Style:** Clean, minimal, calming
 - **Colors:** 
   - Warm neutrals (cream, soft whites)
-  - Accent: Fresh green or warm coral
-  - Supporting: Soft pastels for categories
+  - Accent: Warm orange/coral
+  - Supporting: Soft sand and muted browns
 - **Typography:** Modern, readable, friendly
 - **Imagery:** Appetizing food photography, illustrated icons
 
@@ -255,17 +276,18 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 ## MVP Scope
 
 ### Phase 1: Foundation
-- [ ] User onboarding flow (structure only, questions TBD)
-- [ ] Single user profile setup
-- [ ] Basic routine input (work/gym/home)
-- [ ] Weekly calendar view
-- [ ] Manual meal assignment
+- [ ] Tab navigation shell (My Menu, Groceries, Cookbook, Settings)
+- [ ] My Menu weekly view (today → Sunday)
+- [ ] Manual meal assignment + basic swap
+- [ ] Recipe detail page (ingredients/instructions)
+- [ ] Grocery list from manual menus + manual add
+- [ ] AI meal planning based on onboarding + weekly habits
+- [ ] AI recipe generation tied to planned meals
 
 ### Phase 2: AI Integration
-- [ ] AI meal suggestions based on routines
-- [ ] Weekly meal plan generation
-- [ ] Meal swap functionality
-- [ ] Basic recipe display
+- [ ] AI chat modifications for menus/recipes
+- [ ] Recipe image generation
+- [ ] Pantry-only option in prompts
 
 ### Phase 3: Family Features
 - [ ] Multi-member household support

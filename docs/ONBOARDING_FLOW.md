@@ -5,24 +5,38 @@
 
 ---
 
-## Flow Overview
+## Flow Overview (Current Implementation)
 
-| Phase | Screens | Purpose |
-|-------|---------|---------|
-| 1. Hook | Welcome | Value prop, set expectations |
-| 2. Foundation | Scope → Dietary → Goals | Core branching & constraints |
-| 3. Lifestyle | Activity → Cooking → Schedule | Time & routine patterns |
-| 4. Family Details | Members → Quick Prefs | *Only if Family selected* |
-| 5. Magic Moment | Loading → AI Reveal | Prove personalization value |
-| 6. Commitment | Paywall | Convert while interest peaks |
-| 7. Security | Account Creation | Save data & subscription |
-| 8. Kickstart | Fridge Scan | Immediate utility |
+| Step | Screen | Route | Notes |
+|------|--------|-------|-------|
+| 1 | Welcome | `(onboarding)/welcome` | Entry point |
+| 2 | Profile | `(onboarding)/profile` | Name/avatar basics |
+| 3 | Household Size | `(onboarding)/household-size` | Size selection |
+| 4 | Member Roles | `(onboarding)/member-roles` | Roles + age ranges |
+| 5 | Routines | `(onboarding)/routines` | Weekly routines |
+| 6 | Dietary | `(onboarding)/dietary` | Restrictions + allergies |
+| 7 | Cuisine | `(onboarding)/cuisine` | Cuisine picks |
+| 8 | Cooking | `(onboarding)/cooking` | Time/skill/equipment |
+| 9 | Ready | `(onboarding)/ready` | Summary review |
+| 10 | Processing | `(onboarding)/processing` | Loading state |
+| 11 | Analysis | `(onboarding)/analysis` | AI reveal |
+| 12 | Paywall | `(onboarding)/paywall` | Pricing gate |
+| 13 | Auth | `(onboarding)/auth` | Account screen |
+| 14 | Kickstart | `(onboarding)/kickstart` | Scan intro |
+| 15 | Scan | `(onboarding)/scan` | Camera scan |
+| 16 | Inventory | `(onboarding)/inventory` | Confirm/edit items |
+
+### Completion Rules
+- Onboarding is marked complete when the user taps:
+  - **Kickstart → "Daha Sonra"** (skip)
+  - **Inventory → "Planımı Oluştur"**
+- On completion, onboarding data is saved to `Users/{userId}` in Firestore and `onboardingCompleted` is set to `true`.
 
 ---
 
-## Detailed Screens
+## Detailed Screens (Current)
 
-### PHASE 1: Hook & Context
+### Step 1: Welcome
 
 #### Screen 1: Welcome & Value Prop
 - **Headline**: "Meal planning on autopilot, tailored to your real life."
@@ -32,7 +46,7 @@
 
 ---
 
-### PHASE 2: The Foundation Quiz
+### Steps 2-4: Profile, Household Size, Member Roles
 
 #### Screen 2: The Scope (Who are we feeding?)
 - **Headline**: "Who are we planning for?"
@@ -62,7 +76,7 @@
 
 ---
 
-### PHASE 3: Routine & Lifestyle
+### Steps 5-8: Routines, Dietary, Cuisine, Cooking
 
 #### Screen 5: Cooking Reality Check
 - **Headline**: "Be honest—how much do you actually want to cook?"
@@ -110,7 +124,7 @@
 
 ---
 
-### PHASE 5: The Magic Moment
+### Steps 9-11: Ready, Processing, Analysis
 
 #### Screen 9: Processing State
 - **Visual**: Animated data points connecting—schedules, ingredients, calendars merging
@@ -135,7 +149,7 @@
 
 ---
 
-### PHASE 6: The Commitment
+### Step 12: Paywall
 
 #### Screen 11: Subscription Offer
 - **Headline**: "Start eating better, stress-free."
@@ -148,7 +162,7 @@
 
 ---
 
-### PHASE 7: Account Security
+### Step 13: Auth
 
 #### Screen 12: Create Account
 - **Headline**: "Save your profile"
@@ -161,7 +175,7 @@
 
 ---
 
-### PHASE 8: Post-Onboarding Kickstart
+### Steps 14-16: Kickstart, Scan, Inventory
 
 #### Screen 13: Fridge Scan Intro
 - **Headline**: "Let's see what you already have."
@@ -221,7 +235,6 @@
 
 | Path | Screens |
 |------|---------|
-| Individual | 12 screens |
-| Family | 14 screens (+ 2 for family details) |
+| All users | 16 screens |
 
 Total interaction time target: **2-3 minutes**

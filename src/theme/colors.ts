@@ -1,34 +1,34 @@
 export const colors = {
     // Backgrounds
-    background: '#FAFAF9',
-    surface: '#FFFFFF',
+    background: '#F7EDE3',
+    surface: '#FFF6EB',
 
     // Primary
-    primary: '#2D6A4F',
-    primaryLight: '#40916C',
-    primaryDark: '#1B4332',
+    primary: '#F26B3A',
+    primaryLight: '#FF8A5C',
+    primaryDark: '#D4552A',
 
     // Accent
-    accent: '#E76F51',
-    accentLight: '#F4A261',
+    accent: '#F0A24B',
+    accentLight: '#F7C07B',
 
     // Text
-    textPrimary: '#1F2937',
-    textSecondary: '#6B7280',
-    textMuted: '#9CA3AF',
+    textPrimary: '#2B2420',
+    textSecondary: '#6B5F57',
+    textMuted: '#9B8F86',
     textInverse: '#FFFFFF',
 
     // Borders
-    border: '#E5E7EB',
-    borderLight: '#F3F4F6',
+    border: '#E7D9CC',
+    borderLight: '#F2E7DC',
 
     // Status
-    success: '#10B981',
-    successLight: '#D1FAE5',
-    warning: '#F59E0B',
-    warningLight: '#FEF3C7',
-    error: '#EF4444',
-    errorLight: '#FEE2E2',
+    success: '#1E9E6D',
+    successLight: '#DDF4EA',
+    warning: '#E38A2E',
+    warningLight: '#F8E4C8',
+    error: '#E24D4D',
+    errorLight: '#F8D6D6',
 
     // Misc
     overlay: 'rgba(0, 0, 0, 0.5)',

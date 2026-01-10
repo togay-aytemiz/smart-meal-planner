@@ -9,7 +9,7 @@ export default function CookbookScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>Cookbook</Text>
+                <Text style={styles.title}>Tariflerim</Text>
             </View>
 
             <View style={styles.content}>

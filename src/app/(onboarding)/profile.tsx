@@ -22,8 +22,8 @@ export default function ProfileScreen() {
                 type: 'SET_PROFILE',
                 payload: { name: name.trim(), avatarUrl: selectedAvatar }
             });
-            dispatch({ type: 'SET_STEP', payload: 3 });
-            router.push('/(onboarding)/household-size');
+            dispatch({ type: 'SET_STEP', payload: 5 });
+            router.push('/(onboarding)/routines');
         }
     };
 

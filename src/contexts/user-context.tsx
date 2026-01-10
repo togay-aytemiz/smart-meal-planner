@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useReducer, ReactNode } from 'react';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import firestore, { doc, getDoc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { OnboardingData } from './onboarding-context';
 
 interface UserState {
@@ -60,7 +60,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
             dispatch({ type: 'SET_LOADING', payload: true });
 
             try {
-                const userDoc = await firestore().collection('Users').doc(firebaseUser.uid).get();
+                const userDocRef = doc(firestore(), 'Users', firebaseUser.uid);
+                const userDoc = await getDoc(userDocRef);
                 const userData = userDoc.data();
                 dispatch({
                     type: 'SET_ONBOARDING_COMPLETED',
@@ -85,18 +86,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         const sanitizedData = removeUndefined(data);
 
-        await firestore()
-            .collection('Users')
-            .doc(firebaseUser.uid)
-            .set(
-                {
-                    onboardingCompleted: true,
-                    onboarding: sanitizedData,
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                },
-                { merge: true }
-            );
+        const userDocRef = doc(firestore(), 'Users', firebaseUser.uid);
+        await setDoc(
+            userDocRef,
+            {
+                onboardingCompleted: true,
+                onboarding: sanitizedData,
+                updatedAt: serverTimestamp(),
+                createdAt: serverTimestamp(),
+            },
+            { merge: true }
+        );
 
         dispatch({ type: 'SET_ONBOARDING_COMPLETED', payload: true });
     };

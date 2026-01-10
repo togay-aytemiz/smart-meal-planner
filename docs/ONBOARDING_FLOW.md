@@ -5,14 +5,16 @@
 
 ---
 
-## Flow Overview (Current Implementation)
+## Flow Overview (Current Implementation - MVP)
+
+> **MVP Note**: For MVP, the app is designed for single-person use. Household Size and Member Roles screens are skipped.
 
 | Step | Screen | Route | Notes |
 |------|--------|-------|-------|
 | 1 | Welcome | `(onboarding)/welcome` | Entry point |
 | 2 | Profile | `(onboarding)/profile` | Name/avatar basics |
-| 3 | Household Size | `(onboarding)/household-size` | Size selection |
-| 4 | Member Roles | `(onboarding)/member-roles` | Roles + age ranges |
+| ~~3~~ | ~~Household Size~~ | ~~`(onboarding)/household-size`~~ | **Skipped in MVP** |
+| ~~4~~ | ~~Member Roles~~ | ~~`(onboarding)/member-roles`~~ | **Skipped in MVP** |
 | 5 | Routines | `(onboarding)/routines` | Weekly routines |
 | 6 | Dietary | `(onboarding)/dietary` | Restrictions + allergies |
 | 7 | Cuisine | `(onboarding)/cuisine` | Cuisine picks |

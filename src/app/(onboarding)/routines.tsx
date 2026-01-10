@@ -55,10 +55,25 @@ export default function RoutinesScreen() {
 
     // Get members from state
     const members = state.data.members || [];
+
     const activeMember = members[activeMemberIndex];
 
     // Initialize routines for current member if not exist
     const currentRoutine = activeMember?.routines || DEFAULT_ROUTINE;
+
+    // MVP: If no members exist, create a self member with profile data
+    useEffect(() => {
+        if (members.length === 0 && state.data.profile) {
+            const selfMember: HouseholdMember = {
+                id: 'self',
+                name: state.data.profile.name,
+                role: 'self',
+                ageRange: 'adult',
+                routines: DEFAULT_ROUTINE,
+            };
+            dispatch({ type: 'SET_MEMBERS', payload: [selfMember] });
+        }
+    }, []);
 
     useEffect(() => {
         if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -145,7 +160,8 @@ export default function RoutinesScreen() {
             // Scroll to top
             scrollViewRef.current?.scrollTo({ y: 0, animated: true });
         } else {
-            // Finish
+            // Finish and save final routines data
+            dispatch({ type: 'SET_ROUTINES', payload: currentRoutine });
             dispatch({ type: 'SET_STEP', payload: 6 });
             router.push('/(onboarding)/dietary');
         }

@@ -8,6 +8,30 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 
+const CUISINES = [
+    { key: 'turkish', label: 'Türk' },
+    { key: 'mediterranean', label: 'Akdeniz' },
+    { key: 'italian', label: 'İtalyan' },
+    { key: 'asian', label: 'Asya' },
+    { key: 'middle-eastern', label: 'Ortadoğu' },
+    { key: 'mexican', label: 'Meksika' },
+    { key: 'indian', label: 'Hint' },
+    { key: 'french', label: 'Fransız' },
+    { key: 'japanese', label: 'Japon' },
+    { key: 'chinese', label: 'Çin' },
+    { key: 'thai', label: 'Tayland' },
+    { key: 'american', label: 'Amerikan' },
+];
+
+const EQUIPMENT = [
+    { key: 'oven', label: 'Fırın' },
+    { key: 'blender', label: 'Blender' },
+    { key: 'airfryer', label: 'Airfryer' },
+    { key: 'pressure-cooker', label: 'Düdüklü' },
+    { key: 'mixer', label: 'Mikser' },
+    { key: 'grill', label: 'Izgara' },
+];
+
 export default function ReadyScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
@@ -16,12 +40,12 @@ export default function ReadyScreen() {
     const scaleAnim = useRef(new Animated.Value(0)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
-    // Staggered anims for cards
+    // Staggered anims for cards (4 cards now instead of 5)
     const card1Anim = useRef(new Animated.Value(0)).current;
     const card2Anim = useRef(new Animated.Value(0)).current;
     const card3Anim = useRef(new Animated.Value(0)).current;
     const card4Anim = useRef(new Animated.Value(0)).current;
-    const card5Anim = useRef(new Animated.Value(0)).current;
+
 
     useEffect(() => {
         // Entrance animations
@@ -45,7 +69,6 @@ export default function ReadyScreen() {
                 Animated.timing(card2Anim, { toValue: 1, duration: 300, useNativeDriver: true }),
                 Animated.timing(card3Anim, { toValue: 1, duration: 300, useNativeDriver: true }),
                 Animated.timing(card4Anim, { toValue: 1, duration: 300, useNativeDriver: true }),
-                Animated.timing(card5Anim, { toValue: 1, duration: 300, useNativeDriver: true }),
             ])
         ]).start();
     }, []);
@@ -60,10 +83,27 @@ export default function ReadyScreen() {
     };
 
     const userName = state.data.profile?.name || 'Merhaba';
-    const cuisineCount = state.data.cuisine?.selected?.length || 0;
+    const selectedCuisines = state.data.cuisine?.selected || [];
     const dietaryRestrictions = state.data.dietary?.restrictions?.length || 0;
     const allergies = state.data.dietary?.allergies?.length || 0;
-    const equipmentCount = state.data.cooking?.equipment?.length || 0;
+    const selectedEquipment = state.data.cooking?.equipment || [];
+
+    // Helper function to format list with +N
+    const formatListWithMore = (keys: string[], lookup: { key: string; label: string }[], maxShow: number = 2) => {
+        if (keys.length === 0) return '';
+        const labels = keys.map(key => lookup.find(item => item.key === key)?.label || key);
+        const shown = labels.slice(0, maxShow).join(', ');
+        const remaining = labels.length - maxShow;
+        return remaining > 0 ? `${shown} +${remaining}` : shown;
+    };
+
+    const cuisineDisplay = selectedCuisines.length > 0
+        ? formatListWithMore(selectedCuisines, CUISINES, 2)
+        : 'Farketmez';
+
+    const equipmentDisplay = selectedEquipment.length > 0
+        ? formatListWithMore(selectedEquipment, EQUIPMENT, 3)
+        : 'Standart ekipmanlar';
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -87,8 +127,7 @@ export default function ReadyScreen() {
                 <Animated.View style={[styles.textContainer, { opacity: fadeAnim }]}>
                     <Text style={styles.title}>Hazırsınız, {userName}!</Text>
                     <Text style={styles.subtitle}>
-                        Tercihleriniz kaydedildi. Artık {(state.data.householdSize || 1) > 1 ? 'size ve ailenize' : 'size'} özel yemek planları
-                        oluşturmaya hazırız.
+                        Tercihleriniz kaydedildi. Artık size özel yemek planları oluşturmaya hazırız.
                     </Text>
                 </Animated.View>
 
@@ -96,18 +135,12 @@ export default function ReadyScreen() {
                 <View style={styles.summaryContainer}>
                     <SummaryCard
                         anim={card1Anim}
-                        emoji="👥"
-                        label="Hane halkı"
-                        value={`${state.data.householdSize || 1} kişi`}
+                        emoji="🍽️"
+                        label="Mutfak tercihleri"
+                        value={cuisineDisplay}
                     />
                     <SummaryCard
                         anim={card2Anim}
-                        emoji="🍽️"
-                        label="Mutfak tercihleri"
-                        value={cuisineCount > 0 ? `${cuisineCount} mutfak seçildi` : 'Farketmez'}
-                    />
-                    <SummaryCard
-                        anim={card3Anim}
                         emoji="🥗"
                         label="Diyet & Alerji"
                         value={
@@ -117,17 +150,17 @@ export default function ReadyScreen() {
                         }
                     />
                     <SummaryCard
-                        anim={card4Anim}
+                        anim={card3Anim}
                         emoji="⏱️"
                         label="Yemek Süresi"
                         value={state.data.cooking?.timePreference === 'quick' ? 'Hızlı ve Pratik' :
                             state.data.cooking?.timePreference === 'elaborate' ? 'Detaylı ve Gurme' : 'Dengeli'}
                     />
                     <SummaryCard
-                        anim={card5Anim}
+                        anim={card4Anim}
                         emoji="🍳"
                         label="Mutfak Ekipmanı"
-                        value={equipmentCount > 0 ? `${equipmentCount} ekipman var` : 'Standart ekipmanlar'}
+                        value={equipmentDisplay}
                     />
                 </View>
             </ScrollView>

@@ -1,27 +1,39 @@
 import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { commonStyles } from '../../theme/common-styles';
 import { colors } from '../../theme/colors';
 
 export default function TabsLayout() {
+    const insets = useSafeAreaInsets();
+
     return (
         <Tabs
             screenOptions={{
                 headerShown: false,
-                tabBarStyle: commonStyles.tabBar,
-                tabBarActiveTintColor: colors.tabIconActive,
+                tabBarStyle: {
+                    ...commonStyles.tabBar,
+                    height: 60 + insets.bottom,
+                    paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
+                    paddingTop: 8,
+                },
+                tabBarActiveTintColor: colors.primary,
                 tabBarInactiveTintColor: colors.tabIconInactive,
-                tabBarLabelStyle: commonStyles.tabLabel,
+                tabBarLabelStyle: {
+                    fontSize: 11,
+                    fontWeight: '500',
+                },
             }}
         >
             <Tabs.Screen
                 name="index"
                 options={{
-                    title: 'My Menu',
+                    title: 'Menü',
                     tabBarIcon: ({ color, focused }) => (
                         <MaterialCommunityIcons
-                            name={focused ? 'calendar-month' : 'calendar-month-outline'}
-                            size={24}
+                            name={focused ? 'home' : 'home-outline'}
+                            size={26}
                             color={color}
                         />
                     ),
@@ -30,11 +42,11 @@ export default function TabsLayout() {
             <Tabs.Screen
                 name="groceries"
                 options={{
-                    title: 'Groceries',
+                    title: 'Alışveriş',
                     tabBarIcon: ({ color, focused }) => (
                         <MaterialCommunityIcons
-                            name={focused ? 'cart' : 'cart-outline'}
-                            size={24}
+                            name={focused ? 'basket' : 'basket-outline'}
+                            size={26}
                             color={color}
                         />
                     ),
@@ -43,11 +55,11 @@ export default function TabsLayout() {
             <Tabs.Screen
                 name="cookbook"
                 options={{
-                    title: 'Cookbook',
+                    title: 'Tarifler',
                     tabBarIcon: ({ color, focused }) => (
                         <MaterialCommunityIcons
-                            name={focused ? 'book-open-page-variant' : 'book-outline'}
-                            size={24}
+                            name={focused ? 'heart' : 'heart-outline'}
+                            size={26}
                             color={color}
                         />
                     ),
@@ -59,11 +71,17 @@ export default function TabsLayout() {
                     title: 'Profil',
                     tabBarIcon: ({ color, focused }) => (
                         <MaterialCommunityIcons
-                            name={focused ? 'account' : 'account-outline'}
-                            size={24}
+                            name={focused ? 'account-circle' : 'account-circle-outline'}
+                            size={26}
                             color={color}
                         />
                     ),
+                }}
+            />
+            <Tabs.Screen
+                name="discover"
+                options={{
+                    href: null, // Hide from tab bar
                 }}
             />
         </Tabs>

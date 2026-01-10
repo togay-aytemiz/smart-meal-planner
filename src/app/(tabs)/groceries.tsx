@@ -9,7 +9,7 @@ export default function GroceriesScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>My Groceries</Text>
+                <Text style={styles.title}>Alışveriş Listem</Text>
             </View>
 
             <View style={styles.content}>

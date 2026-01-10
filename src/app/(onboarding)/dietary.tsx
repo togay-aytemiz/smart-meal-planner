@@ -103,7 +103,7 @@ export default function DietaryScreen() {
                 <View style={styles.infoCard}>
                     <Text style={styles.infoEmoji}>💡</Text>
                     <Text style={styles.infoText}>
-                        Bu bilgiler size ve ailenize uygun yemekler önermemize yardımcı olacak.
+                        Bu bilgiler size uygun yemekler oluşturmamıza yardımcı olacak.
                     </Text>
                 </View>
             </ScrollView>

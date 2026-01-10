@@ -49,17 +49,17 @@ export default function PaywallScreen() {
                     <BenefitRow
                         icon="chef-hat"
                         title="Sınırsız AI Şef"
-                        desc="Sana özel, dolabındakilerle anlık tarifler yarat."
+                        desc="Dolabınızdakilerle size özel tarifler."
                     />
                     <BenefitRow
-                        icon="chart-timeline-variant"
-                        title="Akıllı Makro Takibi"
-                        desc="Hedeflerine giden yolda besin değerlerini izle."
+                        icon="calendar-week"
+                        title="Akıllı Haftalık Plan"
+                        desc="Rutinlerinize uygun otomatik plan."
                     />
                     <BenefitRow
-                        icon="barcode-scan"
-                        title="Hızlı Ürün Ekleme"
-                        desc="Barkod okutarak dolabını saniyeler içinde doldur."
+                        icon="cart-outline"
+                        title="Alışveriş Listesi"
+                        desc="Planınızdan otomatik market listesi."
                     />
                 </View>
 

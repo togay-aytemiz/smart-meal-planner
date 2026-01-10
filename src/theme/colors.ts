@@ -42,7 +42,7 @@ export const colors = {
     tabBarBackground: '#F6EFE7',
     tabBarBorder: '#E7D8CC',
     tabIconActive: '#F46C42',
-    tabIconInactive: '#B9AAA0',
+    tabIconInactive: '#FFAA8F',
     iconPrimary: '#F46C42',
     iconMuted: '#9C8F87',
 } as const;

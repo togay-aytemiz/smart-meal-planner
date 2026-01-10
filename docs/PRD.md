@@ -281,13 +281,18 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 ### Phase 1: Foundation (MVP - Single User)
 - [ ] Single-user onboarding (name → weekly routine)
 - [ ] Tab navigation shell (My Menu, Groceries, Cookbook, Settings)
-- [ ] My Menu weekly view (today → Sunday)
-- [ ] AI meal planning based on onboarding + weekly habits
-- [ ] Weekly meal plan generation with 3-course minimum
+- [ ] My Menu daily view (today - dinner meal) - **MVP Scope: Single meal per day**
+- [ ] AI meal planning based on onboarding + daily routine context
+  - **MVP:** Generate 1 dinner meal per day
+  - Uses onboarding data: dietary restrictions, allergies, cuisine preferences, cooking skill, equipment
+  - Routine-aware: gym days, office days, remote days
+  - **Future:** Expand to breakfast, lunch, full daily menu
+- [ ] Daily dinner menu generation (1 meal)
 - [ ] Recipe detail page (ingredients/instructions/nutrition)
-- [ ] AI recipe generation tied to planned meals + image generation
-- [ ] Grocery list from AI menu + pantry + manual add
+- [ ] AI recipe generation with image generation (1 recipe per dinner)
+- [ ] Grocery list from dinner menu + pantry + manual add
 - [ ] Pantry-only toggle in settings and prompt conditioning
+- [ ] **Future (Post-MVP):** User feedback loop (like/dislike, swap meals)
 
 ### Phase 2: AI Integration (Post-MVP)
 - [ ] AI chat modifications for menus/recipes

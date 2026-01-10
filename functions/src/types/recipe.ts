@@ -8,6 +8,10 @@ export interface Recipe {
   name: string;
   description?: string;
   
+  // Reasoning/Explanation (from LLM)
+  reasoning?: string; // "Neden bu yemek?" - LLM'in açıklaması (optional, can be at menu level)
+  // Örnek: "Yüksek protein içeriği ve dengeli karbonhidrat oranı ile post-workout recovery için ideal."
+  
   // Servings & Scalability
   baseServings: number; // Original LLM servings (e.g., 4)
   servings: number; // Active servings (user can adjust)

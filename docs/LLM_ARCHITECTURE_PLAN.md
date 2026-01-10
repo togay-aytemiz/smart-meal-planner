@@ -698,8 +698,16 @@ OnboardingData {
 ## ✅ Progress Tracking
 
 **Last Updated:** 2024-01-10  
-**Current Phase:** Phase 1 - Foundation Setup  
-**Next Milestone:** Core Types & Schemas
+**Current Phase:** Phase 2 - Core Types & Schemas ✅  
+**Next Milestone:** Phase 3 - LLM Providers Implementation
+
+### Recent Updates
+
+- ✅ Added reasoning/explanation field to recipe schema and types
+- ✅ Updated prompt builder to request personalized reasoning from LLM
+- ✅ MVP: Default to Monday routine from onboarding for testing (can be overridden)
+- ✅ Reasoning field: 50-500 characters, Turkish, conversational tone
+- ✅ Reasoning explains: Why this recipe for this user on this specific day
 
 ---
 

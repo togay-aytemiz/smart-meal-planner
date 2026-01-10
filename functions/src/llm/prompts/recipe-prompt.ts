@@ -251,8 +251,9 @@ export function buildRecipePrompt(params: RecipeGenerationParams): string {
   prompt += `\n`;
 
   // === SCALING REQUIREMENTS ===
+  const finalServings = servings || householdSize || 4;
   prompt += `## SCALING REQUIREMENTS\n`;
-  prompt += `- Recipe must support scaling from ${Math.max(1, Math.floor(servings / 2))} to ${servings * 2} servings\n`;
+  prompt += `- Recipe must support scaling from ${Math.max(1, Math.floor(finalServings / 2))} to ${finalServings * 2} servings\n`;
   prompt += `- Ingredient amounts should scale proportionally\n`;
   prompt += `- Cooking times may need slight adjustments for larger batches\n`;
   prompt += `- Nutrition should be calculated accurately for all serving sizes\n`;

@@ -13,6 +13,7 @@ export interface LLMConfig {
   };
   gemini: {
     apiKey: string;
+    model: string; // Model name for Gemini
   };
 }
 
@@ -38,6 +39,7 @@ export function getLLMConfig(): LLMConfig {
         },
         gemini: {
           apiKey: process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY.value(),
+          model: process.env.GEMINI_MODEL || "gemini-3-flash-preview",
         },
       };
     } catch (error) {
@@ -52,6 +54,7 @@ export function getLLMConfig(): LLMConfig {
     },
     gemini: {
       apiKey: secrets.GEMINI_API_KEY.value(),
+      model: process.env.GEMINI_MODEL || "gemini-3-flash-preview",
     },
   };
 }

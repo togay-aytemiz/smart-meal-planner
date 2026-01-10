@@ -1,0 +1,26 @@
+# Compiled JavaScript files
+lib/
+*.js
+*.js.map
+
+# Dependencies
+node_modules/
+
+# Secret files
+.secret.local
+.runtimeconfig.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

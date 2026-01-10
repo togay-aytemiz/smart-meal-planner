@@ -5,20 +5,19 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
 
-export default function TodayScreen() {
+export default function CookbookScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.greeting}>Günaydın</Text>
-                <Text style={styles.date}>9 Ocak 2026, Cuma</Text>
+                <Text style={styles.title}>Cookbook</Text>
             </View>
 
             <View style={styles.content}>
                 <View style={styles.placeholder}>
-                    <MaterialCommunityIcons name="silverware-fork-knife" size={56} color={colors.iconMuted} />
-                    <Text style={styles.placeholderTitle}>Bugünkü Menünüz</Text>
+                    <MaterialCommunityIcons name="book-outline" size={56} color={colors.iconMuted} />
+                    <Text style={styles.placeholderTitle}>Kaydedilen Tarifler</Text>
                     <Text style={styles.placeholderText}>
-                        Haftalık menünüz burada görünecek
+                        Beğendiğiniz AI tarifleri burada birikir
                     </Text>
                 </View>
             </View>
@@ -36,13 +35,9 @@ const styles = StyleSheet.create({
         paddingTop: spacing.md,
         paddingBottom: spacing.lg,
     },
-    greeting: {
+    title: {
         ...typography.h2,
         color: colors.textPrimary,
-    },
-    date: {
-        ...typography.body,
-        color: colors.textSecondary,
     },
     content: {
         flex: 1,
@@ -56,8 +51,8 @@ const styles = StyleSheet.create({
     placeholderTitle: {
         ...typography.h3,
         color: colors.textPrimary,
-        marginBottom: spacing.xs,
         marginTop: spacing.md,
+        marginBottom: spacing.xs,
     },
     placeholderText: {
         ...typography.body,

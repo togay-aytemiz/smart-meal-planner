@@ -1,57 +1,71 @@
 import { Tabs } from 'expo-router';
-import { Text, StyleSheet } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { commonStyles } from '../../theme/common-styles';
 import { colors } from '../../theme/colors';
-import { typography } from '../../theme/typography';
 
 export default function TabsLayout() {
     return (
         <Tabs
             screenOptions={{
                 headerShown: false,
-                tabBarStyle: styles.tabBar,
-                tabBarActiveTintColor: colors.primary,
-                tabBarInactiveTintColor: colors.textMuted,
-                tabBarLabelStyle: styles.tabLabel,
+                tabBarStyle: commonStyles.tabBar,
+                tabBarActiveTintColor: colors.tabIconActive,
+                tabBarInactiveTintColor: colors.tabIconInactive,
+                tabBarLabelStyle: commonStyles.tabLabel,
             }}
         >
             <Tabs.Screen
                 name="index"
                 options={{
-                    title: 'Bugün',
-                    tabBarIcon: ({ color }) => <Text style={[styles.tabIcon, { color }]}>📅</Text>,
+                    title: 'My Menu',
+                    tabBarIcon: ({ color, focused }) => (
+                        <MaterialCommunityIcons
+                            name={focused ? 'calendar-month' : 'calendar-month-outline'}
+                            size={24}
+                            color={color}
+                        />
+                    ),
                 }}
             />
             <Tabs.Screen
-                name="discover"
+                name="groceries"
                 options={{
-                    title: 'Keşfet',
-                    tabBarIcon: ({ color }) => <Text style={[styles.tabIcon, { color }]}>🔍</Text>,
+                    title: 'Groceries',
+                    tabBarIcon: ({ color, focused }) => (
+                        <MaterialCommunityIcons
+                            name={focused ? 'cart' : 'cart-outline'}
+                            size={24}
+                            color={color}
+                        />
+                    ),
+                }}
+            />
+            <Tabs.Screen
+                name="cookbook"
+                options={{
+                    title: 'Cookbook',
+                    tabBarIcon: ({ color, focused }) => (
+                        <MaterialCommunityIcons
+                            name={focused ? 'book-open-page-variant' : 'book-outline'}
+                            size={24}
+                            color={color}
+                        />
+                    ),
                 }}
             />
             <Tabs.Screen
                 name="profile"
                 options={{
                     title: 'Profil',
-                    tabBarIcon: ({ color }) => <Text style={[styles.tabIcon, { color }]}>👤</Text>,
+                    tabBarIcon: ({ color, focused }) => (
+                        <MaterialCommunityIcons
+                            name={focused ? 'account' : 'account-outline'}
+                            size={24}
+                            color={color}
+                        />
+                    ),
                 }}
             />
         </Tabs>
     );
 }
-
-const styles = StyleSheet.create({
-    tabBar: {
-        backgroundColor: colors.surface,
-        borderTopWidth: 1,
-        borderTopColor: colors.borderLight,
-        height: 85,
-        paddingTop: 8,
-    },
-    tabLabel: {
-        ...typography.caption,
-        marginBottom: 8,
-    },
-    tabIcon: {
-        fontSize: 24,
-    },
-});

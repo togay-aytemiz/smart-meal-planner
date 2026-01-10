@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { colors } from '../../theme/colors';
@@ -35,7 +36,9 @@ export default function ProfileScreen() {
 
             <View style={styles.content}>
                 <View style={styles.avatarContainer}>
-                    <Text style={styles.avatar}>👤</Text>
+                    <View style={styles.avatar}>
+                        <MaterialCommunityIcons name="account" size={40} color={colors.primary} />
+                    </View>
                 </View>
 
                 <View style={styles.section}>
@@ -74,14 +77,12 @@ const styles = StyleSheet.create({
         marginBottom: spacing.xl,
     },
     avatar: {
-        fontSize: 64,
         width: 100,
         height: 100,
-        textAlign: 'center',
-        lineHeight: 100,
         backgroundColor: colors.primaryLight + '20',
         borderRadius: 50,
-        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     section: {
         marginBottom: spacing.lg,

@@ -47,7 +47,7 @@ An intelligent meal planner that:
 
 > **Note:** Detailed onboarding questions will be defined in a separate document. The onboarding will collect:
 
-### Household Setup
+### Household Setup (Post-MVP)
 - Number of people in household
 - Relationship/role for each member (self, spouse, child, nanny, etc.)
 - Age range of each member
@@ -72,6 +72,8 @@ An intelligent meal planner that:
 - Kitchen equipment available
 - Grocery shopping habits
 - Budget considerations
+
+> Bu bilgiler size uygun yemekler oluşturmamıza yardımcı olacak.
 
 ---
 
@@ -276,7 +278,8 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 
 ## MVP Scope
 
-### Phase 1: Foundation (MVP)
+### Phase 1: Foundation (MVP - Single User)
+- [ ] Single-user onboarding (name → weekly routine)
 - [ ] Tab navigation shell (My Menu, Groceries, Cookbook, Settings)
 - [ ] My Menu weekly view (today → Sunday)
 - [ ] AI meal planning based on onboarding + weekly habits
@@ -290,7 +293,7 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 - [ ] AI chat modifications for menus/recipes
 - [ ] Preference memory refinement from swaps/dislikes
 
-### Phase 3: Family Features
+### Phase 3: Family Features (Post-MVP)
 - [ ] Multi-member household support
 - [ ] Per-person preferences
 - [ ] Routine conflict resolution

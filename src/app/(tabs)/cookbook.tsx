@@ -6,7 +6,13 @@ import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
 import { useState } from 'react';
 import { functions } from '../../config/firebase';
-import { httpsCallable } from 'firebase/functions';
+
+type TestGeminiResponse = {
+    response: string;
+    success: boolean;
+    model: string;
+    timestamp: string;
+};
 
 export default function CookbookScreen() {
     const [loading, setLoading] = useState(false);
@@ -19,17 +25,21 @@ export default function CookbookScreen() {
         setResponse(null);
 
         try {
-            const testFunction = httpsCallable(functions, 'testGemini');
+            const testFunction = functions.httpsCallable<
+                { prompt: string },
+                TestGeminiResponse
+            >('testGemini');
 
             const result = await testFunction({
                 prompt: 'Merhaba! Türk mutfağından basit ve lezzetli bir tarif öner.'
             });
 
-            const data = result.data as any;
+            const data = result.data;
             setResponse(data.response);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Gemini test hatası:', err);
-            setError(err.message || 'Bir hata oluştu');
+            const message = err instanceof Error ? err.message : 'Bir hata oluştu';
+            setError(message);
         } finally {
             setLoading(false);
         }
@@ -222,4 +232,3 @@ const styles = StyleSheet.create({
         marginBottom: spacing.lg,
     },
 });
-

@@ -104,6 +104,7 @@ export const RECIPE_JSON_SCHEMA = {
           description: "100g başına beslenme (opsiyonel, beslenme hesaplaması için)",
         },
       },
+      },
       required: ["name", "amount", "unit"],
       minItems: 2,
       description: "baseServings için kesin miktarlarla malzeme listesi. SADECE Türkiye'de bulunabilen malzemeler. Tüm malzeme isimleri Türkçe olmalı.",

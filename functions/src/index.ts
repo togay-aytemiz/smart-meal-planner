@@ -11,7 +11,7 @@ import { secrets } from "./config/secrets";
 // Set global options for all functions
 setGlobalOptions({
   region: "us-central1", // Change to your preferred region
-  secrets: [secrets.OPENAI_API_KEY, secrets.GEMINI_API_KEY],
+  secrets: [secrets.GEMINI_API_KEY],
   timeoutSeconds: 540, // 9 minutes max for LLM operations
   memory: "512MiB", // Adjust based on needs
 });
@@ -50,11 +50,12 @@ export const testGemini = onCall(async (request) => {
       model: gemini.getName(),
       timestamp: new Date().toISOString(),
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("testGemini error:", error);
+    const message = error instanceof Error ? error.message : "Failed to generate response";
     throw new functions.HttpsError(
       "internal",
-      error.message || "Failed to generate response"
+      message
     );
   }
 });

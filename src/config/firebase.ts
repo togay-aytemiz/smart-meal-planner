@@ -1,37 +1,17 @@
 /**
- * Firebase Configuration
- * Web SDK for Firebase Functions (Cloud Functions)
+ * Firebase Functions Configuration (React Native Firebase)
  */
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
+import functions from '@react-native-firebase/functions';
+import { Platform } from 'react-native';
 
-// Firebase project configuration
-// TODO: Replace with your actual Firebase project config
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
-
-// Initialize Firebase (singleton pattern)
-let app;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
-}
-
-// Initialize Functions
-const functions = getFunctions(app);
+const functionsInstance = functions();
 
 // Connect to local emulator in development
 if (__DEV__) {
+  const host = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
   console.log('🔧 Connecting to Firebase Functions Emulator...');
-  connectFunctionsEmulator(functions, 'localhost', 5001);
+  functionsInstance.useEmulator(host, 5001);
 }
 
-export { app, functions };
+export { functionsInstance as functions };

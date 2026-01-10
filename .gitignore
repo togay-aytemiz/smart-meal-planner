@@ -46,6 +46,10 @@ functions/lib/
 functions/node_modules/
 functions/.secret.local
 functions/.runtimeconfig.json
+functions/*.js
+functions/*.js.map
+functions/.env
+functions/.env.local
 
 # typescript
 *.tsbuildinfo

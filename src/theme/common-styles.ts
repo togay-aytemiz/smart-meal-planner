@@ -60,6 +60,16 @@ export const commonStyles = StyleSheet.create({
         marginTop: spacing.xs,
     },
 
+    headerIcon: {
+        width: 28,
+        height: 28,
+        tintColor: colors.iconPrimary,
+    },
+
+    headerIconMuted: {
+        tintColor: colors.iconMuted,
+    },
+
     sectionHeader: {
         ...typography.h3,
         color: colors.textPrimary,
@@ -125,7 +135,7 @@ export const commonStyles = StyleSheet.create({
 
     buttonPrimaryText: {
         ...typography.button,
-        color: colors.textInverse,
+        color: colors.textOnPrimary,
     },
 
     buttonSecondary: {
@@ -238,5 +248,55 @@ export const commonStyles = StyleSheet.create({
         paddingBottom: spacing.xxl,
         paddingTop: spacing.md,
         backgroundColor: colors.background,
+    },
+
+    // ═══════════════════════════════════════════════
+    // TAB BAR
+    // ═══════════════════════════════════════════════
+
+    tabBar: {
+        backgroundColor: colors.tabBarBackground,
+        borderTopWidth: 1,
+        borderTopColor: colors.tabBarBorder,
+        paddingTop: spacing.sm,
+        paddingBottom: spacing.md,
+    },
+
+    tabIcon: {
+        width: 24,
+        height: 24,
+        tintColor: colors.tabIconInactive,
+    },
+
+    tabIconActive: {
+        tintColor: colors.tabIconActive,
+    },
+
+    tabLabel: {
+        ...typography.caption,
+        color: colors.tabIconInactive,
+        marginTop: spacing.xs,
+    },
+
+    tabLabelActive: {
+        color: colors.tabIconActive,
+    },
+
+    // ═══════════════════════════════════════════════
+    // PILLS / BADGES
+    // ═══════════════════════════════════════════════
+
+    pill: {
+        backgroundColor: colors.surfaceMuted,
+        borderRadius: radius.full,
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+
+    pillText: {
+        ...typography.caption,
+        color: colors.textSecondary,
     },
 });

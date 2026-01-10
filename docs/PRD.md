@@ -23,6 +23,7 @@ An intelligent meal planner that:
 ### Ollie-Inspired Experience
 - How it works: collect preferences → generate menu + grocery list → user approves → adjustments via chat
 - Core strengths to mirror: automated meal planning, smart grocery lists, and a clear approval loop
+- Post‑MVP: price comparison and ordering assistance (inspired by Ollie)
 
 ---
 
@@ -76,11 +77,11 @@ An intelligent meal planner that:
 
 ## Core Features
 
-### Tab Navigation
+### Tab Navigation (MVP)
 - **My Menu:** Today, tomorrow, and the rest of the week (up to Sunday)
-- **Groceries:** Weekly shopping list (menu + pantry)
-- **Cookbook:** Saved AI recipes (favorites)
-- **Settings/Profile:** Preferences, household, and AI memory
+- **Groceries:** Weekly shopping list from menu + pantry, manual add/edit items
+- **Cookbook:** Saved AI recipes (favorites/heart)
+- **Settings/Profile:** Preferences, household, and account
 
 ### 1. My Menu (Menu Feed)
 
@@ -113,8 +114,8 @@ An intelligent meal planner that:
 - **Personalization Layers:**
   - Global household preferences
   - Individual dietary needs
-  - Ingredient dislikes/avoid list (per user)
-  - Pantry-only mode (when enabled, Post-MVP)
+  - Ingredient dislikes/avoid list (per user, MVP)
+  - Pantry-only mode (when enabled, MVP)
   - Time-based constraints
   - Energy/nutrition goals
 
@@ -156,7 +157,7 @@ An intelligent meal planner that:
 
 #### Recipe Features
 - AI-generated recipes tailored to family (MVP)
-- AI-generated hero image per recipe (Post-MVP)
+- AI-generated hero image per recipe (MVP)
 - Step-by-step cooking instructions
 - Serving size adjustments
 - Nutritional information
@@ -241,8 +242,8 @@ An intelligent meal planner that:
 
 ### Recipe & AI Memory Storage
 - **Recipes:** Store AI-generated recipes in Firestore for reuse and cost savings
-- **Images:** Generate and store recipe images in Firebase Storage (Post-MVP)
-- **User Memory:** Persist dislikes, swaps, and pantry-only preference to condition prompts (Post-MVP)
+- **Images:** Generate and store recipe images in Firebase Storage (MVP)
+- **User Memory:** Persist swap/dislike feedback to condition prompts (Post-MVP)
 
 ### Data Storage
 - **Local:** AsyncStorage for offline access
@@ -275,19 +276,19 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 
 ## MVP Scope
 
-### Phase 1: Foundation
+### Phase 1: Foundation (MVP)
 - [ ] Tab navigation shell (My Menu, Groceries, Cookbook, Settings)
 - [ ] My Menu weekly view (today → Sunday)
-- [ ] Manual meal assignment + basic swap
-- [ ] Recipe detail page (ingredients/instructions)
-- [ ] Grocery list from manual menus + manual add
 - [ ] AI meal planning based on onboarding + weekly habits
-- [ ] AI recipe generation tied to planned meals
+- [ ] Weekly meal plan generation with 3-course minimum
+- [ ] Recipe detail page (ingredients/instructions/nutrition)
+- [ ] AI recipe generation tied to planned meals + image generation
+- [ ] Grocery list from AI menu + pantry + manual add
+- [ ] Pantry-only toggle in settings and prompt conditioning
 
-### Phase 2: AI Integration
+### Phase 2: AI Integration (Post-MVP)
 - [ ] AI chat modifications for menus/recipes
-- [ ] Recipe image generation
-- [ ] Pantry-only option in prompts
+- [ ] Preference memory refinement from swaps/dislikes
 
 ### Phase 3: Family Features
 - [ ] Multi-member household support

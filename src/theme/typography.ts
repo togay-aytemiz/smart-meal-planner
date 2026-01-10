@@ -6,18 +6,21 @@ export const typography = {
         fontSize: 32,
         fontWeight: '700',
         lineHeight: 40,
+        letterSpacing: -0.2,
     } as TextStyle,
 
     h2: {
         fontSize: 24,
         fontWeight: '600',
         lineHeight: 32,
+        letterSpacing: -0.1,
     } as TextStyle,
 
     h3: {
         fontSize: 20,
         fontWeight: '600',
         lineHeight: 28,
+        letterSpacing: -0.1,
     } as TextStyle,
 
     // Body
@@ -25,12 +28,14 @@ export const typography = {
         fontSize: 16,
         fontWeight: '400',
         lineHeight: 24,
+        letterSpacing: 0.1,
     } as TextStyle,
 
     bodySmall: {
         fontSize: 14,
         fontWeight: '400',
         lineHeight: 20,
+        letterSpacing: 0.1,
     } as TextStyle,
 
     // UI Elements
@@ -38,24 +43,28 @@ export const typography = {
         fontSize: 16,
         fontWeight: '600',
         lineHeight: 24,
+        letterSpacing: 0.2,
     } as TextStyle,
 
     buttonSmall: {
         fontSize: 14,
         fontWeight: '600',
         lineHeight: 20,
+        letterSpacing: 0.2,
     } as TextStyle,
 
     caption: {
         fontSize: 12,
         fontWeight: '500',
         lineHeight: 16,
+        letterSpacing: 0.2,
     } as TextStyle,
 
     label: {
         fontSize: 14,
         fontWeight: '500',
         lineHeight: 20,
+        letterSpacing: 0.1,
     } as TextStyle,
 
     // Special

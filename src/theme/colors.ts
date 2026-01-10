@@ -1,38 +1,50 @@
 export const colors = {
     // Backgrounds
-    background: '#F7EDE3',
-    surface: '#FFF6EB',
+    background: '#F6EFE7',
+    surface: '#FFF7EE',
+    surfaceAlt: '#FDF1E4',
+    surfaceMuted: '#F4E6D9',
 
     // Primary
-    primary: '#F26B3A',
-    primaryLight: '#FF8A5C',
-    primaryDark: '#D4552A',
+    primary: '#F46C42',
+    primaryLight: '#FF8A63',
+    primaryDark: '#D5522E',
 
     // Accent
-    accent: '#F0A24B',
-    accentLight: '#F7C07B',
+    accent: '#F2A24A',
+    accentLight: '#F7C47E',
+    accentSoft: '#FBE3C7',
 
     // Text
-    textPrimary: '#2B2420',
-    textSecondary: '#6B5F57',
-    textMuted: '#9B8F86',
+    textPrimary: '#2A241F',
+    textSecondary: '#6E6159',
+    textMuted: '#9C8F87',
     textInverse: '#FFFFFF',
+    textOnPrimary: '#FFF6F0',
 
     // Borders
-    border: '#E7D9CC',
-    borderLight: '#F2E7DC',
+    border: '#E6D8CB',
+    borderLight: '#F3E8DD',
+    borderStrong: '#D9C7B8',
 
     // Status
     success: '#1E9E6D',
-    successLight: '#DDF4EA',
+    successLight: '#DCF3E9',
     warning: '#E38A2E',
     warningLight: '#F8E4C8',
     error: '#E24D4D',
-    errorLight: '#F8D6D6',
+    errorLight: '#F7D6D6',
 
     // Misc
     overlay: 'rgba(0, 0, 0, 0.5)',
+    overlayLight: 'rgba(42, 36, 31, 0.08)',
     transparent: 'transparent',
+    tabBarBackground: '#F6EFE7',
+    tabBarBorder: '#E7D8CC',
+    tabIconActive: '#F46C42',
+    tabIconInactive: '#B9AAA0',
+    iconPrimary: '#F46C42',
+    iconMuted: '#9C8F87',
 } as const;
 
 export type ColorKey = keyof typeof colors;

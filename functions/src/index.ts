@@ -25,7 +25,41 @@ export const health = onRequest(async (request, response) => {
   });
 });
 
-// TODO: Recipe generation function will be added here
-// export const generateRecipe = functions.https.onCall(async (request) => {
+// Import Gemini provider
+import { GeminiProvider } from "./llm/gemini-provider";
+import { onCall } from "firebase-functions/v2/https";
+
+// Test Gemini LLM endpoint
+export const testGemini = onCall(async (request) => {
+  try {
+    const { prompt } = request.data;
+
+    if (!prompt) {
+      throw new functions.HttpsError(
+        "invalid-argument",
+        "Prompt is required"
+      );
+    }
+
+    const gemini = new GeminiProvider();
+    const response = await gemini.generateTest(prompt);
+
+    return {
+      success: true,
+      response: response,
+      model: gemini.getName(),
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error: any) {
+    console.error("testGemini error:", error);
+    throw new functions.HttpsError(
+      "internal",
+      error.message || "Failed to generate response"
+    );
+  }
+});
+
+// TODO: Full menu generation function
+// export const generateMenu = onCall(async (request) => {
 //   // Implementation coming soon
 // });

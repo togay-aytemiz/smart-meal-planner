@@ -35,6 +35,12 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Secret files (anywhere in project)
+**/.secret.local
+**/.runtimeconfig.json
+.secret.local
+.runtimeconfig.json
+
 # Firebase Functions
 functions/lib/
 functions/node_modules/

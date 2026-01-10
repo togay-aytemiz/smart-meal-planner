@@ -556,12 +556,13 @@ OnboardingData {
 - [ ] Secrets management setup
 - [ ] Firestore structure documentation
 
-### Phase 2: Core Types & Schemas
+### Phase 2: Core Types & Schemas ✅
 
-- [ ] Recipe type definitions
-- [ ] Onboarding type integration
-- [ ] JSON schema for LLM (recipe-schema.ts)
-- [ ] Generation parameters types
+- [x] Recipe type definitions
+- [x] Onboarding type integration
+- [x] JSON schema for LLM (recipe-schema.ts)
+- [x] Generation parameters types
+- [x] Prompt builder with onboarding context integration
 
 ### Phase 3: LLM Providers
 

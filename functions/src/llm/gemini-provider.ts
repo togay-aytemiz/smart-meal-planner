@@ -1,21 +1,113 @@
 /**
  * Gemini LLM Provider - Recipe Generation
- * Using Google Generative AI (Gemini) for menu planning
+ * Uses REST v1beta to support preview models.
  */
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getLLMConfig } from "../config/secrets";
 import { buildMenuSystemPrompt, buildMenuPrompt } from "./prompts/menu-prompt";
 import { MenuGenerationRequest } from "../types/menu";
 
+type GeminiContentPart = {
+    text: string;
+};
+
+type GeminiContent = {
+    role: "user" | "model";
+    parts: GeminiContentPart[];
+};
+
+type GeminiGenerationConfig = {
+    temperature?: number;
+    topP?: number;
+    maxOutputTokens?: number;
+};
+
+type GeminiGenerateContentRequest = {
+    contents: GeminiContent[];
+    generationConfig?: GeminiGenerationConfig;
+};
+
+type GeminiGenerateContentResponse = {
+    candidates?: Array<{
+        content?: {
+            parts?: Array<{ text?: string }>;
+        };
+    }>;
+    error?: {
+        message?: string;
+        status?: string;
+    };
+};
+
 export class GeminiProvider {
-    private client: GoogleGenerativeAI;
+    private apiKey: string;
     private model: string;
+    private baseUrl: string;
 
     constructor() {
         const config = getLLMConfig();
-        this.client = new GoogleGenerativeAI(config.gemini.apiKey);
+        this.apiKey = config.gemini.apiKey;
         this.model = config.gemini.model;
+        this.baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    }
+
+    private async generateContent(
+        prompt: string,
+        generationConfig?: GeminiGenerationConfig
+    ): Promise<string> {
+        if (!this.apiKey) {
+            throw new Error("Gemini API key is missing");
+        }
+
+        const modelPath = this.model.startsWith("models/") ? this.model : `models/${this.model}`;
+        const url = `${this.baseUrl}/${modelPath}:generateContent?key=${encodeURIComponent(
+            this.apiKey
+        )}`;
+        const payload: GeminiGenerateContentRequest = {
+            contents: [
+                {
+                    role: "user",
+                    parts: [{ text: prompt }],
+                },
+            ],
+            generationConfig,
+        };
+
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+        });
+
+        const responseText = await response.text();
+        let responseJson: GeminiGenerateContentResponse | null = null;
+
+        try {
+            responseJson = JSON.parse(responseText) as GeminiGenerateContentResponse;
+        } catch {
+            responseJson = null;
+        }
+
+        if (!response.ok) {
+            const status = responseJson?.error?.status ? ` (${responseJson.error.status})` : "";
+            const message =
+                responseJson?.error?.message ||
+                responseText ||
+                response.statusText ||
+                "Gemini API request failed";
+            throw new Error(`Gemini API failed${status}: ${message}`);
+        }
+
+        const parts = responseJson?.candidates?.[0]?.content?.parts ?? [];
+        const text = parts.map((part) => part.text ?? "").join("").trim();
+
+        if (!text) {
+            throw new Error("Gemini API returned empty response");
+        }
+
+        return text;
     }
 
     /**
@@ -23,13 +115,7 @@ export class GeminiProvider {
      */
     async generateTest(prompt: string): Promise<string> {
         try {
-            const model = this.client.getGenerativeModel({ model: this.model });
-
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
-
-            return text;
+            return await this.generateContent(prompt);
         } catch (error) {
             console.error("Gemini API error:", error);
             throw new Error(`Gemini API failed: ${error}`);
@@ -44,25 +130,19 @@ export class GeminiProvider {
             const systemPrompt = buildMenuSystemPrompt();
             const userPrompt = buildMenuPrompt(request);
 
-            const model = this.client.getGenerativeModel({
-                model: this.model,
-                generationConfig: {
-                    temperature: 0.7,
-                    topP: 0.9,
-                    maxOutputTokens: 8192,
-                },
-            });
-
             // Combine prompts
             const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
-            const result = await model.generateContent(fullPrompt);
-            const response = await result.response;
-            const text = response.text();
+            const text = await this.generateContent(fullPrompt, {
+                temperature: 0.7,
+                topP: 0.9,
+                maxOutputTokens: 8192,
+            });
 
             // Try to parse as JSON
             try {
-                const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/{[\s\S]*}/);
+                const jsonMatch =
+                    text.match(/```json\n([\s\S]*?)\n```/) || text.match(/{[\s\S]*}/);
                 if (jsonMatch) {
                     const jsonText = jsonMatch[1] || jsonMatch[0];
                     return JSON.parse(jsonText);

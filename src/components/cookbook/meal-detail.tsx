@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import {
+    Animated,
     Image,
-    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
+    Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -20,12 +21,19 @@ interface MealDetailProps {
     recipe: MenuRecipe;
     appName?: string;
     imageUrl?: string | null;
-    isLive?: boolean;
     onBack?: () => void;
+    onFavorite?: () => void;
+    isFavorited?: boolean;
 }
 
-const HERO_HEIGHT = 320;
+const HERO_HEIGHT = 360;
+const HEADER_HEIGHT = 56;
 const PLACEHOLDER_IMAGE = require('../../../assets/splash-icon.png');
+
+// Stronger smooth gradient (Black -> Transparent)
+const GRADIENT_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAACVGAYAAADc5P5VAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABVSURBVHgB7c6xDYAwDABBE2ZkFqZgL/ZmL2ZgJ0pCQ8VH+cv3yWfMzBfZ7/f7/f7+9X1/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f3+/v38/p/d7f1Y5+xIAAAAASUVORK5CYII=';
+const BRIEF_FALLBACK =
+    'Taze sebzelerle zenginleştirilmiş hafif bulgur pilavı; pratik, dengeli ve güne iyi gelen bir lezzet.';
 
 const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'ingredients', label: 'Ingredients' },
@@ -54,19 +62,55 @@ const formatIngredient = (item: MenuIngredient) => {
 const sortInstructions = (instructions: MenuInstruction[]) =>
     [...instructions].sort((a, b) => a.step - b.step);
 
+const formatTimeValue = (minutes: number) => {
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+        return 'N/A';
+    }
+    return `${minutes} dk`;
+};
+
 export default function MealDetail({
     recipe,
     appName = 'Omnoo',
     imageUrl,
-    isLive = true,
     onBack,
+    onFavorite,
+    isFavorited = false,
 }: MealDetailProps) {
     const insets = useSafeAreaInsets();
     const [activeTab, setActiveTab] = useState<TabKey>('ingredients');
+    const scrollY = useRef(new Animated.Value(0)).current;
 
-    const brief = recipe.brief || 'Kısa özet yakında.';
+    const brief = recipe.brief?.trim() || BRIEF_FALLBACK;
     const resolvedImageUrl = imageUrl?.trim();
     const imageSource = resolvedImageUrl ? { uri: resolvedImageUrl } : PLACEHOLDER_IMAGE;
+
+    // Animation thresholds
+    const scrollThreshold = HERO_HEIGHT - HEADER_HEIGHT - insets.top - 40;
+
+    // Header background opacity based on scroll
+    const headerBgOpacity = scrollY.interpolate({
+        inputRange: [0, scrollThreshold],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+    });
+
+    // Text/Icon color interpolation (white to black)
+    const headerTextColor = scrollY.interpolate({
+        inputRange: [0, scrollThreshold],
+        outputRange: [colors.textInverse, colors.textPrimary],
+        extrapolate: 'clamp',
+    });
+    const headerShadowColor = scrollY.interpolate({
+        inputRange: [0, 40],
+        outputRange: ['rgba(0, 0, 0, 0.35)', 'rgba(0, 0, 0, 0)'],
+        extrapolate: 'clamp',
+    });
+    const headerShadowStyle = {
+        textShadowColor: headerShadowColor,
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+    };
 
     const nutritionRows = useMemo(() => {
         const { calories, protein, carbs, fat } = recipe.macrosPerServing;
@@ -82,131 +126,219 @@ export default function MealDetail({
         () => sortInstructions(recipe.instructions),
         [recipe.instructions]
     );
+    const showCookTime =
+        Number.isFinite(recipe.cookTimeMinutes) && recipe.cookTimeMinutes > 0;
 
     return (
-        <ScrollView contentContainerStyle={styles.contentContainer}>
-            <View style={styles.hero}>
+        <View style={styles.container}>
+            {/* Fixed Hero Image */}
+            <View style={[styles.heroContainer, { height: HERO_HEIGHT }]}>
                 <Image source={imageSource} style={styles.heroImage} />
-                <View style={styles.heroScrim} />
-                <View style={[styles.heroHeader, { paddingTop: insets.top + spacing.sm }]}
-                >
+
+                {/* Smooth Gradient Overlay */}
+                <View style={styles.gradientContainer}>
+                    <Image
+                        source={{ uri: GRADIENT_BASE64 }}
+                        style={styles.gradientImage}
+                        resizeMode="stretch"
+                    />
+                </View>
+            </View>
+
+            {/* Fixed Header */}
+            <Animated.View
+                style={[
+                    styles.header,
+                    {
+                        paddingTop: insets.top,
+                        height: HEADER_HEIGHT + insets.top,
+                    },
+                ]}
+            >
+                {/* Animated background that fades in on scroll */}
+                <Animated.View
+                    style={[
+                        styles.headerBackground,
+                        {
+                            opacity: headerBgOpacity,
+                        },
+                    ]}
+                />
+
+                <View style={styles.headerContent}>
                     {onBack ? (
-                        <TouchableOpacity style={styles.iconButton} onPress={onBack}>
-                            <MaterialCommunityIcons name="chevron-left" size={24} color={colors.textInverse} />
+                        <TouchableOpacity
+                            onPress={onBack}
+                            activeOpacity={0.7}
+                            style={styles.iconButton}
+                        >
+                            <Animated.Text style={[{ color: headerTextColor }, headerShadowStyle]}>
+                                <MaterialCommunityIcons name="arrow-left" size={28} />
+                            </Animated.Text>
                         </TouchableOpacity>
                     ) : (
                         <View style={styles.headerSpacer} />
                     )}
-                    <View style={styles.brandWrapper} pointerEvents="none">
-                        <Text style={styles.brandText}>{appName}</Text>
-                    </View>
-                    {isLive ? (
-                        <View style={styles.liveBadge}>
-                            <MaterialCommunityIcons name="checkbox-blank-circle" size={12} color={colors.textInverse} />
-                            <Text style={styles.liveText}>LIVE</Text>
-                        </View>
+
+                    <Animated.Text
+                        style={[styles.brandText, { color: headerTextColor }, headerShadowStyle]}
+                    >
+                        {appName}
+                    </Animated.Text>
+
+                    {onFavorite ? (
+                        <TouchableOpacity
+                            onPress={onFavorite}
+                            activeOpacity={0.7}
+                            style={styles.iconButton}
+                        >
+                            <Animated.Text style={[{ color: headerTextColor }, headerShadowStyle]}>
+                                <MaterialCommunityIcons
+                                    name={isFavorited ? 'heart' : 'heart-outline'}
+                                    size={28}
+                                />
+                            </Animated.Text>
+                        </TouchableOpacity>
                     ) : (
                         <View style={styles.headerSpacer} />
                     )}
                 </View>
-            </View>
+            </Animated.View>
 
-            <View style={styles.details}>
-                <Text style={styles.title}>{recipe.name}</Text>
-
-                <View style={styles.metaRow}>
-                    <View style={styles.metaPill}>
-                        <MaterialCommunityIcons name="account-group" size={18} color={colors.textSecondary} />
-                        <Text style={styles.metaValue}>{recipe.servings}</Text>
-                        <Text style={styles.metaLabel}>Porsiyon</Text>
-                    </View>
-                    <View style={styles.metaPill}>
-                        <MaterialCommunityIcons name="clock-outline" size={18} color={colors.textSecondary} />
-                        <Text style={styles.metaValue}>{recipe.prepTimeMinutes} dk</Text>
-                        <Text style={styles.metaLabel}>Hazırlık</Text>
-                    </View>
-                    <View style={styles.metaPill}>
-                        <MaterialCommunityIcons name="pot-steam-outline" size={18} color={colors.textSecondary} />
-                        <Text style={styles.metaValue}>{recipe.cookTimeMinutes} dk</Text>
-                        <Text style={styles.metaLabel}>Pişirme</Text>
-                    </View>
-                </View>
-
-                <View style={styles.briefCard}>
-                    <Text style={styles.sectionLabel}>Brief</Text>
-                    <Text style={styles.briefText}>{brief}</Text>
-                </View>
-
-                <View style={styles.tabContainer}>
-                    {tabs.map((tab) => {
-                        const isActive = tab.key === activeTab;
-                        return (
-                            <TouchableOpacity
-                                key={tab.key}
-                                onPress={() => setActiveTab(tab.key)}
-                                style={[styles.tabButton, isActive && styles.tabButtonActive]}
-                            >
-                                <Text style={[styles.tabButtonText, isActive && styles.tabButtonTextActive]}>
-                                    {tab.label}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-
-                {activeTab === 'ingredients' && (
-                    <View style={styles.listContainer}>
-                        {recipe.ingredients.map((item, index) => (
-                            <View key={`${item.name}-${index}`} style={styles.listRow}>
-                                <View style={styles.bullet} />
-                                <Text style={styles.listText}>{formatIngredient(item)}</Text>
-                            </View>
-                        ))}
-                    </View>
+            {/* Scrollable Content */}
+            <Animated.ScrollView
+                contentContainerStyle={[
+                    styles.scrollContent,
+                    { paddingTop: HERO_HEIGHT },
+                ]}
+                scrollEventThrottle={16}
+                onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                    { useNativeDriver: false }
                 )}
+            >
+                <View style={styles.details}>
+                    <Image
+                        source={{ uri: GRADIENT_BASE64 }}
+                        style={styles.detailsGradient}
+                        resizeMode="stretch"
+                        pointerEvents="none"
+                    />
+                    <Text style={styles.title}>{recipe.name}</Text>
 
-                {activeTab === 'instructions' && (
-                    <View style={styles.listContainer}>
-                        {instructions.map((step) => (
-                            <View key={`step-${step.step}`} style={styles.stepRow}>
-                                <View style={styles.stepBadge}>
-                                    <Text style={styles.stepNumber}>{step.step}</Text>
+                    <View style={styles.metaRow}>
+                        <View style={styles.metaPill}>
+                            <MaterialCommunityIcons name="account-group" size={18} color={colors.textSecondary} />
+                            <Text style={styles.metaValue}>{recipe.servings}</Text>
+                            <Text style={styles.metaLabel}>Porsiyon</Text>
+                        </View>
+                        <View style={styles.timeGroup}>
+                            <View style={styles.timeBlock}>
+                                <View style={styles.timeValueRow}>
+                                    <MaterialCommunityIcons
+                                        name="clock-outline"
+                                        size={16}
+                                        color={colors.textSecondary}
+                                    />
+                                    <Text style={styles.timeValue}>{formatTimeValue(recipe.prepTimeMinutes)}</Text>
                                 </View>
-                                <View style={styles.stepContent}>
-                                    <Text style={styles.stepText}>{step.text}</Text>
-                                    {step.durationMinutes > 0 && (
-                                        <Text style={styles.stepDuration}>{step.durationMinutes} dk</Text>
-                                    )}
+                                <Text style={styles.timeLabel}>Hazırlık</Text>
+                            </View>
+                            {showCookTime && (
+                                <View style={styles.timeBlock}>
+                                    <View style={styles.timeValueRow}>
+                                        <MaterialCommunityIcons
+                                            name="clock-outline"
+                                            size={16}
+                                            color={colors.textSecondary}
+                                        />
+                                        <Text style={styles.timeValue}>
+                                            {formatTimeValue(recipe.cookTimeMinutes)}
+                                        </Text>
+                                    </View>
+                                    <Text style={styles.timeLabel}>Pişirme</Text>
                                 </View>
-                            </View>
-                        ))}
+                            )}
+                        </View>
                     </View>
-                )}
 
-                {activeTab === 'nutrition' && (
-                    <View style={styles.listContainer}>
-                        <Text style={styles.nutritionNote}>Porsiyon başına</Text>
-                        {nutritionRows.map((row) => (
-                            <View key={row.label} style={styles.nutritionRow}>
-                                <Text style={styles.nutritionLabel}>{row.label}</Text>
-                                <Text style={styles.nutritionValue}>{row.value}</Text>
-                            </View>
-                        ))}
+                    <View style={styles.briefCard}>
+                        <Text style={styles.briefText}>{brief}</Text>
                     </View>
-                )}
-            </View>
-        </ScrollView>
+
+                    <View style={styles.tabContainer}>
+                        {tabs.map((tab) => {
+                            const isActive = tab.key === activeTab;
+                            return (
+                                <TouchableOpacity
+                                    key={tab.key}
+                                    onPress={() => setActiveTab(tab.key)}
+                                    style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                                >
+                                    <Text style={[styles.tabButtonText, isActive && styles.tabButtonTextActive]}>
+                                        {tab.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    {activeTab === 'ingredients' && (
+                        <View style={styles.listContainer}>
+                            {recipe.ingredients.map((item, index) => (
+                                <View key={`${item.name}-${index}`} style={styles.listRow}>
+                                    <View style={styles.bullet} />
+                                    <Text style={styles.listText}>{formatIngredient(item)}</Text>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
+                    {activeTab === 'instructions' && (
+                        <View style={styles.listContainer}>
+                            {instructions.map((step) => (
+                                <View key={`step-${step.step}`} style={styles.stepRow}>
+                                    <View style={styles.stepBadge}>
+                                        <Text style={styles.stepNumber}>{step.step}</Text>
+                                    </View>
+                                    <View style={styles.stepContent}>
+                                        <Text style={styles.stepText}>{step.text}</Text>
+                                        {step.durationMinutes > 0 && (
+                                            <Text style={styles.stepDuration}>{step.durationMinutes} dk</Text>
+                                        )}
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
+                    {activeTab === 'nutrition' && (
+                        <View style={styles.listContainer}>
+                            <Text style={styles.nutritionNote}>Porsiyon başına</Text>
+                            {nutritionRows.map((row) => (
+                                <View key={row.label} style={styles.nutritionRow}>
+                                    <Text style={styles.nutritionLabel}>{row.label}</Text>
+                                    <Text style={styles.nutritionValue}>{row.value}</Text>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+                </View>
+            </Animated.ScrollView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    contentContainer: {
-        paddingBottom: spacing.xxl,
-        gap: spacing.lg,
+    container: {
+        flex: 1,
+        backgroundColor: colors.background,
     },
-    hero: {
-        height: HERO_HEIGHT,
-        backgroundColor: colors.surfaceMuted,
+    heroContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
         overflow: 'hidden',
     },
     heroImage: {
@@ -215,63 +347,74 @@ const styles = StyleSheet.create({
         height: '100%',
         resizeMode: 'cover',
     },
-    heroScrim: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: colors.heroScrim,
-        opacity: 0.2,
-    },
-    heroHeader: {
+    gradientContainer: {
         position: 'absolute',
-        left: spacing.lg,
-        right: spacing.lg,
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 180, // Increased height for smoother transition
+    },
+    gradientImage: {
+        width: '100%',
+        height: '100%',
+    },
+    header: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+    },
+    headerBackground: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: colors.background,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderLight,
+    },
+    headerContent: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-    },
-    brandWrapper: {
-        ...StyleSheet.absoluteFillObject,
-        alignItems: 'center',
-        justifyContent: 'center',
+        paddingHorizontal: spacing.md,
     },
     brandText: {
-        ...typography.brand,
-        color: colors.textInverse,
-        textShadowColor: colors.overlay,
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 6,
+        ...typography.h3,
+        fontSize: 20,
+        fontWeight: '600',
     },
     iconButton: {
         width: 44,
         height: 44,
-        borderRadius: 22,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: colors.glassSurface,
-        borderWidth: 1,
-        borderColor: colors.glassBorder,
     },
     headerSpacer: {
         width: 44,
         height: 44,
     },
-    liveBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.xs,
-        backgroundColor: colors.liveBadge,
-        paddingHorizontal: spacing.sm,
-        paddingVertical: spacing.xs,
-        borderRadius: radius.full,
-        ...shadows.sm,
-    },
-    liveText: {
-        ...typography.caption,
-        color: colors.textInverse,
-        letterSpacing: 0.8,
+    scrollContent: {
+        paddingBottom: spacing.xxl,
     },
     details: {
+        backgroundColor: colors.background,
+        borderTopLeftRadius: radius.xl,
+        borderTopRightRadius: radius.xl,
+        marginTop: -radius.xl,
+        paddingTop: spacing.lg,
         paddingHorizontal: spacing.lg,
         gap: spacing.lg,
+    },
+    detailsGradient: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 120,
+        borderTopLeftRadius: radius.xl,
+        borderTopRightRadius: radius.xl,
+        tintColor: colors.surfaceAlt,
+        opacity: 0.85,
     },
     title: {
         ...typography.h2,
@@ -279,8 +422,8 @@ const styles = StyleSheet.create({
     },
     metaRow: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: spacing.sm,
+        alignItems: 'center',
+        gap: spacing.md,
     },
     metaPill: {
         flexDirection: 'row',
@@ -301,6 +444,31 @@ const styles = StyleSheet.create({
         ...typography.caption,
         color: colors.textMuted,
     },
+    timeGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.lg,
+        marginLeft: 'auto',
+    },
+    timeBlock: {
+        alignItems: 'flex-start',
+        gap: spacing.xs,
+    },
+    timeValueRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    timeValue: {
+        fontSize: 16,
+        fontWeight: '600',
+        lineHeight: 20,
+        color: colors.textPrimary,
+    },
+    timeLabel: {
+        ...typography.caption,
+        color: colors.textMuted,
+    },
     briefCard: {
         backgroundColor: colors.surface,
         borderRadius: radius.lg,
@@ -309,10 +477,6 @@ const styles = StyleSheet.create({
         borderColor: colors.borderLight,
         ...shadows.sm,
         gap: spacing.sm,
-    },
-    sectionLabel: {
-        ...typography.label,
-        color: colors.textSecondary,
     },
     briefText: {
         ...typography.body,

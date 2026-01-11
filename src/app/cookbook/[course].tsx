@@ -97,7 +97,7 @@ export default function CookbookDetailScreen() {
             )}
 
             {!loading && !error && recipe && (
-                <MealDetail recipe={recipe} onBack={() => router.back()} appName="Omnoo" />
+                <MealDetail recipe={recipe} onBack={() => router.back()} onFavorite={() => { }} appName="Omnoo" />
             )}
         </SafeAreaView>
     );

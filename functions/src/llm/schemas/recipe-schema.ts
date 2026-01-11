@@ -39,8 +39,8 @@ export const RECIPE_JSON_SCHEMA = {
           },
           brief: {
             type: "string",
-            maxLength: 200,
-            description: "Kısa tarif özeti (Türkçe).",
+            maxLength: 240,
+            description: "2-3 cümlelik tarif özeti (Türkçe).",
           },
           servings: {
             type: "integer",

@@ -54,7 +54,7 @@ export function buildRecipePrompt(params: MenuRecipeGenerationParams): string {
   prompt += "- menuType alanı \"dinner\" olmalı.\n";
   prompt += "- Tarifler Türkçe olmalı ve Türk ev mutfağına uygun olmalı.\n";
   prompt += "- cuisine alanı menüdeki cuisine değeri ile aynı olmalı.\n";
-  prompt += "- brief alanı kısa ve net Türkçe özet olmalı.\n";
+  prompt += "- brief alanı 2-3 cümlelik, davetkar ve net bir Türkçe özet olmalı (120-180 karakter).\n";
   prompt += "- Zaman tercihini dikkate al (hızlı/dengeli/zahmetli).\n";
   prompt += "- Malzemeler Türkiye'de kolay bulunan ürünler olmalı.\n";
   prompt += "- Malzeme ölçüleri Türk mutfak birimleriyle olmalı.\n";

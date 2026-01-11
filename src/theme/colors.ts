@@ -49,6 +49,8 @@ export const colors = {
     tabIconInactive: '#FFAA8F',
     iconPrimary: '#F46C42',
     iconMuted: '#9C8F87',
+    headerGradientStart: 'rgba(0, 0, 0, 0.4)',
+    headerGradientEnd: 'rgba(0, 0, 0, 0)',
 } as const;
 
 export type ColorKey = keyof typeof colors;

@@ -4,13 +4,13 @@ export type MenuIngredient = {
     name: string;
     amount: number;
     unit: string;
-    notes?: string;
+    notes: string;
 };
 
 export type MenuInstruction = {
     step: number;
     text: string;
-    durationMinutes?: number;
+    durationMinutes: number;
 };
 
 export type MenuRecipe = {

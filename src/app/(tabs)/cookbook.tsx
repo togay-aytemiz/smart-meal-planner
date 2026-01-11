@@ -86,6 +86,16 @@ type MenuRecipeParams = MenuRequestPayload & {
 const STORAGE_KEY = '@smart_meal_planner:onboarding';
 const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
 
+type FunctionsErrorDetails = {
+    message?: string;
+};
+
+type FunctionsError = {
+    code?: string;
+    message?: string;
+    details?: FunctionsErrorDetails | string;
+};
+
 const DEFAULT_ROUTINES: WeeklyRoutine = {
     monday: { type: 'office', gymTime: 'none' },
     tuesday: { type: 'office', gymTime: 'none' },
@@ -181,6 +191,25 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPaylo
     };
 };
 
+const getFunctionsErrorMessage = (error: unknown) => {
+    if (error && typeof error === 'object') {
+        const maybeError = error as FunctionsError;
+        if (typeof maybeError.details === 'string') {
+            return maybeError.details;
+        }
+        if (maybeError.details?.message) {
+            return maybeError.details.message;
+        }
+        if (maybeError.message) {
+            return maybeError.message;
+        }
+        if (maybeError.code) {
+            return maybeError.code;
+        }
+    }
+    return 'Bir hata oluştu';
+};
+
 const persistMenuRecipes = async (data: MenuRecipesResponse) => {
     try {
         await AsyncStorage.setItem(MENU_RECIPES_STORAGE_KEY, JSON.stringify(data));
@@ -244,8 +273,7 @@ export default function CookbookScreen() {
             await persistMenuRecipes(recipesData);
         } catch (err: unknown) {
             console.error('Menu fetch error:', err);
-            const message = err instanceof Error ? err.message : 'Bir hata oluştu';
-            setError(message);
+            setError(getFunctionsErrorMessage(err));
         } finally {
             setLoading(false);
         }

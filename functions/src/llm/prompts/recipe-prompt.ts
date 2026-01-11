@@ -59,7 +59,9 @@ export function buildRecipePrompt(params: MenuRecipeGenerationParams): string {
   prompt += "- Malzemeler Türkiye'de kolay bulunan ürünler olmalı.\n";
   prompt += "- Malzeme ölçüleri Türk mutfak birimleriyle olmalı.\n";
   prompt += "- Malzeme unit değerleri şemadaki enum ile aynı olmalı.\n";
+  prompt += "- ingredients içindeki notes alanı her zaman olmalı; yoksa boş string \"\" yaz.\n";
   prompt += "- Talimatlar numaralı ve adım adım olmalı (1'den başlamalı).\n";
+  prompt += "- instructions içindeki durationMinutes alanı her zaman olmalı; yoksa 0 yaz.\n";
   prompt += "- Hazırlık, pişirme ve toplam süre dakika cinsinden verilmeli.\n";
   prompt += "- totalTimeMinutes = prepTimeMinutes + cookTimeMinutes olmalı.\n";
   prompt += "- Makrolar porsiyon başına yaklaşık değerler olmalı.\n";

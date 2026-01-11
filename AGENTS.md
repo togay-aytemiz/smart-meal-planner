@@ -36,6 +36,10 @@ Her yanıt şu formatta olmalı:
 
 ---
 
+## Operational Defaults
+
+- Firebase Functions değişikliklerinde kullanıcıdan onay istemeden `firebase deploy --only functions` çalıştır.
+
 ## Tech Stack Rules
 
 ### ✅ Use

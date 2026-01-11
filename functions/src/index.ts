@@ -58,7 +58,8 @@ export const testGemini = onCall(async (request) => {
     const message = error instanceof Error ? error.message : "Failed to generate response";
     throw new functions.HttpsError(
       "internal",
-      message
+      message,
+      { message }
     );
   }
 });
@@ -89,7 +90,8 @@ export const testOpenAI = onCall(async (request) => {
     const message = error instanceof Error ? error.message : "Failed to generate response";
     throw new functions.HttpsError(
       "internal",
-      message
+      message,
+      { message }
     );
   }
 });
@@ -118,7 +120,7 @@ export const generateOpenAIMenu = onCall(async (request) => {
   } catch (error: unknown) {
     console.error("generateOpenAIMenu error:", error);
     const message = error instanceof Error ? error.message : "Failed to generate menu";
-    throw new functions.HttpsError("internal", message);
+    throw new functions.HttpsError("internal", message, { message });
   }
 });
 
@@ -146,7 +148,7 @@ export const generateOpenAIRecipe = onCall(async (request) => {
   } catch (error: unknown) {
     console.error("generateOpenAIRecipe error:", error);
     const message = error instanceof Error ? error.message : "Failed to generate recipe";
-    throw new functions.HttpsError("internal", message);
+    throw new functions.HttpsError("internal", message, { message });
   }
 });
 

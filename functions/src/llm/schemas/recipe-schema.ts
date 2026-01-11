@@ -97,7 +97,7 @@ export const RECIPE_JSON_SCHEMA = {
                   type: "string",
                 },
               },
-              required: ["name", "amount", "unit"],
+              required: ["name", "amount", "unit", "notes"],
             },
           },
           instructions: {
@@ -120,7 +120,7 @@ export const RECIPE_JSON_SCHEMA = {
                   minimum: 0,
                 },
               },
-              required: ["step", "text"],
+              required: ["step", "text", "durationMinutes"],
             },
           },
           macrosPerServing: {

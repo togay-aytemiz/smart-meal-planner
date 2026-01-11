@@ -23,6 +23,13 @@ export const typography = {
         letterSpacing: -0.1,
     } as TextStyle,
 
+    brand: {
+        fontSize: 20,
+        fontWeight: '600',
+        lineHeight: 24,
+        letterSpacing: 0.4,
+    } as TextStyle,
+
     // Body
     body: {
         fontSize: 16,

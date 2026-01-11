@@ -38,6 +38,10 @@ export const colors = {
     // Misc
     overlay: 'rgba(0, 0, 0, 0.5)',
     overlayLight: 'rgba(42, 36, 31, 0.08)',
+    heroScrim: 'rgba(24, 20, 18, 0.35)',
+    glassSurface: 'rgba(255, 247, 238, 0.92)',
+    glassBorder: 'rgba(255, 255, 255, 0.7)',
+    liveBadge: '#F0554A',
     transparent: 'transparent',
     tabBarBackground: '#F6EFE7',
     tabBarBorder: '#E7D8CC',

@@ -7,7 +7,7 @@ import { spacing } from '../../theme/spacing';
 import { useState } from 'react';
 import { functions } from '../../config/firebase';
 
-type TestGeminiResponse = {
+type TestLLMResponse = {
     response: string;
     success: boolean;
     model: string;
@@ -19,7 +19,7 @@ export default function CookbookScreen() {
     const [response, setResponse] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const testGemini = async () => {
+    const testOpenAI = async () => {
         setLoading(true);
         setError(null);
         setResponse(null);
@@ -27,8 +27,8 @@ export default function CookbookScreen() {
         try {
             const testFunction = functions.httpsCallable<
                 { prompt: string },
-                TestGeminiResponse
-            >('testGemini');
+                TestLLMResponse
+            >('testOpenAI');
 
             const result = await testFunction({
                 prompt: 'Merhaba! Türk mutfağından basit ve lezzetli bir tarif öner.'
@@ -37,7 +37,7 @@ export default function CookbookScreen() {
             const data = result.data;
             setResponse(data.response);
         } catch (err: unknown) {
-            console.error('Gemini test hatası:', err);
+            console.error('OpenAI test hatası:', err);
             const message = err instanceof Error ? err.message : 'Bir hata oluştu';
             setError(message);
         } finally {
@@ -63,10 +63,10 @@ export default function CookbookScreen() {
                         {/* Test Button */}
                         <TouchableOpacity
                             style={styles.testButton}
-                            onPress={testGemini}
+                            onPress={testOpenAI}
                         >
                             <MaterialCommunityIcons name="robot" size={24} color="#FFFFFF" />
-                            <Text style={styles.testButtonText}>LLM'yi Test Et</Text>
+                            <Text style={styles.testButtonText}>OpenAI'yi Test Et</Text>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -74,7 +74,7 @@ export default function CookbookScreen() {
                 {loading && (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="large" color={colors.primary} />
-                        <Text style={styles.loadingText}>Gemini'den yanıt bekleniyor...</Text>
+                        <Text style={styles.loadingText}>OpenAI'den yanıt bekleniyor...</Text>
                     </View>
                 )}
 
@@ -85,7 +85,7 @@ export default function CookbookScreen() {
                         <Text style={styles.errorText}>{error}</Text>
                         <TouchableOpacity
                             style={styles.retryButton}
-                            onPress={testGemini}
+                            onPress={testOpenAI}
                         >
                             <Text style={styles.retryButtonText}>Tekrar Dene</Text>
                         </TouchableOpacity>
@@ -96,12 +96,12 @@ export default function CookbookScreen() {
                     <View style={styles.responseContainer}>
                         <View style={styles.responseHeader}>
                             <MaterialCommunityIcons name="check-circle" size={24} color={colors.success} />
-                            <Text style={styles.responseTitle}>LLM Yanıtı</Text>
+                            <Text style={styles.responseTitle}>OpenAI Yanıtı</Text>
                         </View>
                         <Text style={styles.responseText}>{response}</Text>
                         <TouchableOpacity
                             style={styles.retryButton}
-                            onPress={testGemini}
+                            onPress={testOpenAI}
                         >
                             <Text style={styles.retryButtonText}>Yeni Test</Text>
                         </TouchableOpacity>

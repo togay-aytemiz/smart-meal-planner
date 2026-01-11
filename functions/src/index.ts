@@ -11,7 +11,7 @@ import { secrets } from "./config/secrets";
 // Set global options for all functions
 setGlobalOptions({
   region: "us-central1", // Change to your preferred region
-  secrets: [secrets.GEMINI_API_KEY],
+  secrets: [secrets.OPENAI_API_KEY, secrets.GEMINI_API_KEY],
   timeoutSeconds: 540, // 9 minutes max for LLM operations
   memory: "512MiB", // Adjust based on needs
 });
@@ -28,6 +28,7 @@ export const health = onRequest(async (request, response) => {
 // Import Gemini provider
 import { GeminiProvider } from "./llm/gemini-provider";
 import { onCall } from "firebase-functions/v2/https";
+import { OpenAIProvider } from "./llm/openai-provider";
 
 // Test Gemini LLM endpoint
 export const testGemini = onCall(async (request) => {
@@ -52,6 +53,37 @@ export const testGemini = onCall(async (request) => {
     };
   } catch (error: unknown) {
     console.error("testGemini error:", error);
+    const message = error instanceof Error ? error.message : "Failed to generate response";
+    throw new functions.HttpsError(
+      "internal",
+      message
+    );
+  }
+});
+
+// Test OpenAI LLM endpoint
+export const testOpenAI = onCall(async (request) => {
+  try {
+    const { prompt } = request.data;
+
+    if (!prompt) {
+      throw new functions.HttpsError(
+        "invalid-argument",
+        "Prompt is required"
+      );
+    }
+
+    const openai = new OpenAIProvider();
+    const response = await openai.generateTest(prompt);
+
+    return {
+      success: true,
+      response: response,
+      model: openai.getName(),
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error: unknown) {
+    console.error("testOpenAI error:", error);
     const message = error instanceof Error ? error.message : "Failed to generate response";
     throw new functions.HttpsError(
       "internal",

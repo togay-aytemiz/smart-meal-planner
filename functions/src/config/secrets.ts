@@ -10,6 +10,7 @@ import { defineSecret } from "firebase-functions/params";
 export interface LLMConfig {
   openai: {
     apiKey: string;
+    model: string;
   };
   gemini: {
     apiKey: string;
@@ -19,6 +20,7 @@ export interface LLMConfig {
 
 // Define secrets - will be populated at runtime
 export const secrets = {
+  OPENAI_API_KEY: defineSecret("OPENAI_API_KEY"),
   GEMINI_API_KEY: defineSecret("GEMINI_API_KEY"),
 };
 
@@ -34,7 +36,8 @@ export function getLLMConfig(): LLMConfig {
       // Firebase emulator will handle this automatically
       return {
         openai: {
-          apiKey: process.env.OPENAI_API_KEY || "",
+          apiKey: process.env.OPENAI_API_KEY || secrets.OPENAI_API_KEY.value(),
+          model: process.env.OPENAI_MODEL || "gpt-4o-mini",
         },
         gemini: {
           apiKey: process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY.value(),
@@ -49,7 +52,8 @@ export function getLLMConfig(): LLMConfig {
   // Production: Use Functions secrets
   return {
     openai: {
-      apiKey: process.env.OPENAI_API_KEY || "",
+      apiKey: secrets.OPENAI_API_KEY.value(),
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
     },
     gemini: {
       apiKey: secrets.GEMINI_API_KEY.value(),
@@ -64,6 +68,10 @@ export function getLLMConfig(): LLMConfig {
 export function validateSecrets(): void {
   const config = getLLMConfig();
   
+  if (!config.openai.apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
   if (!config.gemini.apiKey) {
     throw new Error("GEMINI_API_KEY is not configured");
   }

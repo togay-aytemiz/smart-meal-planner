@@ -3,15 +3,14 @@
  * All LLM providers (OpenAI, Gemini, etc.) must implement this interface
  */
 
-import { Recipe } from "../types/recipe";
-import { RecipeGenerationParams } from "../types/generation-params";
+import { MenuRecipeGenerationParams } from "../types/generation-params";
 
 export interface LLMProvider {
   /**
-   * Generate a recipe based on the provided parameters
-   * Returns a complete Recipe object
+   * Generate recipes for a selected dinner menu
+   * Returns structured JSON matching the menu recipes schema
    */
-  generateRecipe(params: RecipeGenerationParams): Promise<Recipe>;
+  generateRecipe(params: MenuRecipeGenerationParams): Promise<Record<string, unknown>>;
 
   /**
    * Generate an image from a text prompt
@@ -23,7 +22,7 @@ export interface LLMProvider {
    * Get cost estimate for generating a recipe
    * Returns estimated cost in USD
    */
-  getCostEstimate(params: RecipeGenerationParams): number;
+  getCostEstimate(params: MenuRecipeGenerationParams): number;
 
   /**
    * Get provider name

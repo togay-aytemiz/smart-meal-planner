@@ -7,6 +7,8 @@ import * as functions from "firebase-functions/v2/https";
 import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { secrets } from "./config/secrets";
+import { MenuGenerationRequest } from "./types/menu";
+import { MenuRecipeGenerationParams } from "./types/generation-params";
 
 // Set global options for all functions
 setGlobalOptions({
@@ -89,6 +91,62 @@ export const testOpenAI = onCall(async (request) => {
       "internal",
       message
     );
+  }
+});
+
+// OpenAI Menu generation endpoint
+export const generateOpenAIMenu = onCall(async (request) => {
+  try {
+    const payload = request.data?.request as MenuGenerationRequest | undefined;
+
+    if (!payload) {
+      throw new functions.HttpsError(
+        "invalid-argument",
+        "Menu generation request payload is required"
+      );
+    }
+
+    const openai = new OpenAIProvider();
+    const response = await openai.generateMenu(payload);
+
+    return {
+      success: true,
+      menu: response,
+      model: openai.getName(),
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error: unknown) {
+    console.error("generateOpenAIMenu error:", error);
+    const message = error instanceof Error ? error.message : "Failed to generate menu";
+    throw new functions.HttpsError("internal", message);
+  }
+});
+
+// OpenAI Menu recipe generation endpoint
+export const generateOpenAIRecipe = onCall(async (request) => {
+  try {
+    const params = request.data?.params as MenuRecipeGenerationParams | undefined;
+
+    if (!params) {
+      throw new functions.HttpsError(
+        "invalid-argument",
+        "Menu recipe generation params are required"
+      );
+    }
+
+    const openai = new OpenAIProvider();
+    const response = await openai.generateRecipe(params);
+
+    return {
+      success: true,
+      menuRecipes: response,
+      model: openai.getName(),
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error: unknown) {
+    console.error("generateOpenAIRecipe error:", error);
+    const message = error instanceof Error ? error.message : "Failed to generate recipe";
+    throw new functions.HttpsError("internal", message);
   }
 });
 

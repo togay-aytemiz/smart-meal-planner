@@ -6,6 +6,22 @@
 
 import { Recipe } from "./recipe";
 
+export type ExtraDishType = "soup" | "salad" | "meze";
+
+export interface MenuDecision {
+  menuType: "dinner";
+  cuisine: string;
+  totalTimeMinutes: number;
+  items: {
+    main: string;
+    side: string;
+    extra: {
+      type: ExtraDishType;
+      name: string;
+    };
+  };
+}
+
 export interface DailyMenu {
   id: string;
   userId: string;

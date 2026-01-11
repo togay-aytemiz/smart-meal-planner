@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import {
     Animated,
     Image,
@@ -79,7 +79,11 @@ export default function MealDetail({
 }: MealDetailProps) {
     const insets = useSafeAreaInsets();
     const [activeTab, setActiveTab] = useState<TabKey>('ingredients');
+    const [tabContainerWidth, setTabContainerWidth] = useState(0);
+    const [tabContainerY, setTabContainerY] = useState(0);
     const scrollY = useRef(new Animated.Value(0)).current;
+    const tabIndicatorX = useRef(new Animated.Value(0)).current;
+    const scrollViewRef = useRef<Animated.ScrollView | null>(null);
 
     const brief = recipe.brief?.trim() || BRIEF_FALLBACK;
     const resolvedImageUrl = imageUrl?.trim();
@@ -128,6 +132,32 @@ export default function MealDetail({
     );
     const showCookTime =
         Number.isFinite(recipe.cookTimeMinutes) && recipe.cookTimeMinutes > 0;
+    const activeTabIndex = useMemo(
+        () => tabs.findIndex((tab) => tab.key === activeTab),
+        [activeTab]
+    );
+    const indicatorWidth = tabContainerWidth
+        ? (tabContainerWidth - spacing.xs * 2) / tabs.length
+        : 0;
+
+    useEffect(() => {
+        if (!indicatorWidth || activeTabIndex < 0) {
+            return;
+        }
+        Animated.spring(tabIndicatorX, {
+            toValue: indicatorWidth * activeTabIndex,
+            useNativeDriver: true,
+            damping: 16,
+            stiffness: 160,
+            mass: 0.6,
+        }).start();
+    }, [activeTabIndex, indicatorWidth, tabIndicatorX]);
+
+    const handleTabPress = (tabKey: TabKey) => {
+        setActiveTab(tabKey);
+        const targetY = Math.max(tabContainerY - HEADER_HEIGHT - insets.top - spacing.sm, 0);
+        scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+    };
 
     return (
         <View style={styles.container}>
@@ -207,6 +237,7 @@ export default function MealDetail({
 
             {/* Scrollable Content */}
             <Animated.ScrollView
+                ref={scrollViewRef}
                 contentContainerStyle={[
                     styles.scrollContent,
                     { paddingTop: HERO_HEIGHT },
@@ -266,13 +297,30 @@ export default function MealDetail({
                         <Text style={styles.briefText}>{brief}</Text>
                     </View>
 
-                    <View style={styles.tabContainer}>
+                    <View
+                        style={styles.tabContainer}
+                        onLayout={(event) => {
+                            const { width, y } = event.nativeEvent.layout;
+                            setTabContainerWidth(width);
+                            setTabContainerY(y);
+                        }}
+                    >
+                        <Animated.View
+                            pointerEvents="none"
+                            style={[
+                                styles.tabIndicator,
+                                {
+                                    width: indicatorWidth,
+                                    transform: [{ translateX: tabIndicatorX }],
+                                },
+                            ]}
+                        />
                         {tabs.map((tab) => {
                             const isActive = tab.key === activeTab;
                             return (
                                 <TouchableOpacity
                                     key={tab.key}
-                                    onPress={() => setActiveTab(tab.key)}
+                                    onPress={() => handleTabPress(tab.key)}
                                     style={[styles.tabButton, isActive && styles.tabButtonActive]}
                                 >
                                     <Text style={[styles.tabButtonText, isActive && styles.tabButtonTextActive]}>
@@ -489,6 +537,17 @@ const styles = StyleSheet.create({
         padding: spacing.xs,
         borderWidth: 1,
         borderColor: colors.borderLight,
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    tabIndicator: {
+        position: 'absolute',
+        top: spacing.xs,
+        bottom: spacing.xs,
+        left: spacing.xs,
+        borderRadius: radius.full,
+        backgroundColor: colors.surface,
+        ...shadows.sm,
     },
     tabButton: {
         flex: 1,
@@ -496,11 +555,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: spacing.sm,
         borderRadius: radius.full,
+        zIndex: 1,
     },
-    tabButtonActive: {
-        backgroundColor: colors.surface,
-        ...shadows.sm,
-    },
+    tabButtonActive: {},
     tabButtonText: {
         ...typography.buttonSmall,
         color: colors.textMuted,

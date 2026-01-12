@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback } from 'react';
@@ -19,10 +19,7 @@ export default function KickstartScreen() {
         }, [])
     );
 
-    const handleCamera = () => {
-        nextStep();
-        router.push('/(onboarding)/scan');
-    };
+
 
     const handleSkip = async () => {
         await finishOnboarding();
@@ -33,39 +30,30 @@ export default function KickstartScreen() {
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.illustration}>
-                    <View style={styles.iconCircle}>
-                        <MaterialCommunityIcons name="fridge-outline" size={64} color={colors.primary} />
-                        <View style={styles.aiBadge}>
-                            <Text style={styles.aiText}>AI</Text>
-                        </View>
-                    </View>
+                    <Image
+                        source={require('../../../assets/fridge.png')}
+                        style={styles.illustrationImage}
+                        resizeMode="contain"
+                    />
                 </View>
 
                 <View style={styles.textContainer}>
-                    <Text style={styles.title}>Yapay Zeka ile Görsel Analiz</Text>
+                    <Text style={styles.title}>Malzemelerini Ekle</Text>
                     <Text style={styles.subtitle}>
-                        Gelişmiş görüntü işleme teknolojisi ile dolabınızı saniyeler içinde tarayın. AI asistanınız malzemeleri otomatik tanısın ve size özel tarifler hazırlasın.
+                        Evindeki ürünleri ekleyebilirsin. Omnoo, sana özel tarifler hazırlarken en verimli ve efektif şekilde çalışacak.
                     </Text>
                 </View>
             </ScrollView>
 
             <View style={styles.footer}>
                 <Button
-                    title="AI Taramayı Başlat"
-                    onPress={handleCamera}
-                    fullWidth
-                    size="large"
-                />
-                <Button
-                    title="Manuel Ekle"
+                    title="Eklemeye Başla"
                     onPress={() => {
                         nextStep();
                         router.push({ pathname: '/(onboarding)/inventory', params: { mode: 'manual' } });
                     }}
-                    variant="secondary"
                     fullWidth
-                    size="medium"
-                    style={{ marginTop: spacing.sm }}
+                    size="large"
                 />
                 <Button
                     title="Daha Sonra"
@@ -89,24 +77,16 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         justifyContent: 'center',
         padding: spacing.xl,
+        paddingTop: 100, // Push content down visually
         paddingBottom: 200, // Make room for footer
     },
     illustration: {
         alignItems: 'center',
-        marginBottom: spacing.xxl,
+        marginBottom: spacing.sm,
     },
-    iconCircle: {
-        width: 160,
-        height: 160,
-        borderRadius: 80,
-        backgroundColor: colors.surface,
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 32,
-        elevation: 10,
+    illustrationImage: {
+        width: 280,
+        height: 280,
     },
     textContainer: {
         alignItems: 'center',

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Animated, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
@@ -82,14 +82,29 @@ export default function InventoryScreen() {
     };
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+            {/* Navigation Header */}
+            <View style={styles.navHeader}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <MaterialCommunityIcons name="arrow-left" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+            </View>
+
             <View style={[styles.header, { marginTop: spacing.sm }]}>
                 <View style={styles.iconContainer}>
-                    <MaterialCommunityIcons
-                        name={isManualMode ? "fridge-outline" : "check-circle"}
-                        size={48}
-                        color={isManualMode ? colors.primary : colors.success}
-                    />
+                    {isManualMode ? (
+                        <Image
+                            source={require('../../../assets/fridge.png')}
+                            style={{ width: 60, height: 60 }}
+                            resizeMode="contain"
+                        />
+                    ) : (
+                        <MaterialCommunityIcons
+                            name="check-circle"
+                            size={48}
+                            color={colors.success}
+                        />
+                    )}
                 </View>
                 <Text style={styles.title}>
                     {isManualMode ? "Dolabını Oluştur" : "İşte Bulduklarımız!"}
@@ -103,14 +118,6 @@ export default function InventoryScreen() {
             </View>
 
             <View style={styles.actionButtons}>
-                <Button
-                    title="AI ile Tara"
-                    onPress={() => router.push('/(onboarding)/scan')}
-                    variant="ghost"
-                    size="medium"
-                    icon={<MaterialCommunityIcons name="camera-outline" size={20} color={colors.primary} />}
-                />
-                <View style={styles.verticalDivider} />
                 <Button
                     title="+ Manuel Ekle"
                     variant="ghost"
@@ -167,6 +174,17 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
+    },
+    navHeader: {
+        paddingHorizontal: spacing.lg,
+        height: 44,
+        justifyContent: 'center',
+    },
+    backButton: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        marginLeft: -8, // align visual
     },
     header: {
         paddingHorizontal: spacing.lg,

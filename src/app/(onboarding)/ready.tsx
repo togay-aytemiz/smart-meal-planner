@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, Animated, ScrollView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Button } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
 import { colors } from '../../theme/colors';
@@ -47,6 +48,20 @@ export default function ReadyScreen() {
     const card4Anim = useRef(new Animated.Value(0)).current;
 
 
+    useFocusEffect(
+        useCallback(() => {
+            // Set step to 9 (Ready) so header appears if we come back
+            dispatch({ type: 'SET_STEP', payload: 9 });
+
+            // Reset opacity to 1 when screen is focused
+            Animated.timing(containerOpacity, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+            }).start();
+        }, [])
+    );
+
     useEffect(() => {
         // Entrance animations
         Animated.sequence([
@@ -73,9 +88,17 @@ export default function ReadyScreen() {
         ]).start();
     }, []);
 
+    const containerOpacity = useRef(new Animated.Value(1)).current;
+
     const handleStart = () => {
-        dispatch({ type: 'SET_STEP', payload: 10 });
-        router.push('/(onboarding)/processing');
+        Animated.timing(containerOpacity, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+        }).start(() => {
+            dispatch({ type: 'SET_STEP', payload: 10 });
+            router.push('/(onboarding)/processing');
+        });
     };
 
     const handleBack = () => {
@@ -107,74 +130,76 @@ export default function ReadyScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Success Animation */}
-                <Animated.View
-                    style={[
-                        styles.successContainer,
-                        { transform: [{ scale: scaleAnim }] },
-                    ]}
+            <Animated.View style={{ flex: 1, opacity: containerOpacity }}>
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
                 >
-                    <Image
-                        source={require('../../../assets/onboarding-ready.png')}
-                        style={styles.successImage}
-                        resizeMode="contain"
-                    />
-                </Animated.View>
+                    {/* Success Animation */}
+                    <Animated.View
+                        style={[
+                            styles.successContainer,
+                            { transform: [{ scale: scaleAnim }] },
+                        ]}
+                    >
+                        <Image
+                            source={require('../../../assets/onboarding-ready.png')}
+                            style={styles.successImage}
+                            resizeMode="contain"
+                        />
+                    </Animated.View>
 
-                {/* Message */}
-                <Animated.View style={[styles.textContainer, { opacity: fadeAnim }]}>
-                    <Text style={styles.title}>Hazırsınız, {userName}!</Text>
-                    <Text style={styles.subtitle}>
-                        Tercihleriniz kaydedildi. Artık size özel yemek planları oluşturmaya hazırız.
-                    </Text>
-                </Animated.View>
+                    {/* Message */}
+                    <Animated.View style={[styles.textContainer, { opacity: fadeAnim }]}>
+                        <Text style={styles.title}>Hazırsınız, {userName}!</Text>
+                        <Text style={styles.subtitle}>
+                            Tercihleriniz kaydedildi. Artık size özel yemek planları oluşturmaya hazırız.
+                        </Text>
+                    </Animated.View>
 
-                {/* Summary Cards */}
-                <View style={styles.summaryContainer}>
-                    <SummaryCard
-                        anim={card1Anim}
-                        emoji="🍽️"
-                        label="Mutfak tercihleri"
-                        value={cuisineDisplay}
-                    />
-                    <SummaryCard
-                        anim={card2Anim}
-                        emoji="🥗"
-                        label="Diyet & Alerji"
-                        value={
-                            dietaryRestrictions + allergies > 0
-                                ? `${dietaryRestrictions} kısıtlama, ${allergies} alerji`
-                                : 'Herhangi bir kısıtlama yok'
-                        }
-                    />
-                    <SummaryCard
-                        anim={card3Anim}
-                        emoji="⏱️"
-                        label="Yemek Süresi"
-                        value={state.data.cooking?.timePreference === 'quick' ? 'Hızlı ve Pratik' :
-                            state.data.cooking?.timePreference === 'elaborate' ? 'Detaylı ve Gurme' : 'Dengeli'}
-                    />
-                    <SummaryCard
-                        anim={card4Anim}
-                        emoji="🍳"
-                        label="Mutfak Ekipmanı"
-                        value={equipmentDisplay}
+                    {/* Summary Cards */}
+                    <View style={styles.summaryContainer}>
+                        <SummaryCard
+                            anim={card1Anim}
+                            emoji="🍽️"
+                            label="Mutfak tercihleri"
+                            value={cuisineDisplay}
+                        />
+                        <SummaryCard
+                            anim={card2Anim}
+                            emoji="🥗"
+                            label="Diyet & Alerji"
+                            value={
+                                dietaryRestrictions + allergies > 0
+                                    ? `${dietaryRestrictions} kısıtlama, ${allergies} alerji`
+                                    : 'Herhangi bir kısıtlama yok'
+                            }
+                        />
+                        <SummaryCard
+                            anim={card3Anim}
+                            emoji="⏱️"
+                            label="Yemek Süresi"
+                            value={state.data.cooking?.timePreference === 'quick' ? 'Hızlı ve Pratik' :
+                                state.data.cooking?.timePreference === 'elaborate' ? 'Detaylı ve Gurme' : 'Dengeli'}
+                        />
+                        <SummaryCard
+                            anim={card4Anim}
+                            emoji="🍳"
+                            label="Mutfak Ekipmanı"
+                            value={equipmentDisplay}
+                        />
+                    </View>
+                </ScrollView>
+
+                <View style={styles.footer}>
+                    <Button
+                        title="Planlamaya Başla"
+                        onPress={handleStart}
+                        fullWidth
+                        size="large"
                     />
                 </View>
-            </ScrollView>
-
-            <View style={styles.footer}>
-                <Button
-                    title="Planlamaya Başla"
-                    onPress={handleStart}
-                    fullWidth
-                    size="large"
-                />
-            </View>
+            </Animated.View>
         </SafeAreaView>
     );
 }

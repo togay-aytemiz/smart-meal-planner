@@ -30,8 +30,8 @@ function OnboardingHeader() {
         }
     }, [state.currentStep]);
 
-    // Hide header on welcome screen (1) and scan screen (15)
-    if (state.currentStep === 1 || state.currentStep === 15) {
+    // Hide header on welcome screen (1), scan screen (15), and processing (10)
+    if (state.currentStep === 1 || state.currentStep === 15 || state.currentStep === 10) {
         return null;
     }
 
@@ -54,7 +54,9 @@ function OnboardingHeader() {
                     <View style={styles.backPlaceholder} />
                 )}
                 <Animated.View style={[styles.progressContainer, { opacity: progressOpacity }]}>
-                    <ProgressBar current={state.currentStep - 1} total={TOTAL_STEPS - 2} />
+                    {state.currentStep !== 10 && (
+                        <ProgressBar current={state.currentStep - 1} total={TOTAL_STEPS - 2} />
+                    )}
                 </Animated.View>
                 {state.currentStep === 13 ? (
                     <TouchableOpacity

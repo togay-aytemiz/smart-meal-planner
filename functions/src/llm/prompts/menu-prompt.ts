@@ -35,6 +35,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     maxCookTime,
     previousPreferences,
     mealType,
+    weeklyContext,
   } = request;
 
   const calculatedDayOfWeek =
@@ -65,6 +66,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     maxPrepTime: maxPrepTime ?? null,
     maxCookTime: maxCookTime ?? null,
     previousPreferences: previousPreferences ?? null,
+    weeklyContext: weeklyContext ?? null,
   };
 
   let prompt = `Kullanıcı bağlamı (JSON):\n${JSON.stringify(context, null, 2)}\n\n`;
@@ -118,6 +120,13 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   prompt += "- Diyet kısıtları, alerjiler ve avoidIngredients listesi ihlal edilmemeli.\n";
   prompt += "- existingPantry verilmişse içindeki malzemeleri önceliklendir.\n";
   prompt += "- previousPreferences varsa beğenilenleri önceliklendir, beğenilmeyenlerden kaçın.\n";
+  prompt += "- weeklyContext verildiyse haftalık mantığa uy; özellikle repeatMode, ingredientSynergyFrom ve seasonalityHint ipuçlarını dikkate al.\n";
+  prompt +=
+    "- weeklyContext.seasonalityHint varsa mevsime uygun malzemelerle uyumlu yemekler seç.\n";
+  prompt +=
+    "- weeklyContext.ingredientSynergyFrom varsa reasoning içinde bunu açıkça belirt (örn: \"Dün akşam ... olduğu için bugün ...\").\n";
+  prompt +=
+    "- weeklyContext.reasoningHint varsa reasoning içinde bu ipucunu doğal şekilde kullan.\n";
   prompt += `- menuType alanı \"${resolvedMealType}\" olmalı.\n`;
   prompt += "- cuisine alanı seçilen mutfak türü olmalı (Türkçe).\n";
   prompt += "- Menü öğeleri birbiriyle uyumlu olmalı.\n";

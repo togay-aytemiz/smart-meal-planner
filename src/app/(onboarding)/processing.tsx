@@ -22,8 +22,18 @@ export default function ProcessingScreen() {
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(1)).current;
+    const entranceFade = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
+        dispatch({ type: 'SET_STEP', payload: 10 });
+
+        // Fade in on mount
+        Animated.timing(entranceFade, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+        }).start();
+
         // Message cycling
         const messageInterval = setInterval(() => {
             Animated.sequence([
@@ -40,7 +50,7 @@ export default function ProcessingScreen() {
         const timeout = setTimeout(() => {
             clearInterval(messageInterval);
             dispatch({ type: 'SET_STEP', payload: 11 });
-            router.push('/(onboarding)/analysis');
+            router.replace('/(onboarding)/analysis');
         }, 6000);
 
         return () => {
@@ -51,7 +61,7 @@ export default function ProcessingScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
+            <Animated.View style={[styles.content, { opacity: entranceFade }]}>
                 <View style={styles.iconContainer}>
                     <Image
                         source={require('../../../assets/processing-loader.gif')}
@@ -63,7 +73,7 @@ export default function ProcessingScreen() {
                 <Animated.Text style={[styles.message, { opacity: fadeAnim }]}>
                     {LOADING_MESSAGES[messageIndex]}
                 </Animated.Text>
-            </View>
+            </Animated.View>
         </SafeAreaView>
     );
 }

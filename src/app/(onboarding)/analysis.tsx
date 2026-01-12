@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useRef } from 'react';
@@ -39,7 +39,13 @@ export default function AnalysisScreen() {
             >
                 <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
                     <View style={styles.header}>
-                        <MaterialCommunityIcons name="star-four-points" size={32} color={colors.primary} />
+                        <View style={{ marginBottom: 0 }}>
+                            <Image
+                                source={require('../../../assets/onboarding-samplemenu.png')}
+                                style={{ width: 140, height: 140 }}
+                                resizeMode="contain"
+                            />
+                        </View>
                         <Text style={styles.title}>İşte {userName} özel planın!</Text>
                         <Text style={styles.subtitle}>
                             Alışkanlıklarınıza ve hedeflerinize göre oluşturduğumuz örnek bir gün:
@@ -132,7 +138,7 @@ const styles = StyleSheet.create({
         ...typography.h2,
         color: colors.textPrimary,
         textAlign: 'center',
-        marginTop: spacing.sm,
+        marginTop: -spacing.md,
         marginBottom: spacing.xs,
     },
     subtitle: {

@@ -5,10 +5,25 @@
  */
 
 import { Recipe } from "./recipe";
+import { OnboardingData } from "./onboarding";
 
 export type MealType = "breakfast" | "lunch" | "dinner";
 
 export type ExtraDishType = "soup" | "salad" | "meze" | "dessert" | "pastry";
+
+export type WeeklyContext = {
+  weekStart?: string; // YYYY-MM-DD
+  dayIndex?: number; // 0-6 (weekStart based)
+  repeatMode?: "consecutive" | "spaced";
+  repeatGroupId?: string;
+  ingredientSynergyFrom?: {
+    mealType: MealType;
+    date: string;
+    mainDishName?: string;
+  };
+  reasoningHint?: string;
+  seasonalityHint?: string;
+};
 
 export interface MenuDecision {
   menuType: MealType;
@@ -139,7 +154,22 @@ export interface MenuGenerationRequest {
   
   // Default: Generate single meal (breakfast/lunch/dinner)
   mealType: MealType; // Future: "full"
+
+  // Weekly planning context (optional)
+  weeklyContext?: WeeklyContext;
   
   // Image generation
   generateImage?: boolean;
 }
+
+export type WeeklyMenuGenerationRequest = {
+  userId?: string;
+  weekStart?: string; // YYYY-MM-DD
+  onboarding?: Partial<OnboardingData>;
+  repeatMode?: "consecutive" | "spaced";
+  existingPantry?: string[];
+  avoidIngredients?: string[];
+  maxPrepTime?: number;
+  maxCookTime?: number;
+  generateImage?: boolean;
+};

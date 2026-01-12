@@ -89,7 +89,7 @@ export default function InventoryScreen() {
                     <MaterialCommunityIcons name="arrow-left" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
             </View>
-
+            {/* Header Content */}
             <View style={[styles.header, { marginTop: spacing.sm }]}>
                 <View style={styles.iconContainer}>
                     {isManualMode ? (
@@ -171,10 +171,6 @@ export default function InventoryScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
     navHeader: {
         paddingHorizontal: spacing.lg,
         height: 44,
@@ -186,6 +182,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginLeft: -8, // align visual
     },
+
     header: {
         paddingHorizontal: spacing.lg,
         alignItems: 'center',

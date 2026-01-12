@@ -2,9 +2,8 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
 export const getDb = () => {
-  if (getApps().length === 0) {
-    initializeApp();
-  }
+  const existingDefault = getApps().find((app) => app.name === "[DEFAULT]");
+  const app = existingDefault ?? initializeApp();
 
-  return getFirestore();
+  return getFirestore(app);
 };

@@ -4,13 +4,18 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
+import { formatLongDateTr, getGreeting } from '../../utils/dates';
 
 export default function TodayScreen() {
+    const now = new Date();
+    const greeting = getGreeting(now);
+    const todayLabel = formatLongDateTr(now);
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.greeting}>Günaydın</Text>
-                <Text style={styles.date}>9 Ocak 2026, Cuma</Text>
+                <Text style={styles.greeting}>{greeting}</Text>
+                <Text style={styles.date}>{todayLabel}</Text>
             </View>
 
             <View style={styles.content}>

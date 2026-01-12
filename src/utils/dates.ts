@@ -46,8 +46,8 @@ export function isToday(date: Date): boolean {
     );
 }
 
-export function getTimeOfDay(): 'morning' | 'afternoon' | 'evening' | 'night' {
-    const hour = new Date().getHours();
+export function getTimeOfDay(date: Date = new Date()): 'morning' | 'afternoon' | 'evening' | 'night' {
+    const hour = date.getHours();
 
     if (hour >= 5 && hour < 12) return 'morning';
     if (hour >= 12 && hour < 17) return 'afternoon';
@@ -55,17 +55,40 @@ export function getTimeOfDay(): 'morning' | 'afternoon' | 'evening' | 'night' {
     return 'night';
 }
 
-export function getGreeting(): string {
-    const timeOfDay = getTimeOfDay();
+export function getGreeting(date: Date = new Date()): string {
+    const timeOfDay = getTimeOfDay(date);
 
     switch (timeOfDay) {
         case 'morning':
-            return 'Good morning';
+            return 'G\u00fcnayd\u0131n';
         case 'afternoon':
-            return 'Good afternoon';
+            return 'Merhaba';
         case 'evening':
-            return 'Good evening';
+            return '\u0130yi ak\u015famlar';
         case 'night':
-            return 'Good night';
+            return '\u0130yi geceler';
     }
+}
+
+export function formatLongDateTr(date: Date): string {
+    const formatter = new Intl.DateTimeFormat('tr-TR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        weekday: 'long',
+    });
+    const parts = formatter.formatToParts(date);
+    const dateParts: Partial<Record<'day' | 'month' | 'year' | 'weekday', string>> = {};
+
+    for (const part of parts) {
+        if (part.type === 'day' || part.type === 'month' || part.type === 'year' || part.type === 'weekday') {
+            dateParts[part.type] = part.value;
+        }
+    }
+
+    if (!dateParts.day || !dateParts.month || !dateParts.year || !dateParts.weekday) {
+        return formatter.format(date);
+    }
+
+    return `${dateParts.day} ${dateParts.month} ${dateParts.year}, ${dateParts.weekday}`;
 }

@@ -36,9 +36,9 @@ const BRIEF_FALLBACK =
     'Taze sebzelerle zenginleştirilmiş hafif bulgur pilavı; pratik, dengeli ve güne iyi gelen bir lezzet.';
 
 const tabs: Array<{ key: TabKey; label: string }> = [
-    { key: 'ingredients', label: 'Ingredients' },
-    { key: 'instructions', label: 'Instructions' },
-    { key: 'nutrition', label: 'Nutrition' },
+    { key: 'ingredients', label: 'Malzemeler' },
+    { key: 'instructions', label: 'Hazırlanış' },
+    { key: 'nutrition', label: 'Besin' },
 ];
 
 const formatAmount = (value: number) => {
@@ -445,13 +445,18 @@ const styles = StyleSheet.create({
         paddingBottom: spacing.xxl,
     },
     details: {
-        backgroundColor: colors.background,
+        backgroundColor: colors.surface,
         borderTopLeftRadius: radius.xl,
         borderTopRightRadius: radius.xl,
         marginTop: -radius.xl,
         paddingTop: spacing.lg,
         paddingHorizontal: spacing.lg,
         gap: spacing.lg,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -6 },
+        shadowOpacity: 0.08,
+        shadowRadius: 14,
+        elevation: 6,
     },
     detailsGradient: {
         position: 'absolute',
@@ -461,7 +466,7 @@ const styles = StyleSheet.create({
         height: 120,
         borderTopLeftRadius: radius.xl,
         borderTopRightRadius: radius.xl,
-        tintColor: colors.surfaceAlt,
+        tintColor: colors.surface,
         opacity: 0.85,
     },
     title: {
@@ -518,13 +523,9 @@ const styles = StyleSheet.create({
         color: colors.textMuted,
     },
     briefCard: {
-        backgroundColor: colors.surface,
+        backgroundColor: colors.surfaceAlt,
         borderRadius: radius.lg,
         padding: spacing.lg,
-        borderWidth: 1,
-        borderColor: colors.borderLight,
-        ...shadows.sm,
-        gap: spacing.sm,
     },
     briefText: {
         ...typography.body,

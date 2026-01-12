@@ -2,11 +2,13 @@ import { useState, type ComponentProps } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { ScreenHeader } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows, hitSlop } from '../../theme/spacing';
 import { formatLongDateTr, getGreeting } from '../../utils/dates';
+import type { MenuRecipeCourse } from '../../types/menu-recipes';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -26,9 +28,12 @@ type MealItem = {
     timeMinutes: number;
     calories: number;
     category: string;
+    categoryIcon: IconName;
     context: string;
+    contextIcon: IconName;
     icon: IconName;
     mediaTone: string;
+    course: MenuRecipeCourse;
 };
 
 type MealSection = {
@@ -56,9 +61,12 @@ const MEAL_SECTIONS: MealSection[] = [
                 timeMinutes: 15,
                 calories: 340,
                 category: 'Kahvaltı',
+                categoryIcon: 'coffee-outline',
                 context: 'Pratik',
+                contextIcon: 'lightning-bolt-outline',
                 icon: 'food-apple-outline',
                 mediaTone: colors.accentLight,
+                course: 'main',
             },
         ],
     },
@@ -75,9 +83,12 @@ const MEAL_SECTIONS: MealSection[] = [
                 timeMinutes: 12,
                 calories: 280,
                 category: 'Salata',
+                categoryIcon: 'leaf',
                 context: 'Ofise Uygun',
+                contextIcon: 'briefcase-outline',
                 icon: 'leaf',
                 mediaTone: colors.successLight,
+                course: 'salad',
             },
         ],
     },
@@ -94,9 +105,12 @@ const MEAL_SECTIONS: MealSection[] = [
                 timeMinutes: 35,
                 calories: 420,
                 category: 'Ana Yemek',
+                categoryIcon: 'silverware-fork-knife',
                 context: 'Aile',
+                contextIcon: 'account-group-outline',
                 icon: 'food-steak',
                 mediaTone: colors.surfaceAlt,
+                course: 'main',
             },
             {
                 id: 'dinner-side',
@@ -104,9 +118,12 @@ const MEAL_SECTIONS: MealSection[] = [
                 timeMinutes: 25,
                 calories: 260,
                 category: 'Yan Yemek',
+                categoryIcon: 'pot-steam-outline',
                 context: 'Pratik',
+                contextIcon: 'timer-sand',
                 icon: 'food-variant',
                 mediaTone: colors.borderLight,
+                course: 'side',
             },
             {
                 id: 'dinner-salad',
@@ -114,9 +131,12 @@ const MEAL_SECTIONS: MealSection[] = [
                 timeMinutes: 10,
                 calories: 120,
                 category: 'Salata',
+                categoryIcon: 'leaf',
                 context: 'Hafif',
+                contextIcon: 'leaf',
                 icon: 'leaf',
                 mediaTone: colors.successLight,
+                course: 'salad',
             },
         ],
     },
@@ -156,6 +176,7 @@ const buildWeekDays = (baseDate: Date): CalendarDay[] => {
 
 export default function TodayScreen() {
     const now = new Date();
+    const router = useRouter();
     const userName = 'Togay';
     const greeting = getGreeting(now);
     const weekDays = buildWeekDays(now);
@@ -168,6 +189,9 @@ export default function TodayScreen() {
         ? formatLongDateTr(selectedDay.date)
         : selectedDay.date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
     const mealCount = MEAL_SECTIONS.length;
+    const handleOpenMeal = (course: MenuRecipeCourse) => {
+        router.push({ pathname: '/cookbook/[course]', params: { course } });
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -256,39 +280,60 @@ export default function TodayScreen() {
 
                         <View style={styles.sectionCards}>
                             {section.items.map((item) => (
-                                <TouchableOpacity key={item.id} activeOpacity={0.85} style={styles.mealCard}>
+                                <TouchableOpacity
+                                    key={item.id}
+                                    activeOpacity={0.85}
+                                    style={styles.mealCard}
+                                    onPress={() => handleOpenMeal(item.course)}
+                                >
                                     <View style={[styles.mealMedia, { backgroundColor: item.mediaTone }]}>
                                         <MaterialCommunityIcons name={item.icon} size={24} color={colors.textPrimary} />
-                                        <View style={styles.mediaGlow} />
                                     </View>
                                     <View style={styles.mealContent}>
                                         <View style={styles.mealMetaRow}>
-                                            <View style={styles.categoryPill}>
-                                                <Text style={styles.categoryText}>{item.category}</Text>
+                                            <View style={styles.metaItem}>
+                                                <MaterialCommunityIcons
+                                                    name={item.categoryIcon}
+                                                    size={12}
+                                                    color={colors.textMuted}
+                                                />
+                                                <Text style={styles.metaText}>{item.category}</Text>
                                             </View>
-                                            <View style={styles.timeRow}>
+                                            <View style={styles.metaItem}>
                                                 <MaterialCommunityIcons
                                                     name="clock-outline"
-                                                    size={14}
-                                                    color={colors.textSecondary}
+                                                    size={12}
+                                                    color={colors.textMuted}
                                                 />
-                                                <Text style={styles.timeText}>{item.timeMinutes} dk</Text>
+                                                <Text style={styles.metaText}>{item.timeMinutes} dk</Text>
                                             </View>
                                         </View>
-                                        <Text style={styles.mealTitle}>{item.title}</Text>
+                                        <Text style={styles.mealTitle} numberOfLines={1}>
+                                            {item.title}
+                                        </Text>
                                         <View style={styles.mealFooterRow}>
                                             <View style={styles.calorieRow}>
-                                                <MaterialCommunityIcons name="fire" size={14} color={colors.accent} />
+                                                <MaterialCommunityIcons name="fire" size={12} color={colors.accent} />
                                                 <Text style={styles.calorieText}>{item.calories} kcal</Text>
                                             </View>
-                                            <View style={styles.contextChip}>
-                                                <Text style={styles.contextChipText}>{item.context}</Text>
+                                            <View style={styles.chipRow}>
+                                                <View style={styles.contextChip}>
+                                                    <MaterialCommunityIcons
+                                                        name={item.contextIcon}
+                                                        size={12}
+                                                        color={colors.textSecondary}
+                                                    />
+                                                    <Text style={styles.contextChipText}>{item.context}</Text>
+                                                </View>
                                             </View>
                                         </View>
                                     </View>
-                                    <View style={styles.chevron}>
-                                        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.iconMuted} />
-                                    </View>
+                                    <MaterialCommunityIcons
+                                        name="chevron-right"
+                                        size={18}
+                                        color={colors.iconMuted}
+                                        style={styles.chevron}
+                                    />
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -465,64 +510,49 @@ const styles = StyleSheet.create({
     },
     mealCard: {
         flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.surface,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: colors.border,
-        padding: spacing.md,
-        gap: spacing.md,
-        ...shadows.sm,
+        alignItems: 'stretch',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        overflow: 'hidden',
+        minHeight: 80,
+        ...shadows.md,
     },
     mealMedia: {
-        width: 64,
-        height: 64,
-        borderRadius: radius.md,
+        width: 80,
         alignItems: 'center',
         justifyContent: 'center',
-        position: 'relative',
-        overflow: 'hidden',
-    },
-    mediaGlow: {
-        position: 'absolute',
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: colors.overlayLight,
-        bottom: -16,
-        right: -12,
-        opacity: 0.3,
+        borderTopLeftRadius: 16,
+        borderBottomLeftRadius: 16,
+        borderTopRightRadius: 0,
+        borderBottomRightRadius: 0,
     },
     mealContent: {
         flex: 1,
+        paddingVertical: spacing.sm + 4,
+        paddingHorizontal: spacing.sm + 4,
         gap: spacing.xs,
+        justifyContent: 'center',
     },
     mealMetaRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
     },
-    categoryPill: {
-        backgroundColor: colors.borderLight,
-        borderRadius: radius.full,
-        paddingHorizontal: spacing.sm,
-        paddingVertical: spacing.xs,
-    },
-    categoryText: {
-        ...typography.caption,
-        color: colors.textSecondary,
-    },
-    timeRow: {
+    metaItem: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
     },
-    timeText: {
+    metaText: {
         ...typography.caption,
-        color: colors.textSecondary,
+        fontSize: 11,
+        lineHeight: 14,
+        color: colors.textMuted,
     },
     mealTitle: {
-        ...typography.label,
+        fontSize: 16,
+        fontWeight: '600',
+        lineHeight: 22,
         color: colors.textPrimary,
     },
     mealFooterRow: {
@@ -539,26 +569,30 @@ const styles = StyleSheet.create({
         ...typography.caption,
         color: colors.textSecondary,
     },
+    chipRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
     contextChip: {
-        backgroundColor: colors.surfaceMuted,
+        flexDirection: 'row',
+        alignItems: 'center',
         borderRadius: radius.full,
         paddingHorizontal: spacing.sm,
-        paddingVertical: spacing.xs,
+        paddingVertical: 2,
         borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderColor: colors.borderStrong,
+        gap: spacing.xs,
     },
     contextChipText: {
         ...typography.caption,
+        fontSize: 11,
+        lineHeight: 14,
         color: colors.textSecondary,
     },
     chevron: {
-        width: 32,
-        height: 32,
-        borderRadius: radius.full,
-        borderWidth: 1,
-        borderColor: colors.borderLight,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.surfaceAlt,
+        alignSelf: 'center',
+        marginLeft: spacing.sm,
+        marginRight: spacing.sm + 4,
     },
 });

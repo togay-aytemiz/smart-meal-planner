@@ -79,7 +79,7 @@ export default function CookbookDetailScreen() {
     }, [course]);
 
     return (
-        <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+        <SafeAreaView style={styles.container} edges={['left', 'right']}>
             {loading && (
                 <View style={styles.stateContainer}>
                     <ActivityIndicator size="small" color={colors.primary} />
@@ -106,7 +106,7 @@ export default function CookbookDetailScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.background,
+        backgroundColor: colors.surface,
     },
     stateContainer: {
         paddingHorizontal: spacing.lg,

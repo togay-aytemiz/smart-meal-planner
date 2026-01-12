@@ -181,6 +181,7 @@ An intelligent meal planner that:
 - Quantity calculations based on servings
 - Ingredient consolidation
 - Pantry-aware subtraction
+- Flag meals where all ingredients are already available (no purchase needed)
 - Manual add/edit items
 
 #### Integration Options
@@ -205,6 +206,7 @@ An intelligent meal planner that:
 - Track available ingredients
 - Prioritize recipes using existing stock (Waste Reduction)
 - Manual add/edit capabilities
+- Auto-decrease pantry after cooking and allow quick adjustments
 
 ### 8. Chat Assistant (Recipe + Planning) (Post-MVP)
 - Contextual chat attached to recipe and menu cards
@@ -244,6 +246,7 @@ An intelligent meal planner that:
 
 ### Recipe & AI Memory Storage
 - **Recipes:** Store AI-generated recipes in Firestore for reuse and cost savings
+- **Recipe Metadata:** Persist full payload (ingredients, instructions, macros, prep/cook time, cuisine, tags, image URL) to enable accurate matching, swaps, and history
 - **Images:** Generate and store recipe images in Firebase Storage (MVP)
 - **User Memory:** Persist swap/dislike feedback to condition prompts (Post-MVP)
 

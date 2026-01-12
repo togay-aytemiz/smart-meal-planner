@@ -4,11 +4,15 @@
  */
 
 import * as functions from "firebase-functions/v2/https";
+import { createHash } from "crypto";
 import { onRequest } from "firebase-functions/v2/https";
+import { DocumentData, FieldValue } from "firebase-admin/firestore";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { secrets } from "./config/secrets";
-import { MenuGenerationRequest } from "./types/menu";
+import { getDb } from "./firestore";
+import { MenuDecision, MenuGenerationRequest } from "./types/menu";
 import { MenuRecipeGenerationParams } from "./types/generation-params";
+import { MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from "./types/menu-recipes";
 
 // Set global options for all functions
 setGlobalOptions({
@@ -31,6 +35,170 @@ export const health = onRequest(async (request, response) => {
 import { GeminiProvider } from "./llm/gemini-provider";
 import { onCall } from "firebase-functions/v2/https";
 import { OpenAIProvider } from "./llm/openai-provider";
+
+const IMAGE_FORMAT = "webp";
+const THUMBNAIL_SIZE = 320;
+const DETAIL_SIZE = 640;
+
+type RecipeLink = {
+  id: string;
+  course: MenuRecipeCourse;
+  name: string;
+};
+
+const normalizeText = (value: string) => value.trim().toLowerCase();
+
+const buildRecipeHash = (recipe: MenuRecipe, cuisine: string) => {
+  const ingredientKey = recipe.ingredients
+    .map((ingredient) => normalizeText(ingredient.name))
+    .sort()
+    .join("|");
+
+  return createHash("sha256")
+    .update(`${normalizeText(recipe.name)}|${normalizeText(cuisine)}|${ingredientKey}`)
+    .digest("hex");
+};
+
+const buildRecipeTags = (recipe: MenuRecipe, menuType: string, cuisine: string) => {
+  const tags = new Set<string>();
+
+  if (cuisine) {
+    tags.add(cuisine);
+  }
+  tags.add(recipe.course);
+  tags.add(menuType);
+
+  return Array.from(tags);
+};
+
+const buildImagePlaceholder = () => ({
+  status: "pending",
+  format: IMAGE_FORMAT,
+  thumbnail: {
+    url: null,
+    storagePath: null,
+    width: THUMBNAIL_SIZE,
+    height: THUMBNAIL_SIZE,
+  },
+  detail: {
+    url: null,
+    storagePath: null,
+    width: DETAIL_SIZE,
+    height: DETAIL_SIZE,
+  },
+  base64: null,
+});
+
+const buildRecipeDocument = ({
+  recipe,
+  menu,
+  menuId,
+  userId,
+  provider,
+}: {
+  recipe: MenuRecipe;
+  menu: MenuDecision;
+  menuId: string;
+  userId: string;
+  provider: string;
+}): DocumentData => ({
+  name: recipe.name,
+  brief: recipe.brief,
+  ingredients: recipe.ingredients,
+  instructions: recipe.instructions,
+  macrosPerServing: recipe.macrosPerServing,
+  metadata: {
+    course: recipe.course,
+    cuisine: menu.cuisine,
+    menuType: menu.menuType,
+    servings: recipe.servings,
+    prepTimeMinutes: recipe.prepTimeMinutes,
+    cookTimeMinutes: recipe.cookTimeMinutes,
+    totalTimeMinutes: recipe.totalTimeMinutes,
+    tags: buildRecipeTags(recipe, menu.menuType, menu.cuisine),
+  },
+  image: buildImagePlaceholder(),
+  source: {
+    provider,
+    menuId,
+    userId,
+  },
+  hash: buildRecipeHash(recipe, menu.cuisine),
+  createdAt: FieldValue.serverTimestamp(),
+  updatedAt: FieldValue.serverTimestamp(),
+});
+
+const findRecipeLink = (links: RecipeLink[], course: MenuRecipeCourse, name?: string) => {
+  const byCourse = links.find((link) => link.course === course);
+
+  if (byCourse) {
+    return byCourse;
+  }
+
+  if (!name) {
+    return null;
+  }
+
+  const normalizedName = normalizeText(name);
+  return links.find((link) => normalizeText(link.name) === normalizedName) ?? null;
+};
+
+const buildMenuDocument = ({
+  menu,
+  params,
+  recipeLinks,
+  provider,
+  userId,
+}: {
+  menu: MenuDecision;
+  params: MenuRecipeGenerationParams;
+  recipeLinks: RecipeLink[];
+  provider: string;
+  userId: string;
+}): DocumentData => {
+  const main = findRecipeLink(recipeLinks, "main", menu.items.main);
+  const side = findRecipeLink(recipeLinks, "side", menu.items.side);
+  const extraCourse = menu.items.extra.type as MenuRecipeCourse;
+  const extra = findRecipeLink(recipeLinks, extraCourse, menu.items.extra.name);
+
+  if (!main || !side || !extra) {
+    throw new Error("Menu recipe mapping is incomplete");
+  }
+
+  return {
+    userId,
+    date: params.date,
+    dayOfWeek: params.dayOfWeek ?? null,
+    menuType: menu.menuType,
+    cuisine: menu.cuisine,
+    totalTimeMinutes: menu.totalTimeMinutes,
+    reasoning: menu.reasoning,
+    items: {
+      main: {
+        name: menu.items.main,
+        recipeId: main.id,
+      },
+      side: {
+        name: menu.items.side,
+        recipeId: side.id,
+      },
+      extra: {
+        type: menu.items.extra.type,
+        name: menu.items.extra.name,
+        recipeId: extra.id,
+      },
+    },
+    recipeIds: [main.id, side.id, extra.id],
+    source: {
+      provider,
+    },
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+};
+
+const buildMenuDocId = (userId: string, date: string, menuType: string) =>
+  `${userId}_${date}_${menuType}`;
 
 // Test Gemini LLM endpoint
 export const testGemini = onCall(async (request) => {
@@ -138,10 +306,64 @@ export const generateOpenAIRecipe = onCall(async (request) => {
 
     const openai = new OpenAIProvider();
     const response = await openai.generateRecipe(params);
+    const menuRecipes = response as MenuRecipesResponse;
+
+    if (!menuRecipes?.recipes || !Array.isArray(menuRecipes.recipes)) {
+      throw new functions.HttpsError(
+        "internal",
+        "Menu recipes response is invalid"
+      );
+    }
+
+    const provider = openai.getName();
+    const userId = request.auth?.uid ?? params.userId;
+
+    if (!userId) {
+      throw new functions.HttpsError(
+        "invalid-argument",
+        "User id is required"
+      );
+    }
+
+    const db = getDb();
+    const menuDocId = buildMenuDocId(userId, params.date, menuRecipes.menuType);
+    const recipesRef = db.collection("recipes");
+    const menuRef = db.collection("menus").doc(menuDocId);
+    const batch = db.batch();
+
+    const recipeLinks = menuRecipes.recipes.map((recipe) => {
+      const recipeRef = recipesRef.doc();
+      const recipeDoc = buildRecipeDocument({
+        recipe,
+        menu: params.menu,
+        menuId: menuDocId,
+        userId,
+        provider,
+      });
+
+      batch.set(recipeRef, recipeDoc);
+
+      return {
+        id: recipeRef.id,
+        course: recipe.course,
+        name: recipe.name,
+      };
+    });
+
+    const menuDoc = buildMenuDocument({
+      menu: params.menu,
+      params,
+      recipeLinks,
+      provider,
+      userId,
+    });
+
+    batch.set(menuRef, menuDoc, { merge: true });
+    await batch.commit();
 
     return {
       success: true,
-      menuRecipes: response,
+      menuRecipes,
       model: openai.getName(),
       timestamp: new Date().toISOString(),
     };

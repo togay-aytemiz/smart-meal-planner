@@ -206,14 +206,14 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPaylo
         householdSize: snapshot?.householdSize ?? 1,
         routine: routine
             ? {
-                  type: routine.type,
-                  gymTime: routine.gymTime,
-                  officeMealToGo: routine.officeMealToGo,
-                  officeBreakfastAtHome: routine.officeBreakfastAtHome,
-                  schoolBreakfast: routine.schoolBreakfast,
-                  remoteMeals: routine.remoteMeals,
-                  excludeFromPlan: routine.excludeFromPlan,
-              }
+                type: routine.type,
+                gymTime: routine.gymTime,
+                officeMealToGo: routine.officeMealToGo,
+                officeBreakfastAtHome: routine.officeBreakfastAtHome,
+                schoolBreakfast: routine.schoolBreakfast,
+                remoteMeals: routine.remoteMeals,
+                excludeFromPlan: routine.excludeFromPlan,
+            }
             : undefined,
         mealType: 'dinner',
     };
@@ -316,7 +316,7 @@ export default function CookbookScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <ScreenHeader title="Tarifler" subtitle="Bugün için seçilen akşam menüsü" />
 
             <ScrollView contentContainerStyle={styles.contentContainer}>

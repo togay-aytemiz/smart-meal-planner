@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import {
     ActivityIndicator,
+    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -271,14 +272,14 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPaylo
         householdSize: snapshot?.householdSize ?? 1,
         routine: routine
             ? {
-                  type: routine.type,
-                  gymTime: routine.gymTime,
-                  officeMealToGo: routine.officeMealToGo,
-                  officeBreakfastAtHome: routine.officeBreakfastAtHome,
-                  schoolBreakfast: routine.schoolBreakfast,
-                  remoteMeals: routine.remoteMeals,
-                  excludeFromPlan: routine.excludeFromPlan,
-              }
+                type: routine.type,
+                gymTime: routine.gymTime,
+                officeMealToGo: routine.officeMealToGo,
+                officeBreakfastAtHome: routine.officeBreakfastAtHome,
+                schoolBreakfast: routine.schoolBreakfast,
+                remoteMeals: routine.remoteMeals,
+                excludeFromPlan: routine.excludeFromPlan,
+            }
             : undefined,
         mealType: 'dinner',
     };
@@ -566,14 +567,19 @@ export default function TodayScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Image
+                        source={require('../../../assets/food-loader.gif')}
+                        style={{ width: 200, height: 200 }}
+                        resizeMode="contain"
+                    />
+                    <Text style={styles.loadingText}>Menü hazırlanıyor...</Text>
                 </View>
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
                 <ScreenHeader title={displayName} size="compact" style={styles.header} />
 
@@ -748,6 +754,12 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    loadingText: {
+        ...typography.body,
+        color: colors.textSecondary,
+        textAlign: 'center',
+        marginTop: spacing.md,
     },
     header: {
         paddingHorizontal: 0,

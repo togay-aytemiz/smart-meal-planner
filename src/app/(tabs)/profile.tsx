@@ -30,7 +30,7 @@ export default function ProfileScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <ScreenHeader title="Profil" />
 
             <View style={styles.content}>

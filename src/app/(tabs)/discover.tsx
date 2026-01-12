@@ -7,7 +7,7 @@ import { spacing } from '../../theme/spacing';
 
 export default function DiscoverScreen() {
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <ScreenHeader title="Keşfet" />
 
             <View style={styles.content}>

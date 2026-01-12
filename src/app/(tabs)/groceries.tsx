@@ -8,7 +8,7 @@ import { spacing } from '../../theme/spacing';
 
 export default function GroceriesScreen() {
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <ScreenHeader title="Alışveriş Listem" />
 
             <View style={styles.content}>

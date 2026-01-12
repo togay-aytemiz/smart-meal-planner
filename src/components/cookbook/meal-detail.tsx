@@ -248,7 +248,7 @@ export default function MealDetail({
                     { useNativeDriver: false }
                 )}
             >
-                <View style={styles.details}>
+                <View style={[styles.details, { paddingBottom: spacing.xxl + insets.bottom }]}>
                     <Image
                         source={{ uri: GRADIENT_BASE64 }}
                         style={styles.detailsGradient}
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     },
     headerBackground: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: colors.background,
+        backgroundColor: colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: colors.borderLight,
     },
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
         height: 44,
     },
     scrollContent: {
-        paddingBottom: spacing.xxl,
+        paddingBottom: 0,
     },
     details: {
         backgroundColor: colors.surface,

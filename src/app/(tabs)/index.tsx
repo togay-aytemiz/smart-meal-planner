@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import {
-    ActivityIndicator,
     Image,
     ScrollView,
     StyleSheet,
@@ -9,10 +8,11 @@ import {
     View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ScreenHeader } from '../../components/ui';
+import { ScreenHeader, ReasoningBubble } from '../../components/ui';
 import { functions } from '../../config/firebase';
 import { useUser } from '../../contexts/user-context';
 import { colors } from '../../theme/colors';
@@ -86,45 +86,31 @@ type OnboardingSnapshot = {
     routines?: WeeklyRoutine;
 };
 
-type MenuRequestPayload = {
+type WeeklyMenuRequest = {
     userId: string;
-    date: string;
-    dayOfWeek: string;
-    dietaryRestrictions: string[];
-    allergies: string[];
-    cuisinePreferences: string[];
-    timePreference: 'quick' | 'balanced' | 'elaborate';
-    skillLevel: 'beginner' | 'intermediate' | 'expert';
-    equipment: string[];
-    householdSize: number;
-    routine?: {
-        type: 'office' | 'remote' | 'gym' | 'school' | 'off';
-        gymTime?: 'morning' | 'afternoon' | 'evening' | 'none';
-        officeMealToGo?: 'yes' | 'no';
-        officeBreakfastAtHome?: 'yes' | 'no';
-        schoolBreakfast?: 'yes' | 'no';
-        remoteMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
-        excludeFromPlan?: boolean;
-    };
-    mealType: MenuMealType;
+    weekStart?: string;
+    onboarding?: OnboardingSnapshot;
+    repeatMode?: 'consecutive' | 'spaced';
+    existingPantry?: string[];
+    avoidIngredients?: string[];
+    maxPrepTime?: number;
+    maxCookTime?: number;
+    generateImage?: boolean;
 };
 
-type MenuRecipeParams = MenuRequestPayload & {
-    menu: MenuDecision;
-};
-
-type MenuCallResponse = {
+type WeeklyMenuResponse = {
     success: boolean;
-    menu: MenuDecision;
-    model: string;
+    weekStart: string;
+    totalMenus: number;
+    uniqueMenus: number;
+    recipesCreated: number;
+    model?: string;
     timestamp: string;
 };
 
-type MenuRecipesCallResponse = {
-    success: boolean;
-    menuRecipes: MenuRecipesResponse;
-    model: string;
-    timestamp: string;
+type WeeklyMenuCache = {
+    weekStart: string;
+    generatedAt: string;
 };
 
 type FunctionsErrorDetails = {
@@ -140,6 +126,7 @@ type FunctionsError = {
 const STORAGE_KEY = '@smart_meal_planner:onboarding';
 const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
 const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
+const WEEKLY_MENU_CACHE_KEY = '@smart_meal_planner:weekly_menu_generation';
 
 const DAY_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
@@ -221,6 +208,13 @@ const buildDateKey = (date: Date) => {
     return `${year}-${month}-${day}`;
 };
 
+const resolveWeekStartKey = (date: Date) => {
+    const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dayIndex = (weekStart.getDay() + 6) % 7;
+    weekStart.setDate(weekStart.getDate() - dayIndex);
+    return buildDateKey(weekStart);
+};
+
 const buildWeekDays = (baseDate: Date): CalendarDay[] => {
     const today = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
     const dayOfWeekIndex = (today.getDay() + 6) % 7;
@@ -249,43 +243,6 @@ const buildWeekDays = (baseDate: Date): CalendarDay[] => {
 const getDayKey = (date: Date) =>
     date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof WeeklyRoutine;
 
-const buildMenuRequest = (
-    snapshot: OnboardingSnapshot | null,
-    userId: string,
-    mealType: MenuMealType
-): MenuRequestPayload => {
-    const today = new Date();
-    const date = today.toISOString().split('T')[0];
-    const dayKey = getDayKey(today);
-    const routines = snapshot?.routines ?? DEFAULT_ROUTINES;
-    const routine = routines?.[dayKey];
-
-    return {
-        userId,
-        date,
-        dayOfWeek: dayKey,
-        dietaryRestrictions: snapshot?.dietary?.restrictions ?? [],
-        allergies: snapshot?.dietary?.allergies ?? [],
-        cuisinePreferences: snapshot?.cuisine?.selected ?? [],
-        timePreference: snapshot?.cooking?.timePreference ?? 'balanced',
-        skillLevel: snapshot?.cooking?.skillLevel ?? 'intermediate',
-        equipment: snapshot?.cooking?.equipment ?? [],
-        householdSize: snapshot?.householdSize ?? 1,
-        routine: routine
-            ? {
-                type: routine.type,
-                gymTime: routine.gymTime,
-                officeMealToGo: routine.officeMealToGo,
-                officeBreakfastAtHome: routine.officeBreakfastAtHome,
-                schoolBreakfast: routine.schoolBreakfast,
-                remoteMeals: routine.remoteMeals,
-                excludeFromPlan: routine.excludeFromPlan,
-            }
-            : undefined,
-        mealType,
-    };
-};
-
 type MenuCache = {
     menu: MenuDecision;
     recipes: MenuRecipesResponse;
@@ -296,6 +253,29 @@ const buildMenuCacheKey = (date: string, mealType: MenuMealType) =>
     `${MENU_CACHE_STORAGE_KEY}:${date}:${mealType}`;
 
 const buildMenuRecipesKey = (mealType: MenuMealType) => `${MENU_RECIPES_STORAGE_KEY}:${mealType}`;
+
+const buildWeeklyCacheKey = (userId: string) => `${WEEKLY_MENU_CACHE_KEY}:${userId}`;
+
+const loadWeeklyMenuCache = async (userId: string) => {
+    try {
+        const raw = await AsyncStorage.getItem(buildWeeklyCacheKey(userId));
+        if (!raw) {
+            return null;
+        }
+        return JSON.parse(raw) as WeeklyMenuCache;
+    } catch (error) {
+        console.warn('Weekly menu cache read error:', error);
+        return null;
+    }
+};
+
+const persistWeeklyMenuCache = async (userId: string, data: WeeklyMenuCache) => {
+    try {
+        await AsyncStorage.setItem(buildWeeklyCacheKey(userId), JSON.stringify(data));
+    } catch (error) {
+        console.warn('Weekly menu cache write error:', error);
+    }
+};
 
 const loadMenuCache = async (date: string, mealType: MenuMealType) => {
     try {
@@ -382,20 +362,20 @@ const buildMealItems = (recipes: MenuRecipe[]): MealItem[] => {
         });
 };
 
-const buildEmptyMessage = (meal: MealSectionKey, isSelectedToday: boolean, error?: string | null) => {
-    if (!isSelectedToday) {
-        return 'Bu gün için menü henüz hazırlanmadı.';
-    }
-
+const buildEmptyMessage = (meal: MealSectionKey, isLoading: boolean, error?: string | null) => {
     if (error) {
         return 'Menü oluşturulamadı. Lütfen tekrar deneyin.';
     }
 
-    if (meal === 'dinner') {
-        return 'Akşam menüsü hazırlanıyor.';
+    if (isLoading) {
+        return 'Menü hazırlanıyor.';
     }
 
-    return 'Bu öğün için öneri yakında.';
+    if (meal === 'dinner') {
+        return 'Akşam menüsü henüz hazırlanmadı.';
+    }
+
+    return 'Bu öğün için menü henüz hazırlanmadı.';
 };
 
 const getFunctionsErrorMessage = (error: unknown) => {
@@ -412,6 +392,45 @@ const getFunctionsErrorMessage = (error: unknown) => {
         }
     }
     return 'Bir hata oluştu.';
+};
+
+const ensureWeeklyMenu = async ({
+    userId,
+    weekStart,
+    onboarding,
+}: {
+    userId: string;
+    weekStart: string;
+    onboarding: OnboardingSnapshot | null;
+}): Promise<{ cache: WeeklyMenuCache | null; error: string | null }> => {
+    const cached = await loadWeeklyMenuCache(userId);
+    if (cached?.weekStart === weekStart) {
+        return { cache: cached, error: null };
+    }
+
+    try {
+        const callWeeklyMenu = functions.httpsCallable<
+            { request: WeeklyMenuRequest },
+            WeeklyMenuResponse
+        >('generateWeeklyMenu');
+        const response = await callWeeklyMenu({
+            request: {
+                userId,
+                weekStart,
+                ...(onboarding ? { onboarding } : {}),
+            },
+        });
+        const resolvedWeekStart = response.data?.weekStart ?? weekStart;
+        const cache: WeeklyMenuCache = {
+            weekStart: resolvedWeekStart,
+            generatedAt: new Date().toISOString(),
+        };
+        await persistWeeklyMenuCache(userId, cache);
+        return { cache, error: null };
+    } catch (error) {
+        console.warn('Weekly menu generation failed:', error);
+        return { cache: null, error: getFunctionsErrorMessage(error) };
+    }
 };
 
 export default function TodayScreen() {
@@ -437,22 +456,14 @@ export default function TodayScreen() {
     const [weeklyRoutine, setWeeklyRoutine] = useState<WeeklyRoutine>(DEFAULT_ROUTINES);
     const [userName, setUserName] = useState('');
     const [loading, setLoading] = useState(true);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const isSelectedToday = selectedDay.isToday;
     const selectedRoutine = weeklyRoutine[getDayKey(selectedDay.date)];
     const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
 
     const mealPlan = useMemo(() => buildMealPlan(selectedRoutine), [selectedRoutine]);
     const mealItemsByType = useMemo(() => {
-        if (!isSelectedToday) {
-            return {
-                breakfast: [] as MealItem[],
-                lunch: [] as MealItem[],
-                dinner: [] as MealItem[],
-            };
-        }
-
         const buildItems = (mealType: MealSectionKey) => {
             const bundle = menuBundles[mealType];
             if (!bundle?.recipes?.recipes?.length) {
@@ -466,7 +477,7 @@ export default function TodayScreen() {
             lunch: buildItems('lunch'),
             dinner: buildItems('dinner'),
         };
-    }, [isSelectedToday, menuBundles]);
+    }, [menuBundles]);
 
     const mealSections = useMemo(() => {
         const sections: MealSection[] = [];
@@ -477,7 +488,7 @@ export default function TodayScreen() {
                 id: 'breakfast',
                 ...SECTION_META.breakfast,
                 items,
-                emptyMessage: items.length ? undefined : buildEmptyMessage('breakfast', isSelectedToday, error),
+                emptyMessage: items.length ? undefined : buildEmptyMessage('breakfast', loading, error),
             });
         }
 
@@ -487,7 +498,7 @@ export default function TodayScreen() {
                 id: 'lunch',
                 ...SECTION_META.lunch,
                 items,
-                emptyMessage: items.length ? undefined : buildEmptyMessage('lunch', isSelectedToday, error),
+                emptyMessage: items.length ? undefined : buildEmptyMessage('lunch', loading, error),
             });
         }
 
@@ -497,14 +508,12 @@ export default function TodayScreen() {
                 id: 'dinner',
                 ...SECTION_META.dinner,
                 items,
-                emptyMessage: items.length
-                    ? undefined
-                    : buildEmptyMessage('dinner', isSelectedToday, error),
+                emptyMessage: items.length ? undefined : buildEmptyMessage('dinner', loading, error),
             });
         }
 
         return sections;
-    }, [error, isSelectedToday, mealItemsByType, mealPlan.breakfast, mealPlan.dinner, mealPlan.lunch]);
+    }, [error, loading, mealItemsByType, mealPlan.breakfast, mealPlan.dinner, mealPlan.lunch]);
 
     const mealCount = mealSections.length;
 
@@ -518,7 +527,7 @@ export default function TodayScreen() {
         }
         return '';
     }, [menuBundles]);
-    const showReasoning = isSelectedToday && !error && reasoningText.length > 0;
+    const showReasoning = !error && reasoningText.length > 0;
 
     useEffect(() => {
         if (userState.isLoading) {
@@ -530,32 +539,68 @@ export default function TodayScreen() {
         const fetchMenu = async () => {
             setLoading(true);
             setError(null);
-            if (isMounted) {
-                setMenuBundles({
-                    breakfast: null,
-                    lunch: null,
-                    dinner: null,
-                });
-            }
-
             try {
-                const raw = await AsyncStorage.getItem(STORAGE_KEY);
-                const stored = raw ? (JSON.parse(raw) as { data?: OnboardingSnapshot }) : null;
-                const snapshot = stored?.data ?? null;
+                const fallbackRaw = await AsyncStorage.getItem(STORAGE_KEY);
+                const stored = fallbackRaw ? (JSON.parse(fallbackRaw) as { data?: OnboardingSnapshot }) : null;
+                const fallbackSnapshot = stored?.data ?? null;
+                const userId = userState.user?.uid ?? 'anonymous';
 
-                if (isMounted) {
-                    setUserName(snapshot?.profile?.name ?? '');
-                    setWeeklyRoutine(snapshot?.routines ?? DEFAULT_ROUTINES);
+                let resolvedSnapshot = fallbackSnapshot;
+
+                if (userId !== 'anonymous') {
+                    try {
+                        const userDoc = await getDoc(doc(firestore(), 'Users', userId));
+                        const data = userDoc.data();
+                        const remoteSnapshot = data?.onboarding as OnboardingSnapshot | undefined;
+                        resolvedSnapshot = remoteSnapshot ?? fallbackSnapshot;
+                    } catch (readError) {
+                        console.warn('Failed to load onboarding data:', readError);
+                    }
                 }
 
-                const userId = userState.user?.uid ?? 'anonymous';
-                const baseRequest = buildMenuRequest(snapshot, userId, 'dinner');
-                const routines = snapshot?.routines ?? DEFAULT_ROUTINES;
-                const routineForDay = routines[baseRequest.dayOfWeek as keyof WeeklyRoutine];
+                if (!isMounted) {
+                    return;
+                }
+
+                setUserName(resolvedSnapshot?.profile?.name ?? '');
+                setWeeklyRoutine(resolvedSnapshot?.routines ?? DEFAULT_ROUTINES);
+
+                const activeDate = selectedDay.date;
+                const dateKey = selectedDay.key;
+                const dayKey = getDayKey(activeDate);
+                const routines = resolvedSnapshot?.routines ?? DEFAULT_ROUTINES;
+                const routineForDay = routines[dayKey];
                 const planForDay = buildMealPlan(routineForDay);
                 const mealTypes = (['breakfast', 'lunch', 'dinner'] as MealSectionKey[]).filter(
                     (mealType) => planForDay[mealType]
                 );
+                const weekStart = resolveWeekStartKey(activeDate);
+
+                const cachedBundles: Record<MealSectionKey, MenuBundle | null> = {
+                    breakfast: null,
+                    lunch: null,
+                    dinner: null,
+                };
+
+                for (const mealType of mealTypes) {
+                    const cachedMenu = await loadMenuCache(dateKey, mealType);
+                    if (cachedMenu) {
+                        cachedBundles[mealType] = {
+                            menu: cachedMenu.menu,
+                            recipes: cachedMenu.recipes,
+                        };
+                    }
+                }
+
+                if (isMounted) {
+                    setMenuBundles(cachedBundles);
+                }
+
+                const weeklyResult = await ensureWeeklyMenu({
+                    userId,
+                    weekStart,
+                    onboarding: resolvedSnapshot,
+                });
 
                 const updateBundle = (mealType: MealSectionKey, bundle: MenuBundle) => {
                     if (!isMounted) {
@@ -567,92 +612,35 @@ export default function TodayScreen() {
                     }));
                 };
 
-                const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>(
-                    'generateOpenAIMenu'
-                );
-                const callRecipes = functions.httpsCallable<
-                    { params: MenuRecipeParams },
-                    MenuRecipesCallResponse
-                >('generateOpenAIRecipe');
-
-                let lastError: string | null = null;
+                let loadedCount = 0;
+                let lastError: string | null = weeklyResult.error;
 
                 for (const mealType of mealTypes) {
-                    const request: MenuRequestPayload = {
-                        ...baseRequest,
-                        mealType,
-                    };
-                    const cachedMenu = await loadMenuCache(request.date, mealType);
-
                     try {
-                        const firestoreMenu = await fetchMenuBundle(userId, request.date, request.mealType);
+                        const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType);
                         if (firestoreMenu) {
                             updateBundle(mealType, firestoreMenu);
-                            await persistMenuCache(request.date, mealType, {
+                            await persistMenuCache(dateKey, mealType, {
                                 menu: firestoreMenu.menu,
                                 recipes: firestoreMenu.recipes,
                                 cachedAt: new Date().toISOString(),
                             });
-                            continue;
+                            loadedCount += 1;
                         }
                     } catch (firestoreError) {
                         console.warn('Menu Firestore read error:', firestoreError);
-                        if (cachedMenu) {
-                            updateBundle(mealType, {
-                                menu: cachedMenu.menu,
-                                recipes: cachedMenu.recipes,
-                            });
-                            continue;
+                        if (!lastError) {
+                            lastError = 'Menü yüklenemedi.';
                         }
-                    }
-
-                    if (cachedMenu) {
-                        updateBundle(mealType, {
-                            menu: cachedMenu.menu,
-                            recipes: cachedMenu.recipes,
-                        });
-                        continue;
-                    }
-
-                    try {
-                        const menuResult = await callMenu({ request });
-                        const menuData = menuResult.data?.menu;
-
-                        if (!menuData?.items?.length) {
-                            throw new Error('Menü verisi alınamadı');
-                        }
-
-                        const recipeParams: MenuRecipeParams = {
-                            ...request,
-                            menu: menuData,
-                        };
-
-                        const recipesResult = await callRecipes({ params: recipeParams });
-                        const recipesData = recipesResult.data?.menuRecipes;
-
-                        if (!recipesData?.recipes?.length) {
-                            throw new Error('Tarif verisi alınamadı');
-                        }
-
-                        const bundle = {
-                            menu: menuData,
-                            recipes: recipesData,
-                        };
-
-                        await persistMenuCache(request.date, mealType, {
-                            menu: menuData,
-                            recipes: recipesData,
-                            cachedAt: new Date().toISOString(),
-                        });
-
-                        updateBundle(mealType, bundle);
-                    } catch (err: unknown) {
-                        lastError = getFunctionsErrorMessage(err);
                     }
                 }
 
-                if (lastError && isMounted) {
-                    setError(lastError);
+                if (isMounted) {
+                    if (loadedCount === 0 && lastError) {
+                        setError(lastError);
+                    } else {
+                        setError(null);
+                    }
                 }
             } catch (err: unknown) {
                 console.error('Menu fetch error:', err);
@@ -662,6 +650,7 @@ export default function TodayScreen() {
             } finally {
                 if (isMounted) {
                     setLoading(false);
+                    setIsInitialLoading((prev) => (prev ? false : prev));
                 }
             }
         };
@@ -671,15 +660,16 @@ export default function TodayScreen() {
         return () => {
             isMounted = false;
         };
-    }, [userState.isLoading, userState.user?.uid]);
+    }, [selectedDayKey, userState.isLoading, userState.user?.uid]);
 
     const displayName = userName.trim() ? `${greeting} ${userName}` : greeting;
 
     const handleOpenMeal = (mealType: MealSectionKey, course: MenuRecipeCourse) => {
-        router.push({ pathname: '/cookbook/[course]', params: { course, mealType } });
+        const date = selectedDay?.key ?? buildDateKey(new Date());
+        router.push({ pathname: '/cookbook/[course]', params: { course, mealType, date } });
     };
 
-    if (loading) {
+    if (loading && isInitialLoading) {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.loadingContainer}>
@@ -765,13 +755,7 @@ export default function TodayScreen() {
                 ) : null}
 
                 {showReasoning ? (
-                    <View style={styles.reasoningCard}>
-                        <View style={styles.reasoningHeader}>
-                            <MaterialCommunityIcons name="lightbulb-on-outline" size={18} color={colors.primary} />
-                            <Text style={styles.reasoningTitle}>Neden bu menü?</Text>
-                        </View>
-                        <Text style={styles.reasoningText}>{reasoningText}</Text>
-                    </View>
+                    <ReasoningBubble text={reasoningText} />
                 ) : null}
 
                 {mealSections.map((section) => (
@@ -962,28 +946,6 @@ const styles = StyleSheet.create({
     },
     dayStatusHidden: {
         opacity: 0,
-    },
-    reasoningCard: {
-        backgroundColor: colors.surface,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: colors.border,
-        padding: spacing.lg,
-        gap: spacing.sm,
-        ...shadows.sm,
-    },
-    reasoningHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.sm,
-    },
-    reasoningTitle: {
-        ...typography.label,
-        color: colors.textPrimary,
-    },
-    reasoningText: {
-        ...typography.bodySmall,
-        color: colors.textSecondary,
     },
     dayHeader: {
         flexDirection: 'row',

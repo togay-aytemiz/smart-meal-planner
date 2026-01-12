@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
-import { Button } from '../../components/ui';
+import { Button, ReasoningBubble } from '../../components/ui';
 import { functions } from '../../config/firebase';
 import { useOnboarding, type RoutineDay, type WeeklyRoutine } from '../../contexts/onboarding-context';
 import { useUser } from '../../contexts/user-context';
@@ -676,13 +676,7 @@ export default function AnalysisScreen() {
                     </View>
 
                     {showReasoning ? (
-                        <View style={styles.reasoningCard}>
-                            <View style={styles.reasoningHeader}>
-                                <MaterialCommunityIcons name="lightbulb-on-outline" size={18} color={colors.primary} />
-                                <Text style={styles.reasoningTitle}>Neden bu menü?</Text>
-                            </View>
-                            <Text style={styles.reasoningText}>{reasoningText}</Text>
-                        </View>
+                        <ReasoningBubble text={reasoningText} />
                     ) : null}
 
                     {mealSections.length ? (
@@ -850,29 +844,6 @@ const styles = StyleSheet.create({
     },
     mealCountText: {
         ...typography.caption,
-        color: colors.textSecondary,
-    },
-    reasoningCard: {
-        backgroundColor: colors.surface,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: colors.border,
-        padding: spacing.lg,
-        marginBottom: spacing.lg,
-        gap: spacing.sm,
-        ...shadows.sm,
-    },
-    reasoningHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.sm,
-    },
-    reasoningTitle: {
-        ...typography.label,
-        color: colors.textPrimary,
-    },
-    reasoningText: {
-        ...typography.bodySmall,
         color: colors.textSecondary,
     },
     section: {

@@ -75,6 +75,13 @@ An intelligent meal planner that:
 
 > Bu bilgiler size uygun yemekler oluşturmamıza yardımcı olacak.
 
+### Onboarding AI Reveal (Current Build)
+- LLM-generated sample day preview uses real My Menu meal cards
+- Sample day prefers a weekday and targets at least 2 meals when possible (routine-based)
+- CTA copy: "Haftalık Planı Göster" before paywall
+- Preview refreshes when returning to the screen (no blank state)
+- "Wow/modern" bias in preview to avoid overly classic combinations while respecting onboarding constraints
+
 ---
 
 ## Core Features
@@ -126,6 +133,7 @@ An intelligent meal planner that:
   - Pantry-only mode (when enabled, MVP)
   - Time-based constraints
   - Energy/nutrition goals
+  - Cuisine enforcement: if non-Turkish cuisines are selected, generation must use one of them
 
 ### 3. Weekly Meal Plan Generator (MVP)
 

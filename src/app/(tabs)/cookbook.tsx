@@ -113,7 +113,7 @@ const DEFAULT_ROUTINES: WeeklyRoutine = {
     sunday: { type: 'remote', gymTime: 'none' },
 };
 
-const COURSE_ORDER: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze', 'dessert', 'pastry'];
+const COURSE_ORDER: MenuRecipeCourse[] = ['soup', 'main', 'side', 'pastry', 'salad', 'meze', 'dessert'];
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 

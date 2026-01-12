@@ -42,8 +42,6 @@ type MealItem = {
     calories: number;
     category: string;
     categoryIcon: IconName;
-    context: string;
-    contextIcon: IconName;
     icon: IconName;
     mediaTone: string;
     course: MenuRecipeCourse;
@@ -139,11 +137,6 @@ type FunctionsError = {
     details?: FunctionsErrorDetails | string;
 };
 
-type ContextMeta = {
-    label: string;
-    icon: IconName;
-};
-
 const STORAGE_KEY = '@smart_meal_planner:onboarding';
 const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
 const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
@@ -160,7 +153,7 @@ const DEFAULT_ROUTINES: WeeklyRoutine = {
     sunday: { type: 'remote', gymTime: 'none' },
 };
 
-const COURSE_ORDER: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze', 'dessert', 'pastry'];
+const COURSE_ORDER: MenuRecipeCourse[] = ['soup', 'main', 'side', 'pastry', 'salad', 'meze', 'dessert'];
 
 const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; mediaTone: string }> = {
     main: {
@@ -369,31 +362,7 @@ const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
     return { breakfast: false, lunch: false, dinner: true };
 };
 
-const getContextMeta = (routine: RoutineDay | null | undefined): ContextMeta => {
-    if (!routine) {
-        return { label: 'Günlük', icon: 'calendar-blank-outline' };
-    }
-
-    switch (routine.type) {
-        case 'office':
-            if (routine.officeMealToGo === 'yes') {
-                return { label: 'Ofise Uygun', icon: 'briefcase-outline' };
-            }
-            return { label: 'Evde', icon: 'home-outline' };
-        case 'remote':
-            return { label: 'Evde', icon: 'home-outline' };
-        case 'gym':
-            return { label: 'High Protein', icon: 'dumbbell' };
-        case 'school':
-            return { label: 'Okul Günü', icon: 'school-outline' };
-        case 'off':
-            return { label: 'Aile', icon: 'account-group-outline' };
-        default:
-            return { label: 'Günlük', icon: 'calendar-blank-outline' };
-    }
-};
-
-const buildMealItems = (recipes: MenuRecipe[], contextMeta: ContextMeta): MealItem[] => {
+const buildMealItems = (recipes: MenuRecipe[]): MealItem[] => {
     return recipes
         .filter((recipe) => COURSE_META[recipe.course])
         .sort((first, second) => COURSE_ORDER.indexOf(first.course) - COURSE_ORDER.indexOf(second.course))
@@ -406,8 +375,6 @@ const buildMealItems = (recipes: MenuRecipe[], contextMeta: ContextMeta): MealIt
                 calories: Math.round(recipe.macrosPerServing?.calories ?? 0),
                 category: courseMeta.label,
                 categoryIcon: courseMeta.icon,
-                context: contextMeta.label,
-                contextIcon: contextMeta.icon,
                 icon: courseMeta.icon,
                 mediaTone: courseMeta.mediaTone,
                 course: recipe.course,
@@ -474,10 +441,9 @@ export default function TodayScreen() {
 
     const isSelectedToday = selectedDay.isToday;
     const selectedRoutine = weeklyRoutine[getDayKey(selectedDay.date)];
+    const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
 
     const mealPlan = useMemo(() => buildMealPlan(selectedRoutine), [selectedRoutine]);
-    const contextMeta = useMemo(() => getContextMeta(selectedRoutine), [selectedRoutine]);
-
     const mealItemsByType = useMemo(() => {
         if (!isSelectedToday) {
             return {
@@ -492,7 +458,7 @@ export default function TodayScreen() {
             if (!bundle?.recipes?.recipes?.length) {
                 return [] as MealItem[];
             }
-            return buildMealItems(bundle.recipes.recipes, contextMeta);
+            return buildMealItems(bundle.recipes.recipes);
         };
 
         return {
@@ -500,7 +466,7 @@ export default function TodayScreen() {
             lunch: buildItems('lunch'),
             dinner: buildItems('dinner'),
         };
-    }, [contextMeta, isSelectedToday, menuBundles]);
+    }, [isSelectedToday, menuBundles]);
 
     const mealSections = useMemo(() => {
         const sections: MealSection[] = [];
@@ -791,6 +757,13 @@ export default function TodayScreen() {
                     </View>
                 </View>
 
+                {isHoliday ? (
+                    <View style={styles.holidayCard}>
+                        <MaterialCommunityIcons name="calendar-star" size={18} color={colors.accent} />
+                        <Text style={styles.holidayText}>Bu günü tatil olarak işaretledin.</Text>
+                    </View>
+                ) : null}
+
                 {showReasoning ? (
                     <View style={styles.reasoningCard}>
                         <View style={styles.reasoningHeader}>
@@ -856,16 +829,6 @@ export default function TodayScreen() {
                                                         color={colors.accent}
                                                     />
                                                     <Text style={styles.calorieText}>{item.calories} kcal</Text>
-                                                </View>
-                                                <View style={styles.chipRow}>
-                                                    <View style={styles.contextChip}>
-                                                        <MaterialCommunityIcons
-                                                            name={item.contextIcon}
-                                                            size={12}
-                                                            color={colors.textSecondary}
-                                                        />
-                                                        <Text style={styles.contextChipText}>{item.context}</Text>
-                                                    </View>
                                                 </View>
                                             </View>
                                         </View>
@@ -1027,6 +990,22 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
     },
+    holidayCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        backgroundColor: colors.surface,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: colors.border,
+        padding: spacing.md,
+        ...shadows.sm,
+    },
+    holidayText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        flex: 1,
+    },
     dayTitle: {
         ...typography.h3,
         color: colors.textPrimary,
@@ -1129,27 +1108,6 @@ const styles = StyleSheet.create({
     },
     calorieText: {
         ...typography.caption,
-        color: colors.textSecondary,
-    },
-    chipRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.xs,
-    },
-    contextChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: radius.full,
-        paddingHorizontal: spacing.sm,
-        paddingVertical: 2,
-        borderWidth: 1,
-        borderColor: colors.borderStrong,
-        gap: spacing.xs,
-    },
-    contextChipText: {
-        ...typography.caption,
-        fontSize: 11,
-        lineHeight: 14,
         color: colors.textSecondary,
     },
     chevron: {

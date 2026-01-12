@@ -98,6 +98,12 @@ An intelligent meal planner that:
 - Icons for: gym, office, remote, school, home
 - Helps understand meal requirements at a glance
 
+#### Meal Context Chips (Planned)
+- **Status:** Planned / TODO
+- Categories will be defined manually by the team (fixed set).
+- LLM will select one of the predefined categories per meal.
+- Selected category will be stored on meal detail and shown on meal cards.
+
 ### 2. AI Meal Recommendation Engine (MVP)
 
 #### Core Capabilities

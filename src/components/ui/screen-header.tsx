@@ -24,9 +24,10 @@ export default function ScreenHeader({
     subtitleStyle,
 }: ScreenHeaderProps) {
     const paddingBottom = size === 'compact' ? spacing.sm : spacing.lg;
+    const paddingTop = size === 'compact' ? spacing.md : spacing.lg;
 
     return (
-        <View style={[styles.container, { paddingBottom }, style]}>
+        <View style={[styles.container, { paddingBottom, paddingTop }, style]}>
             <View style={styles.titleRow}>
                 <Text style={[styles.title, titleStyle]}>{title}</Text>
                 {rightSlot ? <View style={styles.rightSlot}>{rightSlot}</View> : null}

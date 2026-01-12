@@ -87,6 +87,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   prompt += "- cuisine alanı seçilen mutfak türü olmalı (Türkçe).\n";
   prompt += "- Menü öğeleri birbiriyle uyumlu olmalı.\n";
   prompt += "- reasoning alanı 1-2 cümlelik, doğal Türkçe bir açıklama olmalı.\n";
+  prompt += "- reasoning kullanıcıya doğrudan hitap etmeli (\"sen\"/\"sana\" dili). \"Kullanıcı\" veya üçüncü şahıs kullanma.\n";
   prompt += "- reasoning yalnızca kullanıcı bağlamına ve rutinine dayanmalı; varsayım ekleme.\n";
   prompt += "- reasoning tamamen Türkçe olmalı; İngilizce kelime/etiket kullanma.\n";
   prompt += "- dietaryRestrictions/allergies İngilizce gelse bile reasoning içinde Türkçe karşılıklarını kullan (örn: dairy free -> sütsüz/laktozsuz, fish allergy -> balık alerjisi).\n";

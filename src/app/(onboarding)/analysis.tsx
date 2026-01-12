@@ -465,9 +465,13 @@ export default function AnalysisScreen() {
             };
 
             const fetchSampleMenu = async () => {
-                setLoading(true);
+                const hasExistingMenu = Object.values(menuBundles).some(
+                    (bundle) => bundle?.recipes?.recipes?.length
+                );
+
+                setLoading(!hasExistingMenu);
                 setError(null);
-                if (isMounted) {
+                if (isMounted && !hasExistingMenu) {
                     setMenuBundles({ breakfast: null, lunch: null, dinner: null });
                 }
 
@@ -582,7 +586,7 @@ export default function AnalysisScreen() {
             return () => {
                 isMounted = false;
             };
-        }, [state.data, userState.isLoading, userState.user?.uid])
+        }, [menuBundles, state.data, userState.isLoading, userState.user?.uid])
     );
 
     const userName = snapshot?.profile?.name || state.data.profile?.name || 'Size';
@@ -782,7 +786,7 @@ export default function AnalysisScreen() {
 
             <View style={styles.footer}>
                 <Button
-                    title="Tam Planı Göster"
+                    title="Haftalık Planı Göster"
                     onPress={handleContinue}
                     fullWidth
                     size="large"

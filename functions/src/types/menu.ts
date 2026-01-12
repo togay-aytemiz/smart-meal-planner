@@ -12,6 +12,7 @@ export interface MenuDecision {
   menuType: "dinner";
   cuisine: string;
   totalTimeMinutes: number;
+  reasoning: string;
   items: {
     main: string;
     side: string;
@@ -117,6 +118,9 @@ export interface MenuGenerationRequest {
   routine?: {
     type: "office" | "remote" | "gym" | "school" | "off";
     gymTime?: "morning" | "afternoon" | "evening" | "none";
+    officeMealToGo?: "yes" | "no";
+    officeBreakfastAtHome?: "yes" | "no";
+    schoolBreakfast?: "yes" | "no";
     remoteMeals?: ("breakfast" | "lunch" | "dinner")[];
     excludeFromPlan?: boolean;
   };

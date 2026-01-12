@@ -12,7 +12,7 @@ export function buildMenuSystemPrompt(): string {
   return [
     "Sen Omnoo uygulaması için menü kararı veren bir yapay zekasın.",
     "Kullanıcı bilgileri sistemde mevcuttur ve sana sağlanacaktır.",
-    "Soru sorma, açıklama yapma.",
+    "Soru sorma; açıklamayı yalnızca reasoning alanında ver.",
     "Yalnızca geçerli JSON üret ve şema dışına çıkma.",
   ].join("\n");
 }
@@ -86,13 +86,19 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   prompt += "- menuType alanı \"dinner\" olmalı.\n";
   prompt += "- cuisine alanı seçilen mutfak türü olmalı (Türkçe).\n";
   prompt += "- Menü öğeleri birbiriyle uyumlu olmalı.\n";
+  prompt += "- reasoning alanı 1-2 cümlelik, doğal Türkçe bir açıklama olmalı.\n";
+  prompt += "- reasoning yalnızca kullanıcı bağlamına ve rutinine dayanmalı; varsayım ekleme.\n";
+  prompt += "- reasoning tamamen Türkçe olmalı; İngilizce kelime/etiket kullanma.\n";
+  prompt += "- dietaryRestrictions/allergies İngilizce gelse bile reasoning içinde Türkçe karşılıklarını kullan (örn: dairy free -> sütsüz/laktozsuz, fish allergy -> balık alerjisi).\n";
+  prompt += "- Kısıt/alerji bilgisi yoksa reasoning içinde bunlardan bahsetme.\n";
+  prompt += "- reasoning içinde officeMealToGo/officeBreakfastAtHome/schoolBreakfast gibi rutin detaylarını dikkate al.\n";
   prompt += "- Zaman tercihini dikkate al (hızlı/dengeli/zahmetli).\n";
   prompt += "- maxPrepTime/maxCookTime varsa aşma; yoksa toplam süre yaklaşık 45 dakikayı geçmesin.\n";
   prompt += "- Yemekler Türkiye'de evde yapılabilir olmalı.\n";
   prompt += "- Malzemeler Türkiye'de kolay bulunan ürünler olmalı.\n";
   prompt += "- Aynı yemek, protein veya pişirme yöntemini sık tekrar etme.\n";
   prompt += "- Tüm yemek adları Türkçe olmalı.\n";
-  prompt += "- Açıklama, gerekçe, soru veya alternatif verme.\n";
+  prompt += "- Açıklama/gerekçeyi yalnızca reasoning alanında ver; onun dışında metin yazma.\n";
   prompt += "- UI metni, emoji veya sohbet dili kullanma.\n";
   prompt += "- Markdown kullanma.\n";
   prompt += "- Yalnızca JSON çıktısı üret.\n";

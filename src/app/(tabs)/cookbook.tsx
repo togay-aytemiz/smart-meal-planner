@@ -74,6 +74,9 @@ type MenuRequestPayload = {
     routine?: {
         type: 'office' | 'remote' | 'gym' | 'school' | 'off';
         gymTime?: 'morning' | 'afternoon' | 'evening' | 'none';
+        officeMealToGo?: 'yes' | 'no';
+        officeBreakfastAtHome?: 'yes' | 'no';
+        schoolBreakfast?: 'yes' | 'no';
         remoteMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
         excludeFromPlan?: boolean;
     };
@@ -205,6 +208,9 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPaylo
             ? {
                   type: routine.type,
                   gymTime: routine.gymTime,
+                  officeMealToGo: routine.officeMealToGo,
+                  officeBreakfastAtHome: routine.officeBreakfastAtHome,
+                  schoolBreakfast: routine.schoolBreakfast,
                   remoteMeals: routine.remoteMeals,
                   excludeFromPlan: routine.excludeFromPlan,
               }

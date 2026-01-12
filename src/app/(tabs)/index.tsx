@@ -98,6 +98,9 @@ type MenuRequestPayload = {
     routine?: {
         type: 'office' | 'remote' | 'gym' | 'school' | 'off';
         gymTime?: 'morning' | 'afternoon' | 'evening' | 'none';
+        officeMealToGo?: 'yes' | 'no';
+        officeBreakfastAtHome?: 'yes' | 'no';
+        schoolBreakfast?: 'yes' | 'no';
         remoteMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
         excludeFromPlan?: boolean;
     };
@@ -270,6 +273,9 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPaylo
             ? {
                   type: routine.type,
                   gymTime: routine.gymTime,
+                  officeMealToGo: routine.officeMealToGo,
+                  officeBreakfastAtHome: routine.officeBreakfastAtHome,
+                  schoolBreakfast: routine.schoolBreakfast,
                   remoteMeals: routine.remoteMeals,
                   excludeFromPlan: routine.excludeFromPlan,
               }
@@ -383,69 +389,6 @@ const buildEmptyMessage = (meal: MealSectionKey, isSelectedToday: boolean, error
     return 'Bu öğün için öneri yakında.';
 };
 
-const buildReasoning = ({
-    routine,
-    mealPlan,
-    menuRecipes,
-    isSelectedToday,
-    error,
-}: {
-    routine: RoutineDay | null | undefined;
-    mealPlan: MealPlan;
-    menuRecipes: MenuRecipesResponse | null;
-    isSelectedToday: boolean;
-    error: string | null;
-}) => {
-    if (!isSelectedToday) {
-        return 'Bu gün için menü henüz hazırlanmadı.';
-    }
-
-    if (error) {
-        return 'Menü oluşturulamadı. Lütfen tekrar deneyin.';
-    }
-
-    if (!mealPlan.dinner) {
-        return 'Bugün plan dışı olduğu için menü oluşturmadım.';
-    }
-
-    const totalTime = menuRecipes?.totalTimeMinutes
-        ? `${Math.round(menuRecipes.totalTimeMinutes)} dk`
-        : null;
-    const cuisine = menuRecipes?.cuisine?.trim();
-
-    let routineLine = 'Bugün için akşam menüsü oluşturdum.';
-
-    if (routine?.type === 'office') {
-        if (!mealPlan.breakfast && !mealPlan.lunch) {
-            routineLine =
-                'Bugün ofis günün. Kahvaltı ve öğle planına ihtiyaç olmadığı için sadece akşam menüsü oluşturdum.';
-        } else if (mealPlan.breakfast && !mealPlan.lunch) {
-            routineLine =
-                'Bugün ofis günün. Kahvaltı evde, öğle dışarıda olduğu için akşam menüsüne odaklandım.';
-        } else if (!mealPlan.breakfast && mealPlan.lunch) {
-            routineLine =
-                'Bugün ofis günün. Öğle için taşınabilir seçenekler uygun; akşam menüsünü planladım.';
-        } else {
-            routineLine =
-                'Bugün ofis günün. Gün içi dengeli seçimlere uygun, akşam menüsünü planladım.';
-        }
-    } else if (routine?.type === 'gym') {
-        routineLine = 'Bugün spor günün. Protein dengesi yüksek bir akşam menüsü seçtim.';
-    } else if (routine?.type === 'remote') {
-        routineLine = 'Bugün ev günün. Evde kolayca hazırlanabilecek bir akşam menüsü seçtim.';
-    } else if (routine?.type === 'school') {
-        routineLine = 'Bugün okul günün. Akşam için aileye uygun dengeli bir seçim yaptım.';
-    } else if (routine?.type === 'off') {
-        routineLine = 'Bugün sakin bir gün. Evde keyifle yapılabilecek bir akşam menüsü seçtim.';
-    }
-
-    const menuLine = cuisine
-        ? `${cuisine} mutfağından ${totalTime ? `${totalTime} civarı` : 'dengeli'} bir akşam menüsü seçtim.`
-        : 'Akşam için dengeli bir menü seçtim.';
-
-    return `${routineLine} ${menuLine}`.trim();
-};
-
 const getFunctionsErrorMessage = (error: unknown) => {
     if (error && typeof error === 'object') {
         const maybeError = error as FunctionsError;
@@ -477,6 +420,7 @@ export default function TodayScreen() {
         : selectedDay.date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 
     const [menuRecipes, setMenuRecipes] = useState<MenuRecipesResponse | null>(null);
+    const [menuReasoning, setMenuReasoning] = useState('');
     const [weeklyRoutine, setWeeklyRoutine] = useState<WeeklyRoutine>(DEFAULT_ROUTINES);
     const [userName, setUserName] = useState('');
     const [loading, setLoading] = useState(true);
@@ -532,17 +476,8 @@ export default function TodayScreen() {
 
     const mealCount = mealSections.length;
 
-    const reasoningText = useMemo(
-        () =>
-            buildReasoning({
-                routine: selectedRoutine,
-                mealPlan,
-                menuRecipes,
-                isSelectedToday,
-                error,
-            }),
-        [selectedRoutine, mealPlan, menuRecipes, isSelectedToday, error]
-    );
+    const reasoningText = menuReasoning.trim();
+    const showReasoning = isSelectedToday && !error && reasoningText.length > 0;
 
     useEffect(() => {
         let isMounted = true;
@@ -550,6 +485,10 @@ export default function TodayScreen() {
         const fetchMenu = async () => {
             setLoading(true);
             setError(null);
+            if (isMounted) {
+                setMenuRecipes(null);
+                setMenuReasoning('');
+            }
 
             try {
                 const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -571,6 +510,10 @@ export default function TodayScreen() {
 
                 if (!menuData?.items) {
                     throw new Error('Menü verisi alınamadı');
+                }
+
+                if (isMounted) {
+                    setMenuReasoning(menuData.reasoning ?? '');
                 }
 
                 const recipeParams: MenuRecipeParams = {
@@ -692,13 +635,15 @@ export default function TodayScreen() {
                     </View>
                 </View>
 
-                <View style={styles.reasoningCard}>
-                    <View style={styles.reasoningHeader}>
-                        <MaterialCommunityIcons name="lightbulb-on-outline" size={18} color={colors.primary} />
-                        <Text style={styles.reasoningTitle}>Neden bu menü?</Text>
+                {showReasoning ? (
+                    <View style={styles.reasoningCard}>
+                        <View style={styles.reasoningHeader}>
+                            <MaterialCommunityIcons name="lightbulb-on-outline" size={18} color={colors.primary} />
+                            <Text style={styles.reasoningTitle}>Neden bu menü?</Text>
+                        </View>
+                        <Text style={styles.reasoningText}>{reasoningText}</Text>
                     </View>
-                    <Text style={styles.reasoningText}>{reasoningText}</Text>
-                </View>
+                ) : null}
 
                 {mealSections.map((section) => (
                     <View key={section.id} style={styles.section}>
@@ -809,7 +754,7 @@ const styles = StyleSheet.create({
     },
     contentContainer: {
         paddingHorizontal: spacing.lg,
-        paddingBottom: spacing.xxxl,
+        paddingBottom: spacing.lg,
         gap: spacing.md,
     },
     calendarRow: {

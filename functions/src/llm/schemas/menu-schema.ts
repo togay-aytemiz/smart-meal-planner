@@ -21,6 +21,11 @@ export const MENU_JSON_SCHEMA = {
       maximum: 45,
       description: "Tüm menünün tahmini toplam süresi (dakika).",
     },
+    reasoning: {
+      type: "string",
+      minLength: 10,
+      description: "Menünün neden seçildiğine dair kısa Türkçe açıklama.",
+    },
     items: {
       type: "object",
       additionalProperties: false,
@@ -52,7 +57,7 @@ export const MENU_JSON_SCHEMA = {
       required: ["main", "side", "extra"],
     },
   },
-  required: ["menuType", "cuisine", "totalTimeMinutes", "items"],
+  required: ["menuType", "cuisine", "totalTimeMinutes", "reasoning", "items"],
 } as const;
 
 export function getOpenAIMenuSchema() {
@@ -60,7 +65,7 @@ export function getOpenAIMenuSchema() {
     type: "json_schema",
     json_schema: {
       name: "menu_schema",
-      description: "Dinner menu decision (main, side, soup/salad/meze/dessert/pastry)",
+      description: "Dinner menu decision with reasoning",
       schema: MENU_JSON_SCHEMA,
       strict: true,
     },

@@ -35,6 +35,7 @@ export type MenuDecision = {
     menuType: 'dinner';
     cuisine: string;
     totalTimeMinutes: number;
+    reasoning: string;
     items: {
         main: string;
         side: string;

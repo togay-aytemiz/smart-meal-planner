@@ -82,6 +82,9 @@ export function onboardingToMenuRequest(
       ? {
           type: routine.type,
           gymTime: routine.gymTime,
+          officeMealToGo: routine.officeMealToGo,
+          officeBreakfastAtHome: routine.officeBreakfastAtHome,
+          schoolBreakfast: routine.schoolBreakfast,
           remoteMeals: routine.remoteMeals,
           excludeFromPlan: routine.excludeFromPlan,
         }

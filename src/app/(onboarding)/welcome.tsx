@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Animated, Easing, Dimensions, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, Dimensions, ScrollView, Image } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useRef } from 'react';
@@ -98,30 +98,17 @@ export default function WelcomeScreen() {
                         }
                     ]}
                 >
-                    {/* Hero Icon */}
-                    <View style={styles.iconContainer}>
-                        <MaterialCommunityIcons name="chef-hat" size={48} color={colors.primary} />
-                    </View>
+                    {/* Hero Image */}
+                    <Image
+                        source={require('../../../assets/welcome.png')}
+                        style={styles.heroImage}
+                        resizeMode="contain"
+                    />
 
                     <Text style={styles.title}>Akıllı Yemek Planlama</Text>
                     <Text style={styles.subtitle}>
-                        "Akşam ne pişirsem?" derdine son verin, sağlıklı yaşama adım atın.
+                        "Bugün ne pişirsem?" derdine son verin, sağlıklı yaşama adım atın.
                     </Text>
-
-                    {/* Social Proof */}
-                    <View style={styles.socialProofContainer}>
-                        <View style={styles.avatarStack}>
-                            {[1, 2, 3].map((_, i) => (
-                                <View key={i} style={[styles.avatarStats, { zIndex: 3 - i, marginLeft: i > 0 ? -12 : 0 }]}>
-                                    <MaterialCommunityIcons name="account" size={16} color={colors.textSecondary} />
-                                </View>
-                            ))}
-                        </View>
-                        <View style={styles.proofTextContainer}>
-                            <Text style={styles.proofTitle}>50,000+ Aile</Text>
-                            <Text style={styles.proofSubtitle}>bu yolculuğa katıldı</Text>
-                        </View>
-                    </View>
                 </Animated.View>
 
                 {/* Feature List */}
@@ -204,21 +191,12 @@ const styles = StyleSheet.create({
     },
     header: {
         alignItems: 'center',
-        marginBottom: spacing.xxl,
+        marginBottom: spacing.xl,
     },
-    iconContainer: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: colors.surface,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: spacing.lg,
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 24,
-        elevation: 10,
+    heroImage: {
+        width: 280,
+        height: 280,
+        marginBottom: spacing.sm,
     },
     title: {
         ...typography.h1,
@@ -226,6 +204,7 @@ const styles = StyleSheet.create({
         color: colors.textPrimary,
         textAlign: 'center',
         marginBottom: spacing.md,
+        fontWeight: '500',
     },
     subtitle: {
         ...typography.body,
@@ -234,7 +213,7 @@ const styles = StyleSheet.create({
         lineHeight: 24,
     },
     featuresList: {
-        gap: spacing.xl,
+        gap: spacing.lg,
     },
     featureRow: {
         flexDirection: 'row',
@@ -287,46 +266,5 @@ const styles = StyleSheet.create({
     startButton: {
         height: 56,
         borderRadius: radius.full,
-    },
-    socialProofContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.surface,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.lg,
-        borderRadius: radius.full,
-        marginTop: spacing.lg,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    avatarStack: {
-        flexDirection: 'row',
-        marginRight: spacing.md,
-    },
-    avatarStats: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: '#F3F4F6',
-        borderWidth: 2,
-        borderColor: '#FFFFFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    proofTextContainer: {
-        justifyContent: 'center',
-    },
-    proofTitle: {
-        ...typography.caption,
-        fontWeight: '700',
-        color: colors.primary,
-    },
-    proofSubtitle: {
-        ...typography.caption,
-        fontSize: 11,
-        color: colors.textSecondary,
     },
 });

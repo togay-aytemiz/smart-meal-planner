@@ -1,8 +1,7 @@
-import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useRef, useState } from 'react';
-import { MaterialCommunityIcons } from '@expo/vector-icons'; // Ensure this is installed
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
@@ -22,20 +21,9 @@ export default function ProcessingScreen() {
     const [messageIndex, setMessageIndex] = useState(0);
 
     // Animations
-    const spinAnim = useRef(new Animated.Value(0)).current;
     const fadeAnim = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
-        // Spin animation
-        Animated.loop(
-            Animated.timing(spinAnim, {
-                toValue: 1,
-                duration: 2000,
-                easing: Easing.linear,
-                useNativeDriver: true,
-            })
-        ).start();
-
         // Message cycling
         const messageInterval = setInterval(() => {
             Animated.sequence([
@@ -61,21 +49,15 @@ export default function ProcessingScreen() {
         };
     }, []);
 
-    const spin = spinAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '360deg']
-    });
-
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.iconContainer}>
-                    <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                        <MaterialCommunityIcons name="loading" size={64} color={colors.primary} />
-                    </Animated.View>
-                    <View style={styles.centerIcon}>
-                        <MaterialCommunityIcons name="brain" size={32} color={colors.primary} />
-                    </View>
+                    <Image
+                        source={require('../../../assets/processing-loader.gif')}
+                        style={styles.loaderImage}
+                        resizeMode="contain"
+                    />
                 </View>
 
                 <Animated.Text style={[styles.message, { opacity: fadeAnim }]}>
@@ -99,14 +81,15 @@ const styles = StyleSheet.create({
         marginTop: '40%', // Push down slightly but not vertically centered
     },
     iconContainer: {
-        width: 120,
-        height: 120,
+        width: 150, // Increased slightly for the gif
+        height: 150,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: spacing.md,
     },
-    centerIcon: {
-        position: 'absolute',
+    loaderImage: {
+        width: '100%',
+        height: '100%',
     },
     message: {
         ...typography.h3,

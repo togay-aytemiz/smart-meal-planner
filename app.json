@@ -9,8 +9,8 @@
     "newArchEnabled": false,
     "scheme": "smart-meal-planner",
     "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
       "backgroundColor": "#FAFAF9"
     },
     "ios": {

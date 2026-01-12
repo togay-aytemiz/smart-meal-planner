@@ -107,7 +107,7 @@ export default function WelcomeScreen() {
 
                     <Text style={styles.title}>Akıllı Yemek Planlama</Text>
                     <Text style={styles.subtitle}>
-                        "Bugün ne pişirsem?" derdine son verin, sağlıklı yaşama adım atın.
+                        "Bugün ne pişirsem?" derdine son ver, hatta bu hafta gibi de olabilir
                     </Text>
                 </Animated.View>
 
@@ -115,19 +115,19 @@ export default function WelcomeScreen() {
                 <View style={styles.featuresList}>
                     <FeatureRow
                         anim={item1Anim}
-                        icon="calendar-clock"
+                        imageSource={require('../../../assets/cal.png')}
                         title="Rutinlerinize Göre Plan"
                         desc="Ofis, ev veya tatil günlerinize göre otomatik ayarlanan dinamik listeler."
                     />
                     <FeatureRow
                         anim={item2Anim}
-                        icon="account-group"
+                        imageSource={require('../../../assets/fam.png')}
                         title="Tüm Aile İçin Uyumlu"
                         desc="Eşiniz, çocuklarınız ve evdeki herkes için ortak, sevilen tarifler."
                     />
                     <FeatureRow
                         anim={item3Anim}
-                        icon="brain"
+                        imageSource={require('../../../assets/ai.png')}
                         title="Yapay Zeka Destekli"
                         desc="Damak tadınıza ve tercihlerinize göre sürekli öğrenen kişisel asistan."
                     />
@@ -149,7 +149,9 @@ export default function WelcomeScreen() {
     );
 }
 
-function FeatureRow({ icon, title, desc, anim }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; title: string; desc: string; anim: Animated.Value }) {
+import { ImageSourcePropType } from 'react-native';
+
+function FeatureRow({ imageSource, title, desc, anim }: { imageSource: ImageSourcePropType; title: string; desc: string; anim: Animated.Value }) {
     return (
         <Animated.View
             style={[
@@ -166,7 +168,7 @@ function FeatureRow({ icon, title, desc, anim }: { icon: keyof typeof MaterialCo
             ]}
         >
             <View style={styles.featureIcon}>
-                <MaterialCommunityIcons name={icon} size={24} color={colors.primary} />
+                <Image source={imageSource} style={styles.featureImage} resizeMode="contain" />
             </View>
             <View style={styles.featureContent}>
                 <Text style={styles.featureTitle}>{title}</Text>
@@ -203,7 +205,7 @@ const styles = StyleSheet.create({
         fontSize: 28,
         color: colors.textPrimary,
         textAlign: 'center',
-        marginBottom: spacing.md,
+        marginBottom: spacing.sm,
         fontWeight: '500',
     },
     subtitle: {
@@ -220,20 +222,15 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     featureIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 16, // Squircle
-        backgroundColor: colors.surface,
+        width: 60,
+        height: 60,
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: spacing.md,
-        borderWidth: 1,
-        borderColor: colors.border,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
+    },
+    featureImage: {
+        width: 60,
+        height: 60,
     },
     featureContent: {
         flex: 1,

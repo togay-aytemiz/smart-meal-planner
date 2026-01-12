@@ -14,10 +14,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ScreenHeader } from '../../components/ui';
 import { functions } from '../../config/firebase';
+import { useUser } from '../../contexts/user-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows, hitSlop } from '../../theme/spacing';
 import { formatLongDateTr, getGreeting } from '../../utils/dates';
+import { fetchMenuBundle } from '../../utils/menu-storage';
 import type { MenuDecision, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
@@ -143,6 +145,7 @@ type ContextMeta = {
 
 const STORAGE_KEY = '@smart_meal_planner:onboarding';
 const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
+const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
 
 const DAY_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
@@ -252,7 +255,7 @@ const buildWeekDays = (baseDate: Date): CalendarDay[] => {
 const getDayKey = (date: Date) =>
     date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof WeeklyRoutine;
 
-const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPayload => {
+const buildMenuRequest = (snapshot: OnboardingSnapshot | null, userId: string): MenuRequestPayload => {
     const today = new Date();
     const date = today.toISOString().split('T')[0];
     const dayKey = getDayKey(today);
@@ -260,7 +263,7 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPaylo
     const routine = routines?.[dayKey];
 
     return {
-        userId: 'anonymous',
+        userId,
         date,
         dayOfWeek: dayKey,
         dietaryRestrictions: snapshot?.dietary?.restrictions ?? [],
@@ -283,6 +286,36 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPaylo
             : undefined,
         mealType: 'dinner',
     };
+};
+
+type MenuCache = {
+    menu: MenuDecision;
+    recipes: MenuRecipesResponse;
+    cachedAt: string;
+};
+
+const buildMenuCacheKey = (date: string) => `${MENU_CACHE_STORAGE_KEY}:${date}`;
+
+const loadMenuCache = async (date: string) => {
+    try {
+        const raw = await AsyncStorage.getItem(buildMenuCacheKey(date));
+        if (!raw) {
+            return null;
+        }
+        return JSON.parse(raw) as MenuCache;
+    } catch (error) {
+        console.warn('Menu cache read error:', error);
+        return null;
+    }
+};
+
+const persistMenuCache = async (date: string, data: MenuCache) => {
+    try {
+        await AsyncStorage.setItem(buildMenuCacheKey(date), JSON.stringify(data));
+        await AsyncStorage.setItem(MENU_RECIPES_STORAGE_KEY, JSON.stringify(data.recipes));
+    } catch (error) {
+        console.warn('Menu cache write error:', error);
+    }
 };
 
 const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
@@ -408,6 +441,7 @@ const getFunctionsErrorMessage = (error: unknown) => {
 
 export default function TodayScreen() {
     const router = useRouter();
+    const { state: userState } = useUser();
     const now = new Date();
     const greeting = getGreeting(now);
     const weekDays = buildWeekDays(now);
@@ -481,6 +515,10 @@ export default function TodayScreen() {
     const showReasoning = isSelectedToday && !error && reasoningText.length > 0;
 
     useEffect(() => {
+        if (userState.isLoading) {
+            return;
+        }
+
         let isMounted = true;
 
         const fetchMenu = async () => {
@@ -490,6 +528,8 @@ export default function TodayScreen() {
                 setMenuRecipes(null);
                 setMenuReasoning('');
             }
+
+            let cachedMenu: MenuCache | null = null;
 
             try {
                 const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -501,7 +541,33 @@ export default function TodayScreen() {
                     setWeeklyRoutine(snapshot?.routines ?? DEFAULT_ROUTINES);
                 }
 
-                const request = buildMenuRequest(snapshot);
+                const userId = userState.user?.uid ?? 'anonymous';
+                const request = buildMenuRequest(snapshot, userId);
+                cachedMenu = await loadMenuCache(request.date);
+
+                try {
+                    const firestoreMenu = await fetchMenuBundle(userId, request.date, request.mealType);
+                    if (firestoreMenu) {
+                        if (isMounted) {
+                            setMenuReasoning(firestoreMenu.menu.reasoning ?? '');
+                            setMenuRecipes(firestoreMenu.recipes);
+                        }
+
+                        await persistMenuCache(request.date, {
+                            menu: firestoreMenu.menu,
+                            recipes: firestoreMenu.recipes,
+                            cachedAt: new Date().toISOString(),
+                        });
+                        return;
+                    }
+                } catch (firestoreError) {
+                    console.warn('Menu Firestore read error:', firestoreError);
+                    if (cachedMenu && isMounted) {
+                        setMenuReasoning(cachedMenu.menu.reasoning ?? '');
+                        setMenuRecipes(cachedMenu.recipes);
+                        return;
+                    }
+                }
 
                 const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>(
                     'generateOpenAIMenu'
@@ -533,13 +599,24 @@ export default function TodayScreen() {
                     throw new Error('Tarif verisi alınamadı');
                 }
 
-                await AsyncStorage.setItem(MENU_RECIPES_STORAGE_KEY, JSON.stringify(recipesData));
+                await persistMenuCache(request.date, {
+                    menu: menuData,
+                    recipes: recipesData,
+                    cachedAt: new Date().toISOString(),
+                });
 
                 if (isMounted) {
                     setMenuRecipes(recipesData);
                 }
             } catch (err: unknown) {
                 console.error('Menu fetch error:', err);
+                const fallbackMenu =
+                    cachedMenu ?? (await loadMenuCache(new Date().toISOString().split('T')[0]));
+                if (fallbackMenu && isMounted) {
+                    setMenuReasoning(fallbackMenu.menu.reasoning ?? '');
+                    setMenuRecipes(fallbackMenu.recipes);
+                    return;
+                }
                 if (isMounted) {
                     setError(getFunctionsErrorMessage(err));
                 }
@@ -555,7 +632,7 @@ export default function TodayScreen() {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [userState.isLoading, userState.user?.uid]);
 
     const displayName = userName.trim() ? `${greeting} ${userName}` : greeting;
 

@@ -3,10 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useUser } from '../../contexts/user-context';
 import { colors } from '../../theme/colors';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import MealDetail from '../../components/cookbook/meal-detail';
+import { fetchMenuBundle } from '../../utils/menu-storage';
 import { MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 
 const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
@@ -23,11 +25,16 @@ const normalizeCourse = (value: string | string[] | undefined): MenuRecipeCourse
 export default function CookbookDetailScreen() {
     const router = useRouter();
     const { course } = useLocalSearchParams<{ course?: string }>();
+    const { state: userState } = useUser();
     const [recipe, setRecipe] = useState<MenuRecipe | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        if (userState.isLoading) {
+            return;
+        }
+
         let isMounted = true;
 
         const loadRecipe = async () => {
@@ -38,6 +45,24 @@ export default function CookbookDetailScreen() {
                 const courseKey = normalizeCourse(course);
                 if (!courseKey) {
                     throw new Error('Tarif bulunamadı');
+                }
+
+                const userId = userState.user?.uid ?? 'anonymous';
+                const today = new Date().toISOString().split('T')[0];
+
+                try {
+                    const firestoreMenu = await fetchMenuBundle(userId, today, 'dinner');
+                    const match = firestoreMenu?.recipes.recipes.find((item) => item.course === courseKey);
+                    if (match && isMounted) {
+                        setRecipe(match);
+                        await AsyncStorage.setItem(
+                            MENU_RECIPES_STORAGE_KEY,
+                            JSON.stringify(firestoreMenu.recipes)
+                        );
+                        return;
+                    }
+                } catch (firestoreError) {
+                    console.warn('Cookbook Firestore read error:', firestoreError);
                 }
 
                 const raw = await AsyncStorage.getItem(MENU_RECIPES_STORAGE_KEY);
@@ -76,7 +101,7 @@ export default function CookbookDetailScreen() {
         return () => {
             isMounted = false;
         };
-    }, [course]);
+    }, [course, userState.isLoading, userState.user?.uid]);
 
     return (
         <SafeAreaView style={styles.container} edges={['left', 'right']}>

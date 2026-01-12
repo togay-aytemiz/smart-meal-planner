@@ -6,10 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ScreenHeader } from '../../components/ui';
+import { useUser } from '../../contexts/user-context';
 import { colors } from '../../theme/colors';
 import { spacing, radius, shadows } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { functions } from '../../config/firebase';
+import { fetchMenuBundle } from '../../utils/menu-storage';
 import { MenuDecision, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 
 type MenuCallResponse = {
@@ -89,6 +91,7 @@ type MenuRecipeParams = MenuRequestPayload & {
 
 const STORAGE_KEY = '@smart_meal_planner:onboarding';
 const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
+const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
 
 type FunctionsErrorDetails = {
     message?: string;
@@ -186,7 +189,7 @@ const formatToday = () => {
     return { dayLabel, dateLabel };
 };
 
-const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPayload => {
+const buildMenuRequest = (snapshot: OnboardingSnapshot | null, userId: string): MenuRequestPayload => {
     const today = new Date();
     const date = today.toISOString().split('T')[0];
     const dayKey = getDayKey(today);
@@ -194,7 +197,7 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null): MenuRequestPaylo
     const routine = routines?.[dayKey];
 
     return {
-        userId: 'anonymous',
+        userId,
         date,
         dayOfWeek: dayKey,
         dietaryRestrictions: snapshot?.dietary?.restrictions ?? [],
@@ -238,16 +241,39 @@ const getFunctionsErrorMessage = (error: unknown) => {
     return 'Bir hata oluştu';
 };
 
-const persistMenuRecipes = async (data: MenuRecipesResponse) => {
+type MenuCache = {
+    menu: MenuDecision;
+    recipes: MenuRecipesResponse;
+    cachedAt: string;
+};
+
+const buildMenuCacheKey = (date: string) => `${MENU_CACHE_STORAGE_KEY}:${date}`;
+
+const loadMenuCache = async (date: string) => {
     try {
-        await AsyncStorage.setItem(MENU_RECIPES_STORAGE_KEY, JSON.stringify(data));
+        const raw = await AsyncStorage.getItem(buildMenuCacheKey(date));
+        if (!raw) {
+            return null;
+        }
+        return JSON.parse(raw) as MenuCache;
     } catch (error) {
-        console.warn('Menu recipes cache error:', error);
+        console.warn('Menu cache read error:', error);
+        return null;
+    }
+};
+
+const persistMenuCache = async (date: string, data: MenuCache) => {
+    try {
+        await AsyncStorage.setItem(buildMenuCacheKey(date), JSON.stringify(data));
+        await AsyncStorage.setItem(MENU_RECIPES_STORAGE_KEY, JSON.stringify(data.recipes));
+    } catch (error) {
+        console.warn('Menu cache write error:', error);
     }
 };
 
 export default function CookbookScreen() {
     const router = useRouter();
+    const { state: userState } = useUser();
     const [menuRecipes, setMenuRecipes] = useState<MenuRecipesResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -270,7 +296,28 @@ export default function CookbookScreen() {
         try {
             const raw = await AsyncStorage.getItem(STORAGE_KEY);
             const stored = raw ? (JSON.parse(raw) as { data?: OnboardingSnapshot }) : null;
-            const request = buildMenuRequest(stored?.data ?? null);
+            const userId = userState.user?.uid ?? 'anonymous';
+            const request = buildMenuRequest(stored?.data ?? null, userId);
+            const cachedMenu = await loadMenuCache(request.date);
+
+            try {
+                const firestoreMenu = await fetchMenuBundle(userId, request.date, request.mealType);
+                if (firestoreMenu) {
+                    setMenuRecipes(firestoreMenu.recipes);
+                    await persistMenuCache(request.date, {
+                        menu: firestoreMenu.menu,
+                        recipes: firestoreMenu.recipes,
+                        cachedAt: new Date().toISOString(),
+                    });
+                    return;
+                }
+            } catch (firestoreError) {
+                console.warn('Menu Firestore read error:', firestoreError);
+                if (cachedMenu) {
+                    setMenuRecipes(cachedMenu.recipes);
+                    return;
+                }
+            }
 
             const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>(
                 'generateOpenAIMenu'
@@ -298,9 +345,18 @@ export default function CookbookScreen() {
             }
 
             setMenuRecipes(recipesData);
-            await persistMenuRecipes(recipesData);
+            await persistMenuCache(request.date, {
+                menu: menuData,
+                recipes: recipesData,
+                cachedAt: new Date().toISOString(),
+            });
         } catch (err: unknown) {
             console.error('Menu fetch error:', err);
+            const cachedMenu = await loadMenuCache(new Date().toISOString().split('T')[0]);
+            if (cachedMenu) {
+                setMenuRecipes(cachedMenu.recipes);
+                return;
+            }
             setError(getFunctionsErrorMessage(err));
         } finally {
             setLoading(false);
@@ -308,8 +364,10 @@ export default function CookbookScreen() {
     };
 
     useEffect(() => {
-        fetchRecipe();
-    }, []);
+        if (!userState.isLoading) {
+            fetchRecipe();
+        }
+    }, [userState.isLoading, userState.user?.uid]);
 
     const handleOpenRecipe = (course: MenuRecipeCourse) => {
         router.push({ pathname: '/cookbook/[course]', params: { course } });

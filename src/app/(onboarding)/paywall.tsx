@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image, ImageSourcePropType } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useRef, useEffect } from 'react';
@@ -39,6 +39,11 @@ export default function PaywallScreen() {
             >
                 {/* Header Section */}
                 <View style={styles.header}>
+                    <Image
+                        source={require('../../../assets/pw-superomnoo.png')}
+                        style={styles.headerImage}
+                        resizeMode="contain"
+                    />
                     <Text style={styles.title}>En iyi haline{'\n'}merhaba de.</Text>
                     <Text style={styles.subtitle}>
                     </Text>
@@ -47,19 +52,19 @@ export default function PaywallScreen() {
                 {/* Benefits List */}
                 <View style={styles.benefitsContainer}>
                     <BenefitRow
-                        icon="chef-hat"
+                        image={require('../../../assets/pw-chef.png')}
                         title="Sınırsız AI Şef"
-                        desc="Dolabınızdakilerle size özel tarifler."
+                        desc="Sadece sana özel tarifler."
                     />
                     <BenefitRow
-                        icon="calendar-week"
+                        image={require('../../../assets/pw-plan.png')}
                         title="Akıllı Haftalık Plan"
-                        desc="Rutinlerinize uygun otomatik plan."
+                        desc="Rutinine uygun otomatik plan."
                     />
                     <BenefitRow
-                        icon="cart-outline"
+                        image={require('../../../assets/pw-groc.png')}
                         title="Alışveriş Listesi"
-                        desc="Planınızdan otomatik market listesi."
+                        desc="Saniyeler içinde hazır, eksiksiz alışveriş listesi."
                     />
                 </View>
 
@@ -135,10 +140,10 @@ export default function PaywallScreen() {
     );
 }
 
-function BenefitRow({ icon, title, desc }: { icon: any, title: string, desc: string }) {
+function BenefitRow({ image, title, desc }: { image: ImageSourcePropType, title: string, desc: string }) {
     return (
         <View style={styles.benefitRow}>
-            <MaterialCommunityIcons name={icon} size={28} color={colors.warning} style={styles.benefitIcon} />
+            <Image source={image} style={styles.benefitIcon} resizeMode="contain" />
             <View style={styles.benefitContent}>
                 <Text style={styles.benefitTitle}>{title}</Text>
                 <Text style={styles.benefitDesc}>{desc}</Text>
@@ -160,6 +165,15 @@ const styles = StyleSheet.create({
         marginTop: spacing.sm,
         marginBottom: spacing.sm,
     },
+    headerImage: {
+        position: 'absolute',
+        top: 0,
+        right: -20,
+        width: 140,
+        height: 140,
+        zIndex: -1,
+        opacity: 0.8,
+    },
     title: {
         ...typography.h1,
         fontSize: 32,
@@ -172,16 +186,17 @@ const styles = StyleSheet.create({
         lineHeight: 24,
     },
     benefitsContainer: {
-        gap: spacing.lg,
+        gap: spacing.md,
         marginBottom: spacing.xl,
     },
     benefitRow: {
         flexDirection: 'row',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         gap: spacing.md,
     },
     benefitIcon: {
-        marginTop: 2,
+        width: 48,
+        height: 48,
     },
     benefitContent: {
         flex: 1,

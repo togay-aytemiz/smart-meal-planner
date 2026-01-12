@@ -1,3 +1,5 @@
+import type { MealType } from "./menu";
+
 export type MenuRecipeCourse = "main" | "side" | "soup" | "salad" | "meze" | "dessert" | "pastry";
 
 export type MenuIngredient = {
@@ -32,7 +34,7 @@ export type MenuRecipe = {
 };
 
 export type MenuRecipesResponse = {
-  menuType: "dinner";
+  menuType: MealType;
   cuisine: string;
   totalTimeMinutes: number;
   recipes: MenuRecipe[];

@@ -29,6 +29,8 @@ export function buildRecipePrompt(params: MenuRecipeGenerationParams): string {
     householdSize,
     routine,
   } = params;
+  const menuType = menu.menuType ?? "dinner";
+  const menuItems = Array.isArray(menu.items) ? menu.items : [];
 
   const context = {
     householdSize,
@@ -48,11 +50,15 @@ export function buildRecipePrompt(params: MenuRecipeGenerationParams): string {
 
   prompt += "Kurallar:\n";
   prompt += "- Menüdeki yemek adlarını değiştirme, aynen kullan.\n";
-  prompt += "- 1 ana yemek, 1 yan yemek, 1 çorba/salata/meze/tatlı/hamur işi olacak şekilde 3 tarif üret.\n";
+  prompt += "- Menüdeki her öğe için 1 tarif üret; ürettiğin tarif sayısı menu.items.length ile aynı olmalı.\n";
+  prompt += "- Her tarifin name ve course değeri menu.items içindeki öğe ile birebir aynı olmalı.\n";
+  if (menuItems.length) {
+    prompt += `- Bu menüde ${menuItems.length} öğe var; tam ${menuItems.length} tarif üret.\n`;
+  }
   prompt += "- course alanı: main, side, soup, salad, meze, dessert, pastry olarak doğru atanmalı.\n";
   prompt += "- Kategori eşlemesi: Ana Yemek -> main, Yan Yemek -> side, Çorba -> soup, Salata -> salad, Meze -> meze, Tatlı -> dessert, Hamur İşi -> pastry.\n";
   prompt += `- servings alanı ${householdSize} olmalı.\n`;
-  prompt += "- menuType alanı \"dinner\" olmalı.\n";
+  prompt += `- menuType alanı \"${menuType}\" olmalı.\n`;
   prompt += "- Tarifler Türkçe olmalı ve Türk ev mutfağına uygun olmalı.\n";
   prompt += "- cuisine alanı menüdeki cuisine değeri ile aynı olmalı.\n";
   prompt += "- brief alanı 2-3 cümlelik, davetkar ve net bir Türkçe özet olmalı (120-180 karakter).\n";

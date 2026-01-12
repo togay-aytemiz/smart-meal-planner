@@ -10,6 +10,7 @@ Mobil kullanıcı deneyimi için ideal denge:
 - **+1 Opsiyonel:** İçecek veya Tatlı
 
 Bu formül, her mutfakta aynen uygulanmaz. Aşağıdaki "Mutfağa Göre Kategori Dağılımı" tablosu ile esnetilir.
+Kahvaltı ve öğle öğünleri için özel mantık matrisi ayrıca uygulanır.
 
 ## 2. Mutfağa Göre Kategori Dağılımı
 
@@ -69,7 +70,7 @@ Sonuç örneği:
 
 ## 5. Kategori Sayısı Kuralları (Kullanıcıyı Boğmamak İçin)
 
-Bir öğün oluştururken **minimum 2, maksimum 4 kategori** seçilir.
+Akşam yemeğinde **minimum 2, maksimum 4 kategori** seçilir. Kahvaltı ve öğle için aşağıdaki matrisler önceliklidir.
 
 - **Hızlı Öğle Yemeği (Ofis/Okul):** 1 veya 2 kategori
   - Örnek: Ana Yemek veya Ana Yemek + Salata
@@ -80,7 +81,31 @@ Bir öğün oluştururken **minimum 2, maksimum 4 kategori** seçilir.
 - **Bowl/Modern Menü:** 1 kategori
   - Örnek: Tek Tabak (All-in-one)
 
-## 6. Menü Oluşturma Akışı (Özet)
+## 6. Kahvaltı Mantık Matrisi (Breakfast Logic)
+
+Kahvaltıda ana değişken, kullanıcının o günkü zaman bütçesidir.
+
+**AI Karar Kuralları**
+- Hafta içi (Pzt-Cuma): Kullanıcı "Evden Çalışıyor" veya "Ofise Gidiyor" ise hazırlama süresini max 15 dk tut.
+- Hafta sonu (Cmt-Paz): Hazırlama süresini serbest bırak ve daha fazla bileşenli "Geleneksel" menüler öner.
+
+| Senaryo (Context) | Öğün Yapısı | Örnek Kombinasyon |
+| --- | --- | --- |
+| Hafta İçi / Pratik | 1 Temel Bileşen (Hızlı & Enerjik) | Avokado Tost veya Yulaflı Smoothie |
+| Hafta Sonu / Keyif | 3-4 Bileşen (Serpme/Klasik) | Yumurta + Peynir Tabağı + Zeytin + Domates/Salatalık |
+
+## 7. Öğle Yemeği Mantık Matrisi (Lunch Logic)
+
+Öğle yemeğinde ana değişken, yemeğin nerede yeneceğidir.
+
+| Senaryo (Context) | Öğün Yapısı | Örnek Kombinasyon |
+| --- | --- | --- |
+| Ofise Uygun (Cold-Friendly) | 1 Ana (Soğuk yenebilir) + 1 Yan | Mercimek Köftesi + Mevsim Salata |
+| Evde / Taze (Quick Cook) | 1 Pratik Ana + 1 İçecek (+1) | Tavuklu Wrap + Ayran |
+
+> Not: İçecek opsiyonel +1'dir; menü öğeleri listesine dahil edilmez.
+
+## 8. Menü Oluşturma Akışı (Özet)
 
 1. **Mutfak seçimi** yapılır.
 2. **Bağlam** (ofis, aile, sporcu vb.) netleştirilir.
@@ -92,7 +117,7 @@ Bir öğün oluştururken **minimum 2, maksimum 4 kategori** seçilir.
    - Eşleşmeyen bileşenler elenir.
    - Opsiyonel +1 (içecek/tatlı) sadece uygunsa eklenir.
 
-## 7. Kombinasyon Tutarlılık Kontrolleri
+## 9. Kombinasyon Tutarlılık Kontrolleri
 
 - Farklı mutfaklardan bileşen karıştırılmaz.
 - Mutfağa göre zorunlu kategoriler eksik bırakılmaz (Bowl hariç).

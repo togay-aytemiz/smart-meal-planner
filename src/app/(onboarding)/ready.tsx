@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Animated, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Animated, ScrollView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useRef } from 'react';
@@ -118,9 +118,11 @@ export default function ReadyScreen() {
                         { transform: [{ scale: scaleAnim }] },
                     ]}
                 >
-                    <View style={styles.successCircle}>
-                        <Text style={styles.successEmoji}>🎉</Text>
-                    </View>
+                    <Image
+                        source={require('../../../assets/onboarding-ready.png')}
+                        style={styles.successImage}
+                        resizeMode="contain"
+                    />
                 </Animated.View>
 
                 {/* Message */}
@@ -231,16 +233,9 @@ const styles = StyleSheet.create({
         marginBottom: spacing.lg,
         marginTop: spacing.sm, // Reduced from md
     },
-    successCircle: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: colors.primaryLight + '20',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    successEmoji: {
-        fontSize: 64,
+    successImage: {
+        width: 140,
+        height: 140,
     },
     textContainer: {
         alignItems: 'center',

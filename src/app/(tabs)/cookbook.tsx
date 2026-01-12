@@ -12,7 +12,7 @@ import { spacing, radius, shadows } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { functions } from '../../config/firebase';
 import { fetchMenuBundle } from '../../utils/menu-storage';
-import { MenuDecision, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
+import { MenuDecision, MenuMealType, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 
 type MenuCallResponse = {
     success: boolean;
@@ -82,7 +82,7 @@ type MenuRequestPayload = {
         remoteMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
         excludeFromPlan?: boolean;
     };
-    mealType: 'dinner';
+    mealType: MenuMealType;
 };
 
 type MenuRecipeParams = MenuRequestPayload & {
@@ -189,7 +189,11 @@ const formatToday = () => {
     return { dayLabel, dateLabel };
 };
 
-const buildMenuRequest = (snapshot: OnboardingSnapshot | null, userId: string): MenuRequestPayload => {
+const buildMenuRequest = (
+    snapshot: OnboardingSnapshot | null,
+    userId: string,
+    mealType: MenuMealType
+): MenuRequestPayload => {
     const today = new Date();
     const date = today.toISOString().split('T')[0];
     const dayKey = getDayKey(today);
@@ -218,7 +222,7 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null, userId: string): 
                 excludeFromPlan: routine.excludeFromPlan,
             }
             : undefined,
-        mealType: 'dinner',
+        mealType,
     };
 };
 
@@ -247,11 +251,12 @@ type MenuCache = {
     cachedAt: string;
 };
 
-const buildMenuCacheKey = (date: string) => `${MENU_CACHE_STORAGE_KEY}:${date}`;
+const buildMenuCacheKey = (date: string, mealType: MenuMealType) => `${MENU_CACHE_STORAGE_KEY}:${date}:${mealType}`;
+const buildMenuRecipesKey = (mealType: MenuMealType) => `${MENU_RECIPES_STORAGE_KEY}:${mealType}`;
 
-const loadMenuCache = async (date: string) => {
+const loadMenuCache = async (date: string, mealType: MenuMealType) => {
     try {
-        const raw = await AsyncStorage.getItem(buildMenuCacheKey(date));
+        const raw = await AsyncStorage.getItem(buildMenuCacheKey(date, mealType));
         if (!raw) {
             return null;
         }
@@ -262,10 +267,10 @@ const loadMenuCache = async (date: string) => {
     }
 };
 
-const persistMenuCache = async (date: string, data: MenuCache) => {
+const persistMenuCache = async (date: string, mealType: MenuMealType, data: MenuCache) => {
     try {
-        await AsyncStorage.setItem(buildMenuCacheKey(date), JSON.stringify(data));
-        await AsyncStorage.setItem(MENU_RECIPES_STORAGE_KEY, JSON.stringify(data.recipes));
+        await AsyncStorage.setItem(buildMenuCacheKey(date, mealType), JSON.stringify(data));
+        await AsyncStorage.setItem(buildMenuRecipesKey(mealType), JSON.stringify(data.recipes));
     } catch (error) {
         console.warn('Menu cache write error:', error);
     }
@@ -297,14 +302,15 @@ export default function CookbookScreen() {
             const raw = await AsyncStorage.getItem(STORAGE_KEY);
             const stored = raw ? (JSON.parse(raw) as { data?: OnboardingSnapshot }) : null;
             const userId = userState.user?.uid ?? 'anonymous';
-            const request = buildMenuRequest(stored?.data ?? null, userId);
-            const cachedMenu = await loadMenuCache(request.date);
+            const mealType: MenuMealType = 'dinner';
+            const request = buildMenuRequest(stored?.data ?? null, userId, mealType);
+            const cachedMenu = await loadMenuCache(request.date, mealType);
 
             try {
                 const firestoreMenu = await fetchMenuBundle(userId, request.date, request.mealType);
                 if (firestoreMenu) {
                     setMenuRecipes(firestoreMenu.recipes);
-                    await persistMenuCache(request.date, {
+                    await persistMenuCache(request.date, mealType, {
                         menu: firestoreMenu.menu,
                         recipes: firestoreMenu.recipes,
                         cachedAt: new Date().toISOString(),
@@ -325,7 +331,7 @@ export default function CookbookScreen() {
             const menuResult = await callMenu({ request });
             const menuData = menuResult.data?.menu;
 
-            if (!menuData?.items) {
+            if (!menuData?.items?.length) {
                 throw new Error('Menü verisi alınamadı');
             }
 
@@ -345,14 +351,14 @@ export default function CookbookScreen() {
             }
 
             setMenuRecipes(recipesData);
-            await persistMenuCache(request.date, {
+            await persistMenuCache(request.date, mealType, {
                 menu: menuData,
                 recipes: recipesData,
                 cachedAt: new Date().toISOString(),
             });
         } catch (err: unknown) {
             console.error('Menu fetch error:', err);
-            const cachedMenu = await loadMenuCache(new Date().toISOString().split('T')[0]);
+            const cachedMenu = await loadMenuCache(new Date().toISOString().split('T')[0], mealType);
             if (cachedMenu) {
                 setMenuRecipes(cachedMenu.recipes);
                 return;

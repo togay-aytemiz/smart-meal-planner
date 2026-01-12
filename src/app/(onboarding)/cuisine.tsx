@@ -68,10 +68,15 @@ export default function CuisineScreen() {
                                 onPress={() => toggleCuisine(cuisine.key)}
                             >
                                 <Text style={styles.cuisineEmoji}>{cuisine.emoji}</Text>
-                                <Text style={[
-                                    styles.cuisineLabel,
-                                    selected.includes(cuisine.key) && styles.cuisineLabelSelected,
-                                ]}>
+                                <Text
+                                    style={[
+                                        styles.cuisineLabel,
+                                        selected.includes(cuisine.key) && styles.cuisineLabelSelected,
+                                    ]}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.8}
+                                >
                                     {cuisine.label}
                                 </Text>
                                 {selected.includes(cuisine.key) && (
@@ -98,10 +103,15 @@ export default function CuisineScreen() {
                                 onPress={() => toggleCuisine(cuisine.key)}
                             >
                                 <Text style={styles.cuisineEmoji}>{cuisine.emoji}</Text>
-                                <Text style={[
-                                    styles.cuisineLabel,
-                                    selected.includes(cuisine.key) && styles.cuisineLabelSelected,
-                                ]}>
+                                <Text
+                                    style={[
+                                        styles.cuisineLabel,
+                                        selected.includes(cuisine.key) && styles.cuisineLabelSelected,
+                                    ]}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.8}
+                                >
                                     {cuisine.label}
                                 </Text>
                                 {selected.includes(cuisine.key) && (

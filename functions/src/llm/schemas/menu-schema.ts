@@ -1,5 +1,5 @@
 /**
- * JSON Schema for LLM Menu Decision (Dinner only)
+ * JSON Schema for LLM Menu Decision (Breakfast/Lunch/Dinner)
  */
 
 export const MENU_JSON_SCHEMA = {
@@ -8,7 +8,7 @@ export const MENU_JSON_SCHEMA = {
   properties: {
     menuType: {
       type: "string",
-      enum: ["dinner"],
+      enum: ["breakfast", "lunch", "dinner"],
     },
     cuisine: {
       type: "string",
@@ -27,34 +27,24 @@ export const MENU_JSON_SCHEMA = {
       description: "Menünün neden seçildiğine dair kısa Türkçe açıklama.",
     },
     items: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        main: {
-          type: "string",
-          description: "Ana yemek adı (Türkçe).",
-        },
-        side: {
-          type: "string",
-          description: "Yan yemek adı (Türkçe).",
-        },
-        extra: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            type: {
-              type: "string",
-              enum: ["soup", "salad", "meze", "dessert", "pastry"],
-            },
-            name: {
-              type: "string",
-              description: "Çorba/salata/meze/tatlı/hamur işi adı (Türkçe).",
-            },
+      type: "array",
+      minItems: 1,
+      maxItems: 4,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          course: {
+            type: "string",
+            enum: ["main", "side", "soup", "salad", "meze", "dessert", "pastry"],
           },
-          required: ["type", "name"],
+          name: {
+            type: "string",
+            description: "Yemek adı (Türkçe).",
+          },
         },
+        required: ["course", "name"],
       },
-      required: ["main", "side", "extra"],
     },
   },
   required: ["menuType", "cuisine", "totalTimeMinutes", "reasoning", "items"],

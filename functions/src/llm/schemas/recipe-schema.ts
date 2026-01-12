@@ -1,6 +1,6 @@
 /**
  * JSON Schema for LLM Menu Recipe Generation
- * Generates recipes for all dinner menu items
+ * Generates recipes for all menu items (breakfast/lunch/dinner)
  */
 
 export const RECIPE_JSON_SCHEMA = {
@@ -9,7 +9,7 @@ export const RECIPE_JSON_SCHEMA = {
   properties: {
     menuType: {
       type: "string",
-      enum: ["dinner"],
+      enum: ["breakfast", "lunch", "dinner"],
     },
     cuisine: {
       type: "string",
@@ -23,8 +23,8 @@ export const RECIPE_JSON_SCHEMA = {
     },
     recipes: {
       type: "array",
-      minItems: 3,
-      maxItems: 3,
+      minItems: 1,
+      maxItems: 4,
       items: {
         type: "object",
         additionalProperties: false,

@@ -7,7 +7,7 @@ import { MenuRecipeGenerationParams } from "../types/generation-params";
 
 export interface LLMProvider {
   /**
-   * Generate recipes for a selected dinner menu
+   * Generate recipes for a selected menu (breakfast/lunch/dinner)
    * Returns structured JSON matching the menu recipes schema
    */
   generateRecipe(params: MenuRecipeGenerationParams): Promise<Record<string, unknown>>;

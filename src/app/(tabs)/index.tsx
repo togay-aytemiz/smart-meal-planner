@@ -19,7 +19,7 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows, hitSlop } from '../../theme/spacing';
 import { formatLongDateTr, getGreeting } from '../../utils/dates';
-import { fetchMenuBundle } from '../../utils/menu-storage';
+import { fetchMenuBundle, type MenuBundle } from '../../utils/menu-storage';
 import type { MenuDecision, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
@@ -50,6 +50,7 @@ type MealItem = {
 };
 
 type MealSectionKey = 'breakfast' | 'lunch' | 'dinner';
+type MenuMealType = MenuRecipesResponse['menuType'];
 
 type MealSection = {
     id: MealSectionKey;
@@ -107,7 +108,7 @@ type MenuRequestPayload = {
         remoteMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
         excludeFromPlan?: boolean;
     };
-    mealType: 'dinner';
+    mealType: MenuMealType;
 };
 
 type MenuRecipeParams = MenuRequestPayload & {
@@ -255,7 +256,11 @@ const buildWeekDays = (baseDate: Date): CalendarDay[] => {
 const getDayKey = (date: Date) =>
     date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof WeeklyRoutine;
 
-const buildMenuRequest = (snapshot: OnboardingSnapshot | null, userId: string): MenuRequestPayload => {
+const buildMenuRequest = (
+    snapshot: OnboardingSnapshot | null,
+    userId: string,
+    mealType: MenuMealType
+): MenuRequestPayload => {
     const today = new Date();
     const date = today.toISOString().split('T')[0];
     const dayKey = getDayKey(today);
@@ -284,7 +289,7 @@ const buildMenuRequest = (snapshot: OnboardingSnapshot | null, userId: string): 
                 excludeFromPlan: routine.excludeFromPlan,
             }
             : undefined,
-        mealType: 'dinner',
+        mealType,
     };
 };
 
@@ -294,11 +299,14 @@ type MenuCache = {
     cachedAt: string;
 };
 
-const buildMenuCacheKey = (date: string) => `${MENU_CACHE_STORAGE_KEY}:${date}`;
+const buildMenuCacheKey = (date: string, mealType: MenuMealType) =>
+    `${MENU_CACHE_STORAGE_KEY}:${date}:${mealType}`;
 
-const loadMenuCache = async (date: string) => {
+const buildMenuRecipesKey = (mealType: MenuMealType) => `${MENU_RECIPES_STORAGE_KEY}:${mealType}`;
+
+const loadMenuCache = async (date: string, mealType: MenuMealType) => {
     try {
-        const raw = await AsyncStorage.getItem(buildMenuCacheKey(date));
+        const raw = await AsyncStorage.getItem(buildMenuCacheKey(date, mealType));
         if (!raw) {
             return null;
         }
@@ -309,10 +317,10 @@ const loadMenuCache = async (date: string) => {
     }
 };
 
-const persistMenuCache = async (date: string, data: MenuCache) => {
+const persistMenuCache = async (date: string, mealType: MenuMealType, data: MenuCache) => {
     try {
-        await AsyncStorage.setItem(buildMenuCacheKey(date), JSON.stringify(data));
-        await AsyncStorage.setItem(MENU_RECIPES_STORAGE_KEY, JSON.stringify(data.recipes));
+        await AsyncStorage.setItem(buildMenuCacheKey(date, mealType), JSON.stringify(data));
+        await AsyncStorage.setItem(buildMenuRecipesKey(mealType), JSON.stringify(data.recipes));
     } catch (error) {
         console.warn('Menu cache write error:', error);
     }
@@ -385,7 +393,7 @@ const getContextMeta = (routine: RoutineDay | null | undefined): ContextMeta => 
     }
 };
 
-const buildDinnerItems = (recipes: MenuRecipe[], contextMeta: ContextMeta): MealItem[] => {
+const buildMealItems = (recipes: MenuRecipe[], contextMeta: ContextMeta): MealItem[] => {
     return recipes
         .filter((recipe) => COURSE_META[recipe.course])
         .sort((first, second) => COURSE_ORDER.indexOf(first.course) - COURSE_ORDER.indexOf(second.course))
@@ -454,8 +462,11 @@ export default function TodayScreen() {
         ? formatLongDateTr(selectedDay.date)
         : selectedDay.date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    const [menuRecipes, setMenuRecipes] = useState<MenuRecipesResponse | null>(null);
-    const [menuReasoning, setMenuReasoning] = useState('');
+    const [menuBundles, setMenuBundles] = useState<Record<MealSectionKey, MenuBundle | null>>({
+        breakfast: null,
+        lunch: null,
+        dinner: null,
+    });
     const [weeklyRoutine, setWeeklyRoutine] = useState<WeeklyRoutine>(DEFAULT_ROUTINES);
     const [userName, setUserName] = useState('');
     const [loading, setLoading] = useState(true);
@@ -467,51 +478,80 @@ export default function TodayScreen() {
     const mealPlan = useMemo(() => buildMealPlan(selectedRoutine), [selectedRoutine]);
     const contextMeta = useMemo(() => getContextMeta(selectedRoutine), [selectedRoutine]);
 
-    const dinnerItems = useMemo(() => {
-        if (!isSelectedToday || !menuRecipes?.recipes?.length) {
-            return [];
+    const mealItemsByType = useMemo(() => {
+        if (!isSelectedToday) {
+            return {
+                breakfast: [] as MealItem[],
+                lunch: [] as MealItem[],
+                dinner: [] as MealItem[],
+            };
         }
-        return buildDinnerItems(menuRecipes.recipes, contextMeta);
-    }, [contextMeta, isSelectedToday, menuRecipes]);
+
+        const buildItems = (mealType: MealSectionKey) => {
+            const bundle = menuBundles[mealType];
+            if (!bundle?.recipes?.recipes?.length) {
+                return [] as MealItem[];
+            }
+            return buildMealItems(bundle.recipes.recipes, contextMeta);
+        };
+
+        return {
+            breakfast: buildItems('breakfast'),
+            lunch: buildItems('lunch'),
+            dinner: buildItems('dinner'),
+        };
+    }, [contextMeta, isSelectedToday, menuBundles]);
 
     const mealSections = useMemo(() => {
         const sections: MealSection[] = [];
 
         if (mealPlan.breakfast) {
+            const items = mealItemsByType.breakfast;
             sections.push({
                 id: 'breakfast',
                 ...SECTION_META.breakfast,
-                items: [],
-                emptyMessage: buildEmptyMessage('breakfast', isSelectedToday, error),
+                items,
+                emptyMessage: items.length ? undefined : buildEmptyMessage('breakfast', isSelectedToday, error),
             });
         }
 
         if (mealPlan.lunch) {
+            const items = mealItemsByType.lunch;
             sections.push({
                 id: 'lunch',
                 ...SECTION_META.lunch,
-                items: [],
-                emptyMessage: buildEmptyMessage('lunch', isSelectedToday, error),
+                items,
+                emptyMessage: items.length ? undefined : buildEmptyMessage('lunch', isSelectedToday, error),
             });
         }
 
         if (mealPlan.dinner) {
+            const items = mealItemsByType.dinner;
             sections.push({
                 id: 'dinner',
                 ...SECTION_META.dinner,
-                items: dinnerItems,
-                emptyMessage: dinnerItems.length
+                items,
+                emptyMessage: items.length
                     ? undefined
                     : buildEmptyMessage('dinner', isSelectedToday, error),
             });
         }
 
         return sections;
-    }, [dinnerItems, error, isSelectedToday, mealPlan.breakfast, mealPlan.dinner, mealPlan.lunch]);
+    }, [error, isSelectedToday, mealItemsByType, mealPlan.breakfast, mealPlan.dinner, mealPlan.lunch]);
 
     const mealCount = mealSections.length;
 
-    const reasoningText = menuReasoning.trim();
+    const reasoningText = useMemo(() => {
+        const order: MealSectionKey[] = ['dinner', 'lunch', 'breakfast'];
+        for (const mealType of order) {
+            const text = menuBundles[mealType]?.menu.reasoning?.trim();
+            if (text) {
+                return text;
+            }
+        }
+        return '';
+    }, [menuBundles]);
     const showReasoning = isSelectedToday && !error && reasoningText.length > 0;
 
     useEffect(() => {
@@ -525,11 +565,12 @@ export default function TodayScreen() {
             setLoading(true);
             setError(null);
             if (isMounted) {
-                setMenuRecipes(null);
-                setMenuReasoning('');
+                setMenuBundles({
+                    breakfast: null,
+                    lunch: null,
+                    dinner: null,
+                });
             }
-
-            let cachedMenu: MenuCache | null = null;
 
             try {
                 const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -542,81 +583,113 @@ export default function TodayScreen() {
                 }
 
                 const userId = userState.user?.uid ?? 'anonymous';
-                const request = buildMenuRequest(snapshot, userId);
-                cachedMenu = await loadMenuCache(request.date);
+                const baseRequest = buildMenuRequest(snapshot, userId, 'dinner');
+                const routines = snapshot?.routines ?? DEFAULT_ROUTINES;
+                const routineForDay = routines[baseRequest.dayOfWeek as keyof WeeklyRoutine];
+                const planForDay = buildMealPlan(routineForDay);
+                const mealTypes = (['breakfast', 'lunch', 'dinner'] as MealSectionKey[]).filter(
+                    (mealType) => planForDay[mealType]
+                );
 
-                try {
-                    const firestoreMenu = await fetchMenuBundle(userId, request.date, request.mealType);
-                    if (firestoreMenu) {
-                        if (isMounted) {
-                            setMenuReasoning(firestoreMenu.menu.reasoning ?? '');
-                            setMenuRecipes(firestoreMenu.recipes);
-                        }
-
-                        await persistMenuCache(request.date, {
-                            menu: firestoreMenu.menu,
-                            recipes: firestoreMenu.recipes,
-                            cachedAt: new Date().toISOString(),
-                        });
+                const updateBundle = (mealType: MealSectionKey, bundle: MenuBundle) => {
+                    if (!isMounted) {
                         return;
                     }
-                } catch (firestoreError) {
-                    console.warn('Menu Firestore read error:', firestoreError);
-                    if (cachedMenu && isMounted) {
-                        setMenuReasoning(cachedMenu.menu.reasoning ?? '');
-                        setMenuRecipes(cachedMenu.recipes);
-                        return;
-                    }
-                }
+                    setMenuBundles((prev) => ({
+                        ...prev,
+                        [mealType]: bundle,
+                    }));
+                };
 
                 const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>(
                     'generateOpenAIMenu'
                 );
-                const menuResult = await callMenu({ request });
-                const menuData = menuResult.data?.menu;
-
-                if (!menuData?.items) {
-                    throw new Error('Menü verisi alınamadı');
-                }
-
-                if (isMounted) {
-                    setMenuReasoning(menuData.reasoning ?? '');
-                }
-
-                const recipeParams: MenuRecipeParams = {
-                    ...request,
-                    menu: menuData,
-                };
-
                 const callRecipes = functions.httpsCallable<
                     { params: MenuRecipeParams },
                     MenuRecipesCallResponse
                 >('generateOpenAIRecipe');
-                const recipesResult = await callRecipes({ params: recipeParams });
-                const recipesData = recipesResult.data?.menuRecipes;
 
-                if (!recipesData?.recipes?.length) {
-                    throw new Error('Tarif verisi alınamadı');
+                let lastError: string | null = null;
+
+                for (const mealType of mealTypes) {
+                    const request: MenuRequestPayload = {
+                        ...baseRequest,
+                        mealType,
+                    };
+                    const cachedMenu = await loadMenuCache(request.date, mealType);
+
+                    try {
+                        const firestoreMenu = await fetchMenuBundle(userId, request.date, request.mealType);
+                        if (firestoreMenu) {
+                            updateBundle(mealType, firestoreMenu);
+                            await persistMenuCache(request.date, mealType, {
+                                menu: firestoreMenu.menu,
+                                recipes: firestoreMenu.recipes,
+                                cachedAt: new Date().toISOString(),
+                            });
+                            continue;
+                        }
+                    } catch (firestoreError) {
+                        console.warn('Menu Firestore read error:', firestoreError);
+                        if (cachedMenu) {
+                            updateBundle(mealType, {
+                                menu: cachedMenu.menu,
+                                recipes: cachedMenu.recipes,
+                            });
+                            continue;
+                        }
+                    }
+
+                    if (cachedMenu) {
+                        updateBundle(mealType, {
+                            menu: cachedMenu.menu,
+                            recipes: cachedMenu.recipes,
+                        });
+                        continue;
+                    }
+
+                    try {
+                        const menuResult = await callMenu({ request });
+                        const menuData = menuResult.data?.menu;
+
+                        if (!menuData?.items?.length) {
+                            throw new Error('Menü verisi alınamadı');
+                        }
+
+                        const recipeParams: MenuRecipeParams = {
+                            ...request,
+                            menu: menuData,
+                        };
+
+                        const recipesResult = await callRecipes({ params: recipeParams });
+                        const recipesData = recipesResult.data?.menuRecipes;
+
+                        if (!recipesData?.recipes?.length) {
+                            throw new Error('Tarif verisi alınamadı');
+                        }
+
+                        const bundle = {
+                            menu: menuData,
+                            recipes: recipesData,
+                        };
+
+                        await persistMenuCache(request.date, mealType, {
+                            menu: menuData,
+                            recipes: recipesData,
+                            cachedAt: new Date().toISOString(),
+                        });
+
+                        updateBundle(mealType, bundle);
+                    } catch (err: unknown) {
+                        lastError = getFunctionsErrorMessage(err);
+                    }
                 }
 
-                await persistMenuCache(request.date, {
-                    menu: menuData,
-                    recipes: recipesData,
-                    cachedAt: new Date().toISOString(),
-                });
-
-                if (isMounted) {
-                    setMenuRecipes(recipesData);
+                if (lastError && isMounted) {
+                    setError(lastError);
                 }
             } catch (err: unknown) {
                 console.error('Menu fetch error:', err);
-                const fallbackMenu =
-                    cachedMenu ?? (await loadMenuCache(new Date().toISOString().split('T')[0]));
-                if (fallbackMenu && isMounted) {
-                    setMenuReasoning(fallbackMenu.menu.reasoning ?? '');
-                    setMenuRecipes(fallbackMenu.recipes);
-                    return;
-                }
                 if (isMounted) {
                     setError(getFunctionsErrorMessage(err));
                 }
@@ -636,8 +709,8 @@ export default function TodayScreen() {
 
     const displayName = userName.trim() ? `${greeting} ${userName}` : greeting;
 
-    const handleOpenMeal = (course: MenuRecipeCourse) => {
-        router.push({ pathname: '/cookbook/[course]', params: { course } });
+    const handleOpenMeal = (mealType: MealSectionKey, course: MenuRecipeCourse) => {
+        router.push({ pathname: '/cookbook/[course]', params: { course, mealType } });
     };
 
     if (loading) {
@@ -744,7 +817,7 @@ export default function TodayScreen() {
                                         key={item.id}
                                         activeOpacity={0.85}
                                         style={styles.mealCard}
-                                        onPress={() => handleOpenMeal(item.course)}
+                                        onPress={() => handleOpenMeal(section.id, item.course)}
                                     >
                                         <View style={[styles.mealMedia, { backgroundColor: item.mediaTone }]}>
                                             <MaterialCommunityIcons

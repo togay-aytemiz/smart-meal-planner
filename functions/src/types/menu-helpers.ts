@@ -4,11 +4,11 @@
  */
 
 import { OnboardingData } from "./onboarding";
-import { MenuGenerationRequest } from "./menu";
+import { MenuGenerationRequest, MealType } from "./menu";
 
 /**
  * Convert onboarding data to menu generation request
- * MVP: Generate single dinner meal
+ * Default: Generate dinner meal unless mealType is provided
  * 
  * Note: For MVP testing, if no date is provided or date is not specified,
  * the function will use Monday routine from onboarding (default for testing)
@@ -22,6 +22,7 @@ export function onboardingToMenuRequest(
     maxPrepTime?: number;
     maxCookTime?: number;
     generateImage?: boolean;
+    mealType?: MealType;
     previousPreferences?: {
       likedRecipes?: string[];
       dislikedRecipes?: string[];
@@ -99,8 +100,8 @@ export function onboardingToMenuRequest(
     // User feedback (Future - Post-MVP)
     previousPreferences: options?.previousPreferences,
 
-    // MVP: Generate dinner only
-    mealType: "dinner",
+    // Default: dinner unless overridden
+    mealType: options?.mealType ?? "dinner",
 
     // Image generation
     generateImage: options?.generateImage ?? true,

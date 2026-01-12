@@ -1,26 +1,24 @@
 /**
  * Daily Menu Types
- * MVP: Single dinner meal per day
+ * Default: Single meal per day (dinner)
  * Future: Full daily menu (breakfast, lunch, dinner, snacks)
  */
 
 import { Recipe } from "./recipe";
 
+export type MealType = "breakfast" | "lunch" | "dinner";
+
 export type ExtraDishType = "soup" | "salad" | "meze" | "dessert" | "pastry";
 
 export interface MenuDecision {
-  menuType: "dinner";
+  menuType: MealType;
   cuisine: string;
   totalTimeMinutes: number;
   reasoning: string;
-  items: {
-    main: string;
-    side: string;
-    extra: {
-      type: ExtraDishType;
-      name: string;
-    };
-  };
+  items: Array<{
+    course: "main" | "side" | ExtraDishType;
+    name: string;
+  }>;
 }
 
 export interface DailyMenu {
@@ -32,7 +30,7 @@ export interface DailyMenu {
   dayOfWeek: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
   routineType: "office" | "remote" | "gym" | "school" | "off";
   
-  // MVP: Single dinner meal
+  // Default: Single meal (dinner)
   dinner?: MenuMeal;
   
   // Future: Full daily menu
@@ -139,8 +137,8 @@ export interface MenuGenerationRequest {
     preferredCuisines?: string[]; // Learned preferences
   };
   
-  // MVP: Generate dinner only
-  mealType: "dinner"; // Future: "breakfast" | "lunch" | "dinner" | "full"
+  // Default: Generate single meal (breakfast/lunch/dinner)
+  mealType: MealType; // Future: "full"
   
   // Image generation
   generateImage?: boolean;

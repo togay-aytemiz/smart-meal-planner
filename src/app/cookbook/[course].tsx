@@ -9,7 +9,7 @@ import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import MealDetail from '../../components/cookbook/meal-detail';
 import { fetchMenuBundle } from '../../utils/menu-storage';
-import { MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
+import { MenuMealType, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 
 const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
 
@@ -22,9 +22,18 @@ const normalizeCourse = (value: string | string[] | undefined): MenuRecipeCourse
     return allowed.includes(value as MenuRecipeCourse) ? (value as MenuRecipeCourse) : null;
 };
 
+const resolveMealType = (value: string | string[] | undefined): MenuMealType => {
+    if (value === 'breakfast' || value === 'lunch' || value === 'dinner') {
+        return value;
+    }
+    return 'dinner';
+};
+
+const buildMenuRecipesKey = (mealType: MenuMealType) => `${MENU_RECIPES_STORAGE_KEY}:${mealType}`;
+
 export default function CookbookDetailScreen() {
     const router = useRouter();
-    const { course } = useLocalSearchParams<{ course?: string }>();
+    const { course, mealType } = useLocalSearchParams<{ course?: string; mealType?: string }>();
     const { state: userState } = useUser();
     const [recipe, setRecipe] = useState<MenuRecipe | null>(null);
     const [loading, setLoading] = useState(true);
@@ -49,14 +58,15 @@ export default function CookbookDetailScreen() {
 
                 const userId = userState.user?.uid ?? 'anonymous';
                 const today = new Date().toISOString().split('T')[0];
+                const resolvedMealType = resolveMealType(mealType);
 
                 try {
-                    const firestoreMenu = await fetchMenuBundle(userId, today, 'dinner');
+                    const firestoreMenu = await fetchMenuBundle(userId, today, resolvedMealType);
                     const match = firestoreMenu?.recipes.recipes.find((item) => item.course === courseKey);
                     if (match && isMounted) {
                         setRecipe(match);
                         await AsyncStorage.setItem(
-                            MENU_RECIPES_STORAGE_KEY,
+                            buildMenuRecipesKey(resolvedMealType),
                             JSON.stringify(firestoreMenu.recipes)
                         );
                         return;
@@ -65,7 +75,9 @@ export default function CookbookDetailScreen() {
                     console.warn('Cookbook Firestore read error:', firestoreError);
                 }
 
-                const raw = await AsyncStorage.getItem(MENU_RECIPES_STORAGE_KEY);
+                const raw =
+                    (await AsyncStorage.getItem(buildMenuRecipesKey(resolvedMealType))) ??
+                    (await AsyncStorage.getItem(MENU_RECIPES_STORAGE_KEY));
                 if (!raw) {
                     throw new Error('Tarif bulunamadı');
                 }

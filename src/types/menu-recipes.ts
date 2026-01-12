@@ -1,3 +1,4 @@
+export type MenuMealType = 'breakfast' | 'lunch' | 'dinner';
 export type MenuRecipeCourse = 'main' | 'side' | 'soup' | 'salad' | 'meze' | 'dessert' | 'pastry';
 
 export type MenuIngredient = {
@@ -32,22 +33,18 @@ export type MenuRecipe = {
 };
 
 export type MenuDecision = {
-    menuType: 'dinner';
+    menuType: MenuMealType;
     cuisine: string;
     totalTimeMinutes: number;
     reasoning: string;
-    items: {
-        main: string;
-        side: string;
-        extra: {
-            type: 'soup' | 'salad' | 'meze' | 'dessert' | 'pastry';
-            name: string;
-        };
-    };
+    items: Array<{
+        course: MenuRecipeCourse;
+        name: string;
+    }>;
 };
 
 export type MenuRecipesResponse = {
-    menuType: 'dinner';
+    menuType: MenuMealType;
     cuisine: string;
     totalTimeMinutes: number;
     recipes: MenuRecipe[];

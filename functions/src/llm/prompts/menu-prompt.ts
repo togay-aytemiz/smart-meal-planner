@@ -34,16 +34,25 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     maxPrepTime,
     maxCookTime,
     previousPreferences,
+    mealType,
   } = request;
 
   const calculatedDayOfWeek =
     dayOfWeek ||
     new Date(date).toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+  const resolvedMealType = mealType ?? "dinner";
+  const mealLabel =
+    resolvedMealType === "breakfast"
+      ? "kahvaltı"
+      : resolvedMealType === "lunch"
+        ? "öğle"
+        : "akşam";
 
   const context = {
     date,
     dayOfWeek: calculatedDayOfWeek,
     householdSize,
+    mealType: resolvedMealType,
     dietaryRestrictions,
     allergies,
     cuisinePreferences,
@@ -60,14 +69,40 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
 
   let prompt = `Kullanıcı bağlamı (JSON):\n${JSON.stringify(context, null, 2)}\n\n`;
 
-  prompt += "Görev: Sadece akşam yemeği menüsünü belirle. Tarif üretme.\n\n";
+  prompt += `Görev: Sadece ${mealLabel} menüsünü belirle. Tarif üretme.\n\n`;
 
   prompt += "Kurallar:\n";
   prompt += "- Onboarding ve gün bazlı bağlam verilerini kullan; soru sorma.\n";
+  prompt += "- items alanı { course, name } içeren 1-4 öğelik bir dizi olmalı.\n";
   prompt += "- Menü Mantık Matrisi'ni uygula: mutfağa göre doğru öğün yapısı kur ve kültür dışı kombinasyonlardan kaçın.\n";
-  prompt += "- 3 + 1 kuralı: Ana yemek + yan yemek + (salata/meze veya çorba). Bu şema 3 öğe beklediği için yalnızca bu 3 bileşeni üret; içecek gibi opsiyonel +1'i ekleme.\n";
-  prompt += "- Menü 1 ana yemek + 1 yan yemek + 1 extra içerir.\n";
-  prompt += "- Extra öğe türü yalnızca soup, salad, meze, dessert veya pastry olabilir.\n";
+  if (resolvedMealType === "dinner") {
+    prompt +=
+      "- 3 + 1 kuralı: Ana yemek + yan yemek + (salata/meze veya çorba). Bu şema 3 öğe beklediği için yalnızca bu 3 bileşeni üret; içecek gibi opsiyonel +1'i ekleme.\n";
+    prompt += "- Menü 1 ana yemek + 1 yan yemek + 1 extra içerir.\n";
+    prompt += "- Extra öğe türü yalnızca soup, salad, meze, dessert veya pastry olabilir.\n";
+  }
+
+  if (resolvedMealType === "breakfast") {
+    prompt += "- Kahvaltıda öğe sayısı 1-4 arasında olmalı.\n";
+    prompt +=
+      "- Hafta içi (monday-friday) ve routine.type office/remote ise toplam süreyi 15 dakikayı geçirme, 1 temel bileşen öner.\n";
+    prompt +=
+      "- Hafta sonu (saturday-sunday) ise daha geleneksel/serpme bir yapı kur; 3-4 bileşen önerilebilir.\n";
+  }
+
+  if (resolvedMealType === "lunch") {
+    prompt += "- Öğle yemeğinde öğe sayısı 1-2 arasında olmalı.\n";
+    prompt +=
+      "- Ofis/okul bağlamında (routine.type office/school veya officeMealToGo === yes) soğuk yenebilir, taşınabilir 1 ana + 1 yan öner.\n";
+    prompt +=
+      "- Evde/taze bağlamında (routine.type remote/off/gym) pratik 1 ana + hafif bir eşlikçi (salata/meze) öner.\n";
+    prompt += "- İçecek opsiyonel +1'dir; items listesine ekleme.\n";
+  }
+
+  if (resolvedMealType !== "dinner" && resolvedMealType !== "breakfast" && resolvedMealType !== "lunch") {
+    prompt += "- Bu öğünde 1-2 öğe üret; en az bir öğe mutlaka ana yemek olmalı.\n";
+    prompt += "- İkinci öğe gerekiyorsa side veya soup/salad/meze/pastry olabilir.\n";
+  }
   prompt += "- Kategori eşlemesi: Çorba -> soup, Salata -> salad, Meze -> meze, Tatlı -> dessert, Hamur İşi -> pastry.\n";
   prompt += "- Mutfak seçimi: Kullanıcının mutfak tercihleri varsa onlardan birini seç; yoksa Türk mutfağı seç.\n";
   prompt += "- Mutfak-kategori uyumu:\n";
@@ -83,7 +118,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   prompt += "- Diyet kısıtları, alerjiler ve avoidIngredients listesi ihlal edilmemeli.\n";
   prompt += "- existingPantry verilmişse içindeki malzemeleri önceliklendir.\n";
   prompt += "- previousPreferences varsa beğenilenleri önceliklendir, beğenilmeyenlerden kaçın.\n";
-  prompt += "- menuType alanı \"dinner\" olmalı.\n";
+  prompt += `- menuType alanı \"${resolvedMealType}\" olmalı.\n`;
   prompt += "- cuisine alanı seçilen mutfak türü olmalı (Türkçe).\n";
   prompt += "- Menü öğeleri birbiriyle uyumlu olmalı.\n";
   prompt += "- reasoning alanı 1-2 cümlelik, doğal Türkçe bir açıklama olmalı.\n";

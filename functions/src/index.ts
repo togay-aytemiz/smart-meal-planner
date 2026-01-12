@@ -129,17 +129,25 @@ const buildRecipeDocument = ({
 });
 
 const findRecipeLink = (links: RecipeLink[], course: MenuRecipeCourse, name?: string) => {
-  const byCourse = links.find((link) => link.course === course);
+  const normalizedName = name ? normalizeText(name) : null;
+  if (normalizedName) {
+    const exact = links.find(
+      (link) => link.course === course && normalizeText(link.name) === normalizedName
+    );
+    if (exact) {
+      return exact;
+    }
+  }
 
+  const byCourse = links.find((link) => link.course === course);
   if (byCourse) {
     return byCourse;
   }
 
-  if (!name) {
+  if (!normalizedName) {
     return null;
   }
 
-  const normalizedName = normalizeText(name);
   return links.find((link) => normalizeText(link.name) === normalizedName) ?? null;
 };
 
@@ -156,14 +164,17 @@ const buildMenuDocument = ({
   provider: string;
   userId: string;
 }): DocumentData => {
-  const main = findRecipeLink(recipeLinks, "main", menu.items.main);
-  const side = findRecipeLink(recipeLinks, "side", menu.items.side);
-  const extraCourse = menu.items.extra.type as MenuRecipeCourse;
-  const extra = findRecipeLink(recipeLinks, extraCourse, menu.items.extra.name);
-
-  if (!main || !side || !extra) {
-    throw new Error("Menu recipe mapping is incomplete");
-  }
+  const menuItems = menu.items.map((item) => {
+    const link = findRecipeLink(recipeLinks, item.course as MenuRecipeCourse, item.name);
+    if (!link) {
+      throw new Error("Menu recipe mapping is incomplete");
+    }
+    return {
+      course: item.course,
+      name: item.name,
+      recipeId: link.id,
+    };
+  });
 
   return {
     userId,
@@ -173,22 +184,8 @@ const buildMenuDocument = ({
     cuisine: menu.cuisine,
     totalTimeMinutes: menu.totalTimeMinutes,
     reasoning: menu.reasoning,
-    items: {
-      main: {
-        name: menu.items.main,
-        recipeId: main.id,
-      },
-      side: {
-        name: menu.items.side,
-        recipeId: side.id,
-      },
-      extra: {
-        type: menu.items.extra.type,
-        name: menu.items.extra.name,
-        recipeId: extra.id,
-      },
-    },
-    recipeIds: [main.id, side.id, extra.id],
+    items: menuItems,
+    recipeIds: menuItems.map((item) => item.recipeId),
     source: {
       provider,
     },

@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { ScreenHeader } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
@@ -30,9 +31,7 @@ export default function ProfileScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Profil</Text>
-            </View>
+            <ScreenHeader title="Profil" />
 
             <View style={styles.content}>
                 <View style={styles.avatarContainer}>
@@ -58,15 +57,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
-    },
-    header: {
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.md,
-        paddingBottom: spacing.lg,
-    },
-    title: {
-        ...typography.h2,
-        color: colors.textPrimary,
     },
     content: {
         flex: 1,

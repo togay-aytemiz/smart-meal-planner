@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenHeader } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
@@ -7,9 +8,7 @@ import { spacing } from '../../theme/spacing';
 export default function DiscoverScreen() {
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Keşfet</Text>
-            </View>
+            <ScreenHeader title="Keşfet" />
 
             <View style={styles.content}>
                 <View style={styles.placeholder}>
@@ -28,15 +27,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
-    },
-    header: {
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.md,
-        paddingBottom: spacing.lg,
-    },
-    title: {
-        ...typography.h2,
-        color: colors.textPrimary,
     },
     content: {
         flex: 1,

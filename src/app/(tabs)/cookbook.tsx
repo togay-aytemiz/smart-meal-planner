@@ -5,6 +5,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { ScreenHeader } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { spacing, radius, shadows } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -310,10 +311,7 @@ export default function CookbookScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Tarifler</Text>
-                <Text style={styles.subtitle}>Bugün için seçilen akşam menüsü</Text>
-            </View>
+            <ScreenHeader title="Tarifler" subtitle="Bugün için seçilen akşam menüsü" />
 
             <ScrollView contentContainerStyle={styles.contentContainer}>
                 {loading && (
@@ -405,19 +403,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
-    },
-    header: {
-        paddingHorizontal: spacing.lg,
-        paddingBottom: spacing.md,
-        gap: spacing.xs,
-    },
-    title: {
-        ...typography.h2,
-        color: colors.textPrimary,
-    },
-    subtitle: {
-        ...typography.bodySmall,
-        color: colors.textSecondary,
     },
     contentContainer: {
         paddingHorizontal: spacing.lg,

@@ -1,4 +1,4 @@
-export type MenuRecipeCourse = 'main' | 'side' | 'soup' | 'salad' | 'meze';
+export type MenuRecipeCourse = 'main' | 'side' | 'soup' | 'salad' | 'meze' | 'dessert' | 'pastry';
 
 export type MenuIngredient = {
     name: string;
@@ -39,7 +39,7 @@ export type MenuDecision = {
         main: string;
         side: string;
         extra: {
-            type: 'soup' | 'salad' | 'meze';
+            type: 'soup' | 'salad' | 'meze' | 'dessert' | 'pastry';
             name: string;
         };
     };

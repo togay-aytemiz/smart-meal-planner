@@ -39,11 +39,11 @@ export const MENU_JSON_SCHEMA = {
           properties: {
             type: {
               type: "string",
-              enum: ["soup", "salad", "meze"],
+              enum: ["soup", "salad", "meze", "dessert", "pastry"],
             },
             name: {
               type: "string",
-              description: "Çorba/salata/meze adı (Türkçe).",
+              description: "Çorba/salata/meze/tatlı/hamur işi adı (Türkçe).",
             },
           },
           required: ["type", "name"],
@@ -60,7 +60,7 @@ export function getOpenAIMenuSchema() {
     type: "json_schema",
     json_schema: {
       name: "menu_schema",
-      description: "Dinner menu decision (main, side, soup/salad/meze)",
+      description: "Dinner menu decision (main, side, soup/salad/meze/dessert/pastry)",
       schema: MENU_JSON_SCHEMA,
       strict: true,
     },

@@ -106,48 +106,69 @@ const DEFAULT_ROUTINES: WeeklyRoutine = {
     sunday: { type: 'remote', gymTime: 'none' },
 };
 
-const COURSE_ORDER: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze'];
+const COURSE_ORDER: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze', 'dessert', 'pastry'];
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const COURSE_META: Record<
     MenuRecipeCourse,
-    { label: string; icon: IconName; background: string; accent: string; glow: string }
+    { label: string; icon: IconName; background: string; accent: string; glow: string; textColor: string }
 > = {
     main: {
-        label: 'Ana yemek',
+        label: 'Ana Yemek',
         icon: 'silverware-fork-knife',
         background: colors.primaryLight,
         accent: colors.primaryDark,
         glow: colors.accentSoft,
+        textColor: colors.textOnPrimary,
     },
     side: {
-        label: 'Yan yemek',
+        label: 'Yan Yemek',
         icon: 'food-variant',
-        background: colors.accentSoft,
-        accent: colors.accent,
+        background: colors.warningLight,
+        accent: colors.warning,
         glow: colors.accentLight,
+        textColor: colors.textOnPrimary,
     },
     soup: {
         label: 'Çorba',
         icon: 'pot-steam-outline',
-        background: colors.successLight,
-        accent: colors.success,
-        glow: colors.surface,
+        background: colors.accentSoft,
+        accent: colors.accent,
+        glow: colors.accentLight,
+        textColor: colors.textOnPrimary,
     },
     salad: {
         label: 'Salata',
         icon: 'leaf',
-        background: colors.warningLight,
-        accent: colors.warning,
-        glow: colors.accentLight,
+        background: colors.successLight,
+        accent: colors.success,
+        glow: colors.surface,
+        textColor: colors.textOnPrimary,
     },
     meze: {
         label: 'Meze',
-        icon: 'food-variant',
+        icon: 'food',
         background: colors.surfaceMuted,
-        accent: colors.primary,
+        accent: colors.tabIconInactive,
         glow: colors.accentSoft,
+        textColor: colors.textPrimary,
+    },
+    dessert: {
+        label: 'Tatlı',
+        icon: 'cupcake',
+        background: colors.errorLight,
+        accent: colors.error,
+        glow: colors.surface,
+        textColor: colors.textOnPrimary,
+    },
+    pastry: {
+        label: 'Hamur İşi',
+        icon: 'bread-slice-outline',
+        background: colors.surfaceAlt,
+        accent: colors.iconMuted,
+        glow: colors.surfaceMuted,
+        textColor: colors.textOnPrimary,
     },
 };
 
@@ -349,14 +370,15 @@ export default function CookbookScreen() {
                                                         {recipe.totalTimeMinutes} dk
                                                     </Text>
                                                 </View>
-                                                <View style={[styles.courseBadge, { backgroundColor: meta.accent }]}
-                                                >
+                                                <View style={[styles.courseBadge, { backgroundColor: meta.accent }]}>
                                                     <MaterialCommunityIcons
                                                         name={meta.icon}
                                                         size={14}
-                                                        color={colors.textOnPrimary}
+                                                        color={meta.textColor}
                                                     />
-                                                    <Text style={styles.courseBadgeText}>{meta.label}</Text>
+                                                    <Text style={[styles.courseBadgeText, { color: meta.textColor }]}>
+                                                        {meta.label}
+                                                    </Text>
                                                 </View>
                                             </View>
                                             <View style={[styles.mediaGlow, { backgroundColor: meta.glow }]} />
@@ -485,7 +507,6 @@ const styles = StyleSheet.create({
     },
     courseBadgeText: {
         ...typography.caption,
-        color: colors.textOnPrimary,
     },
     mediaGlow: {
         position: 'absolute',

@@ -31,7 +31,7 @@ export const RECIPE_JSON_SCHEMA = {
         properties: {
           course: {
             type: "string",
-            enum: ["main", "side", "soup", "salad", "meze"],
+            enum: ["main", "side", "soup", "salad", "meze", "dessert", "pastry"],
           },
           name: {
             type: "string",

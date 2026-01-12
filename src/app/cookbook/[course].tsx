@@ -16,7 +16,7 @@ const normalizeCourse = (value: string | string[] | undefined): MenuRecipeCourse
         return null;
     }
 
-    const allowed: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze'];
+    const allowed: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze', 'dessert', 'pastry'];
     return allowed.includes(value as MenuRecipeCourse) ? (value as MenuRecipeCourse) : null;
 };
 

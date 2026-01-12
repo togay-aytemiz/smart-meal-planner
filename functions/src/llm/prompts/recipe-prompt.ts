@@ -48,8 +48,9 @@ export function buildRecipePrompt(params: MenuRecipeGenerationParams): string {
 
   prompt += "Kurallar:\n";
   prompt += "- Menüdeki yemek adlarını değiştirme, aynen kullan.\n";
-  prompt += "- 1 ana yemek, 1 yan yemek, 1 çorba/salata/meze olacak şekilde 3 tarif üret.\n";
-  prompt += "- course alanı: main, side, soup/salad/meze olarak doğru atanmalı.\n";
+  prompt += "- 1 ana yemek, 1 yan yemek, 1 çorba/salata/meze/tatlı/hamur işi olacak şekilde 3 tarif üret.\n";
+  prompt += "- course alanı: main, side, soup, salad, meze, dessert, pastry olarak doğru atanmalı.\n";
+  prompt += "- Kategori eşlemesi: Ana Yemek -> main, Yan Yemek -> side, Çorba -> soup, Salata -> salad, Meze -> meze, Tatlı -> dessert, Hamur İşi -> pastry.\n";
   prompt += `- servings alanı ${householdSize} olmalı.\n`;
   prompt += "- menuType alanı \"dinner\" olmalı.\n";
   prompt += "- Tarifler Türkçe olmalı ve Türk ev mutfağına uygun olmalı.\n";

@@ -6,7 +6,7 @@
 
 import { Recipe } from "./recipe";
 
-export type ExtraDishType = "soup" | "salad" | "meze";
+export type ExtraDishType = "soup" | "salad" | "meze" | "dessert" | "pastry";
 
 export interface MenuDecision {
   menuType: "dinner";

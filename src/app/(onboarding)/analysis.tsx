@@ -24,6 +24,18 @@ type MealPlan = {
     dinner: boolean;
 };
 
+type MealItem = {
+    id: string;
+    title: string;
+    timeMinutes: number;
+    calories: number;
+    category: string;
+    categoryIcon: IconName;
+    icon: IconName;
+    mediaTone: string;
+    course: MenuRecipeCourse;
+};
+
 type OnboardingSnapshot = {
     profile?: {
         name?: string;
@@ -102,20 +114,16 @@ type SampleDay = {
     mealPlan: MealPlan;
 };
 
-type MealRowData = {
-    key: MenuMealType;
-    time: string;
+type MealSectionData = {
+    id: MenuMealType;
     title: string;
-    desc: string;
     icon: IconName;
-    isPlaceholder: boolean;
+    tint: string;
+    iconColor: string;
+    items: MealItem[];
+    emptyMessage: string;
 };
 
-type FooterMeta = {
-    icon: IconName;
-    color: string;
-    text: string;
-};
 
 const DEFAULT_ROUTINES: WeeklyRoutine = {
     monday: { type: 'office', gymTime: 'none' },
@@ -147,24 +155,56 @@ const WEEKDAY_INDEX: Record<WeekdayKey, number> = {
     sunday: 6,
 };
 
-const MEAL_META: Record<MenuMealType, { label: string; icon: IconName }> = {
-    breakfast: { label: 'Sabah', icon: 'weather-sunset' },
-    lunch: { label: 'Öğle', icon: 'weather-sunny' },
-    dinner: { label: 'Akşam', icon: 'weather-night' },
+const MEAL_META: Record<MenuMealType, { label: string; icon: IconName; tint: string; iconColor: string }> = {
+    breakfast: { label: 'Kahvaltı', icon: 'coffee-outline', tint: colors.accentSoft, iconColor: colors.primaryDark },
+    lunch: { label: 'Öğle', icon: 'weather-sunny', tint: colors.warningLight, iconColor: colors.warning },
+    dinner: { label: 'Akşam', icon: 'silverware-fork-knife', tint: colors.surfaceMuted, iconColor: colors.textPrimary },
 };
 
-const COURSE_PRIORITY: Record<MenuRecipeCourse, number> = {
-    main: 0,
-    pastry: 1,
-    soup: 2,
-    side: 3,
-    salad: 4,
-    meze: 5,
-    dessert: 6,
+const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; mediaTone: string }> = {
+    main: {
+        label: 'Ana Yemek',
+        icon: 'silverware-fork-knife',
+        mediaTone: colors.surfaceAlt,
+    },
+    side: {
+        label: 'Yan Yemek',
+        icon: 'pot-steam-outline',
+        mediaTone: colors.borderLight,
+    },
+    soup: {
+        label: 'Çorba',
+        icon: 'pot-steam-outline',
+        mediaTone: colors.accentSoft,
+    },
+    salad: {
+        label: 'Salata',
+        icon: 'leaf',
+        mediaTone: colors.successLight,
+    },
+    meze: {
+        label: 'Meze',
+        icon: 'food',
+        mediaTone: colors.surfaceMuted,
+    },
+    dessert: {
+        label: 'Tatlı',
+        icon: 'cupcake',
+        mediaTone: colors.errorLight,
+    },
+    pastry: {
+        label: 'Hamur İşi',
+        icon: 'bread-slice-outline',
+        mediaTone: colors.surfaceAlt,
+    },
 };
+
+const COURSE_ORDER: MenuRecipeCourse[] = ['soup', 'main', 'side', 'pastry', 'salad', 'meze', 'dessert'];
 
 const MEAL_ORDER: MenuMealType[] = ['breakfast', 'lunch', 'dinner'];
 const DEFAULT_SAMPLE_DAY: WeekdayKey = 'tuesday';
+const WEEKDAY_PRIORITY: WeekdayKey[] = ['tuesday', 'monday', 'wednesday', 'thursday', 'friday'];
+const WEEKEND_PRIORITY: WeekdayKey[] = ['saturday', 'sunday'];
 
 const buildDateKey = (date: Date) => {
     const year = date.getFullYear();
@@ -182,6 +222,9 @@ const getNextWeekdayDate = (weekday: WeekdayKey) => {
     nextDate.setDate(today.getDate() + diff);
     return nextDate;
 };
+
+const getMealCount = (plan: MealPlan) =>
+    Number(plan.breakfast) + Number(plan.lunch) + Number(plan.dinner);
 
 const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
     if (!routine) {
@@ -227,16 +270,44 @@ const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
 };
 
 const pickSampleDayKey = (routines: WeeklyRoutine): WeekdayKey => {
-    const preferredPlan = buildMealPlan(routines[DEFAULT_SAMPLE_DAY]);
-    if (preferredPlan.breakfast || preferredPlan.lunch || preferredPlan.dinner) {
-        return DEFAULT_SAMPLE_DAY;
+    const pickByMinMeals = (days: WeekdayKey[], minMeals: number) => {
+        for (const dayKey of days) {
+            const plan = buildMealPlan(routines[dayKey]);
+            if (getMealCount(plan) >= minMeals) {
+                return dayKey;
+            }
+        }
+        return null;
+    };
+
+    const pickByMaxMeals = (days: WeekdayKey[]) => {
+        let bestDay: WeekdayKey | null = null;
+        let bestCount = 0;
+
+        for (const dayKey of days) {
+            const plan = buildMealPlan(routines[dayKey]);
+            const count = getMealCount(plan);
+            if (count > bestCount) {
+                bestDay = dayKey;
+                bestCount = count;
+            }
+        }
+
+        return bestCount > 0 ? bestDay : null;
+    };
+
+    const weekdayChoice =
+        pickByMinMeals(WEEKDAY_PRIORITY, 2)
+        ?? pickByMaxMeals(WEEKDAY_PRIORITY);
+    if (weekdayChoice) {
+        return weekdayChoice;
     }
 
-    for (const dayKey of Object.keys(routines) as WeekdayKey[]) {
-        const plan = buildMealPlan(routines[dayKey]);
-        if (plan.breakfast || plan.lunch || plan.dinner) {
-            return dayKey;
-        }
+    const weekendChoice =
+        pickByMinMeals(WEEKEND_PRIORITY, 2)
+        ?? pickByMaxMeals(WEEKEND_PRIORITY);
+    if (weekendChoice) {
+        return weekendChoice;
     }
 
     return DEFAULT_SAMPLE_DAY;
@@ -294,15 +365,34 @@ const getFunctionsErrorMessage = (error: unknown) => {
     return 'Bir hata oluştu.';
 };
 
-const resolvePrimaryRecipe = (recipes: MenuRecipe[] | null | undefined) => {
-    if (!recipes?.length) {
-        return null;
-    }
+const buildMealItems = (recipes: MenuRecipe[]): MealItem[] => {
+    return recipes
+        .filter((recipe) => COURSE_META[recipe.course])
+        .sort((first, second) => COURSE_ORDER.indexOf(first.course) - COURSE_ORDER.indexOf(second.course))
+        .map((recipe) => {
+            const courseMeta = COURSE_META[recipe.course];
+            return {
+                id: `${recipe.course}-${recipe.name}`,
+                title: recipe.name,
+                timeMinutes: Math.round(recipe.totalTimeMinutes ?? 0),
+                calories: Math.round(recipe.macrosPerServing?.calories ?? 0),
+                category: courseMeta.label,
+                categoryIcon: courseMeta.icon,
+                icon: courseMeta.icon,
+                mediaTone: courseMeta.mediaTone,
+                course: recipe.course,
+            };
+        });
+};
 
-    const sorted = [...recipes].sort(
-        (first, second) => COURSE_PRIORITY[first.course] - COURSE_PRIORITY[second.course]
-    );
-    return sorted[0] ?? null;
+const buildEmptyMessage = (isLoading: boolean, errorText: string | null) => {
+    if (isLoading) {
+        return 'Menü hazırlanıyor.';
+    }
+    if (errorText) {
+        return 'Bu öğün hazırlanamadı.';
+    }
+    return 'Öneri hazırlanıyor.';
 };
 
 export default function AnalysisScreen() {
@@ -487,15 +577,12 @@ export default function AnalysisScreen() {
     const userName = snapshot?.profile?.name || state.data.profile?.name || 'Size';
     const plannedMealCount = useMemo(() => {
         const plan = sampleDay?.mealPlan;
-        if (!plan) {
-            return 0;
-        }
-        return Number(plan.breakfast) + Number(plan.lunch) + Number(plan.dinner);
+        return plan ? getMealCount(plan) : 0;
     }, [sampleDay]);
 
-    const mealRows = useMemo(() => {
+    const mealSections = useMemo(() => {
         const plan = sampleDay?.mealPlan ?? { breakfast: false, lunch: false, dinner: false };
-        const rows: MealRowData[] = [];
+        const sections: MealSectionData[] = [];
 
         for (const mealType of MEAL_ORDER) {
             if (!plan[mealType]) {
@@ -503,35 +590,21 @@ export default function AnalysisScreen() {
             }
 
             const meta = MEAL_META[mealType];
-            const recipes = menuBundles[mealType]?.recipes?.recipes ?? [];
-            const primary = resolvePrimaryRecipe(recipes);
-            const isPlaceholder = !primary;
-
-            const title = primary?.name
-                ?? (loading
-                    ? 'Menü hazırlanıyor'
-                    : error
-                        ? 'Bu öğün hazırlanamadı'
-                        : 'Bu öğün yakında hazır');
-            const desc = primary?.brief
-                ?? (loading
-                    ? 'Sana uygun tarifleri seçiyoruz.'
-                    : error
-                        ? 'Şu anda örnek gösterilemiyor.'
-                        : 'Öneri hazırlanıyor.');
-
-            rows.push({
-                key: mealType,
-                time: meta.label,
-                title,
-                desc,
+            const items = buildMealItems(menuBundles[mealType]?.recipes?.recipes ?? []);
+            sections.push({
+                id: mealType,
+                title: meta.label,
                 icon: meta.icon,
-                isPlaceholder,
+                tint: meta.tint,
+                iconColor: meta.iconColor,
+                items,
+                emptyMessage: buildEmptyMessage(loading, error),
             });
         }
 
-        return rows;
+        return sections;
     }, [error, loading, menuBundles, sampleDay]);
+    const mealCount = mealSections.length;
 
     const reasoningText = useMemo(() => {
         const order: MenuMealType[] = ['dinner', 'lunch', 'breakfast'];
@@ -544,42 +617,7 @@ export default function AnalysisScreen() {
         return '';
     }, [menuBundles]);
 
-    const footerMeta: FooterMeta = useMemo(() => {
-        if (loading) {
-            return {
-                icon: 'clock-outline',
-                color: colors.textMuted,
-                text: 'Planın hazırlanıyor, birkaç saniye sürebilir.',
-            };
-        }
-
-        if (error) {
-            return {
-                icon: 'alert-circle',
-                color: colors.error,
-                text: 'Plan şu anda hazırlanamadı. Yine de devam edebilirsin.',
-            };
-        }
-
-        if (reasoningText) {
-            return {
-                icon: 'lightbulb-on-outline',
-                color: colors.primary,
-                text: reasoningText,
-            };
-        }
-
-        const dietaryCount =
-            snapshot?.dietary?.restrictions?.length
-            ?? state.data.dietary?.restrictions?.length
-            ?? 0;
-
-        return {
-            icon: 'check-circle',
-            color: colors.success,
-            text: dietaryCount > 0 ? 'Diyet tercihlerinize uygun' : 'Besin değerleri dengelendi',
-        };
-    }, [error, loading, reasoningText, snapshot, state.data.dietary?.restrictions?.length]);
+    const showReasoning = !error && reasoningText.length > 0;
 
     const handleContinue = () => {
         dispatch({ type: 'SET_STEP', payload: 12 });
@@ -609,45 +647,114 @@ export default function AnalysisScreen() {
                         <Text style={styles.subtitle}>{subtitleText}</Text>
                     </View>
 
-                    <View style={styles.card}>
-                        <View style={styles.cardHeader}>
-                            <Text style={styles.cardTitle}>Örnek {sampleDay.label} Günü</Text>
-                            <View style={styles.badge}>
-                                <Text style={styles.badgeText}>{loading ? 'Hazırlanıyor' : 'Mükemmel Uyum'}</Text>
-                            </View>
-                        </View>
-
-                        {mealRows.length ? (
-                            mealRows.map((meal, index) => (
-                                <View key={meal.key}>
-                                    <MealRow
-                                        time={meal.time}
-                                        title={meal.title}
-                                        desc={meal.desc}
-                                        icon={meal.icon}
-                                        isPlaceholder={meal.isPlaceholder}
-                                    />
-                                    {index < mealRows.length - 1 ? <View style={styles.divider} /> : null}
-                                </View>
-                            ))
-                        ) : (
-                            <View style={styles.emptyState}>
-                                <MaterialCommunityIcons
-                                    name="calendar-blank-outline"
-                                    size={18}
-                                    color={colors.textMuted}
-                                />
-                                <Text style={styles.emptyText}>Bu gün için öğün planlanmadı.</Text>
-                            </View>
-                        )}
-
-                        <View style={styles.cardFooter}>
-                            <MaterialCommunityIcons name={footerMeta.icon} size={16} color={footerMeta.color} />
-                            <Text style={styles.footerText} numberOfLines={2}>
-                                {footerMeta.text}
-                            </Text>
+                    <View style={styles.dayHeader}>
+                        <Text style={styles.dayTitle}>Örnek {sampleDay.label} Günü</Text>
+                        <View style={styles.mealCountPill}>
+                            <Text style={styles.mealCountText}>{mealCount} öğün</Text>
                         </View>
                     </View>
+
+                    {showReasoning ? (
+                        <View style={styles.reasoningCard}>
+                            <View style={styles.reasoningHeader}>
+                                <MaterialCommunityIcons name="lightbulb-on-outline" size={18} color={colors.primary} />
+                                <Text style={styles.reasoningTitle}>Neden bu menü?</Text>
+                            </View>
+                            <Text style={styles.reasoningText}>{reasoningText}</Text>
+                        </View>
+                    ) : null}
+
+                    {mealSections.length ? (
+                        mealSections.map((section) => (
+                            <View key={section.id} style={styles.section}>
+                                <View style={styles.sectionHeader}>
+                                    <View style={[styles.sectionIcon, { backgroundColor: section.tint }]}>
+                                        <MaterialCommunityIcons
+                                            name={section.icon}
+                                            size={18}
+                                            color={section.iconColor}
+                                        />
+                                    </View>
+                                    <Text style={styles.sectionTitle}>{section.title}</Text>
+                                </View>
+
+                                <View style={styles.sectionCards}>
+                                    {section.items.length ? (
+                                        section.items.map((item) => (
+                                            <View key={item.id} style={styles.mealCard}>
+                                                <View style={[styles.mealMedia, { backgroundColor: item.mediaTone }]}>
+                                                    <MaterialCommunityIcons
+                                                        name={item.icon}
+                                                        size={24}
+                                                        color={colors.textPrimary}
+                                                    />
+                                                </View>
+                                                <View style={styles.mealContent}>
+                                                    <View style={styles.mealMetaRow}>
+                                                        <View style={styles.metaItem}>
+                                                            <MaterialCommunityIcons
+                                                                name={item.categoryIcon}
+                                                                size={12}
+                                                                color={colors.textMuted}
+                                                            />
+                                                            <Text style={styles.metaText}>{item.category}</Text>
+                                                        </View>
+                                                        <View style={styles.metaItem}>
+                                                            <MaterialCommunityIcons
+                                                                name="clock-outline"
+                                                                size={12}
+                                                                color={colors.textMuted}
+                                                            />
+                                                            <Text style={styles.metaText}>{item.timeMinutes} dk</Text>
+                                                        </View>
+                                                    </View>
+                                                    <Text style={styles.mealTitle} numberOfLines={1}>
+                                                        {item.title}
+                                                    </Text>
+                                                    <View style={styles.mealFooterRow}>
+                                                        <View style={styles.calorieRow}>
+                                                            <MaterialCommunityIcons
+                                                                name="fire"
+                                                                size={12}
+                                                                color={colors.accent}
+                                                            />
+                                                            <Text style={styles.calorieText}>
+                                                                {item.calories} kcal
+                                                            </Text>
+                                                        </View>
+                                                    </View>
+                                                </View>
+                                                <MaterialCommunityIcons
+                                                    name="chevron-right"
+                                                    size={18}
+                                                    color={colors.iconMuted}
+                                                    style={styles.chevron}
+                                                />
+                                            </View>
+                                        ))
+                                    ) : (
+                                        <View style={styles.emptyMealCard}>
+                                            <MaterialCommunityIcons
+                                                name="calendar-blank-outline"
+                                                size={16}
+                                                color={colors.textMuted}
+                                            />
+                                            <Text style={styles.emptyMealText}>{section.emptyMessage}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            </View>
+                        ))
+                    ) : (
+                        <View style={styles.emptyState}>
+                            <MaterialCommunityIcons
+                                name="calendar-blank-outline"
+                                size={18}
+                                color={colors.textMuted}
+                            />
+                            <Text style={styles.emptyText}>Bu gün için öğün planlanmadı.</Text>
+                        </View>
+                    )}
                 </Animated.View>
             </ScrollView>
 
@@ -663,47 +770,6 @@ export default function AnalysisScreen() {
     );
 }
 
-function MealRow({
-    time,
-    title,
-    desc,
-    icon,
-    isPlaceholder,
-}: {
-    time: string;
-    title: string;
-    desc: string;
-    icon: IconName;
-    isPlaceholder: boolean;
-}) {
-    return (
-        <View style={styles.mealRow}>
-            <View style={styles.mealIcon}>
-                <MaterialCommunityIcons
-                    name={icon}
-                    size={20}
-                    color={isPlaceholder ? colors.textMuted : colors.textSecondary}
-                />
-            </View>
-            <View style={styles.mealContent}>
-                <Text style={styles.mealTime}>{time}</Text>
-                <Text
-                    style={[styles.mealTitle, isPlaceholder && styles.mealTitlePlaceholder]}
-                    numberOfLines={1}
-                >
-                    {title}
-                </Text>
-                <Text
-                    style={[styles.mealDesc, isPlaceholder && styles.mealDescPlaceholder]}
-                    numberOfLines={2}
-                >
-                    {desc}
-                </Text>
-            </View>
-        </View>
-    );
-}
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -711,7 +777,8 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingHorizontal: spacing.lg,
-        paddingBottom: 100,
+        paddingBottom: 120,
+        gap: spacing.md,
     },
     header: {
         alignItems: 'center',
@@ -737,75 +804,152 @@ const styles = StyleSheet.create({
         color: colors.textSecondary,
         textAlign: 'center',
     },
-    card: {
-        backgroundColor: colors.surface,
-        borderRadius: radius.lg,
-        padding: spacing.md,
-        borderWidth: 1,
-        borderColor: colors.border,
-        ...shadows.md,
-    },
-    cardHeader: {
+    dayHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: spacing.lg,
-        paddingBottom: spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
+        marginBottom: spacing.sm,
     },
-    cardTitle: {
+    dayTitle: {
         ...typography.h3,
         color: colors.textPrimary,
     },
-    badge: {
-        backgroundColor: colors.primaryLight + '30',
-        paddingHorizontal: spacing.sm,
-        paddingVertical: 4,
+    mealCountPill: {
+        backgroundColor: colors.surface,
         borderRadius: radius.full,
-    },
-    badgeText: {
-        ...typography.caption,
-        color: colors.primary,
-        fontWeight: '700',
-    },
-    mealRow: {
-        flexDirection: 'row',
-        gap: spacing.md,
+        paddingHorizontal: spacing.md,
         paddingVertical: spacing.xs,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
     },
-    mealIcon: {
-        marginTop: 2,
+    mealCountText: {
+        ...typography.caption,
+        color: colors.textSecondary,
+    },
+    reasoningCard: {
+        backgroundColor: colors.surface,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: colors.border,
+        padding: spacing.lg,
+        marginBottom: spacing.lg,
+        gap: spacing.sm,
+        ...shadows.sm,
+    },
+    reasoningHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    reasoningTitle: {
+        ...typography.label,
+        color: colors.textPrimary,
+    },
+    reasoningText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+    },
+    section: {
+        gap: spacing.md,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    sectionIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: radius.full,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    sectionTitle: {
+        ...typography.h3,
+        color: colors.textPrimary,
+    },
+    sectionCards: {
+        gap: spacing.md,
+    },
+    mealCard: {
+        flexDirection: 'row',
+        alignItems: 'stretch',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        overflow: 'hidden',
+        minHeight: 80,
+        ...shadows.md,
+    },
+    mealMedia: {
+        width: 80,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderTopLeftRadius: 16,
+        borderBottomLeftRadius: 16,
+        borderTopRightRadius: 0,
+        borderBottomRightRadius: 0,
     },
     mealContent: {
         flex: 1,
+        paddingVertical: spacing.sm + 4,
+        paddingHorizontal: spacing.sm + 4,
+        gap: spacing.xs,
+        justifyContent: 'center',
     },
-    mealTime: {
+    mealMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    metaItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    metaText: {
         ...typography.caption,
+        fontSize: 11,
+        lineHeight: 14,
         color: colors.textMuted,
-        marginBottom: 2,
     },
     mealTitle: {
-        ...typography.body,
+        fontSize: 16,
         fontWeight: '600',
+        lineHeight: 22,
         color: colors.textPrimary,
     },
-    mealTitlePlaceholder: {
-        color: colors.textSecondary,
+    mealFooterRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
-    mealDesc: {
+    calorieRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    calorieText: {
         ...typography.caption,
         color: colors.textSecondary,
-        marginTop: 2,
     },
-    mealDescPlaceholder: {
-        color: colors.textMuted,
+    chevron: {
+        alignSelf: 'center',
+        marginLeft: spacing.sm,
+        marginRight: spacing.sm + 4,
     },
-    divider: {
-        height: 1,
-        backgroundColor: colors.border,
-        marginVertical: spacing.md,
-        marginLeft: 32,
+    emptyMealCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        backgroundColor: colors.surfaceMuted,
+        borderRadius: radius.md,
+        paddingVertical: spacing.sm + 4,
+        paddingHorizontal: spacing.md,
+    },
+    emptyMealText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        flex: 1,
     },
     emptyState: {
         flexDirection: 'row',
@@ -816,21 +960,6 @@ const styles = StyleSheet.create({
     emptyText: {
         ...typography.bodySmall,
         color: colors.textSecondary,
-    },
-    cardFooter: {
-        marginTop: spacing.lg,
-        paddingTop: spacing.md,
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: spacing.sm,
-    },
-    footerText: {
-        ...typography.caption,
-        color: colors.textSecondary,
-        flex: 1,
-        lineHeight: 18,
     },
     footer: {
         position: 'absolute',

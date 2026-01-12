@@ -7,6 +7,31 @@ import { MENU_JSON_SCHEMA } from "../schemas/menu-schema";
 
 const MENU_SCHEMA_STRING = JSON.stringify(MENU_JSON_SCHEMA, null, 2);
 const DEFAULT_EQUIPMENT = ["ocak", "tencere", "tava", "fırın"];
+const CUISINE_LABELS: Record<string, string> = {
+  turkish: "Türk",
+  mediterranean: "Akdeniz",
+  italian: "İtalyan",
+  asian: "Asya",
+  "middle-eastern": "Ortadoğu",
+  mexican: "Meksika",
+  indian: "Hint",
+  french: "Fransız",
+  japanese: "Japon",
+  chinese: "Çin",
+  thai: "Tayland",
+  american: "Amerikan",
+};
+
+const normalizeCuisinePreferences = (values: string[]) =>
+  values
+    .map((value) => CUISINE_LABELS[value] ?? value)
+    .filter((value) => Boolean(value));
+
+const hasNonTurkishCuisine = (values: string[]) =>
+  values.some((value) => {
+    const normalized = value.toLocaleLowerCase("tr-TR");
+    return normalized !== "türk" && normalized !== "turk";
+  });
 
 export function buildMenuSystemPrompt(): string {
   return [
@@ -49,6 +74,9 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
         ? "öğle"
         : "akşam";
 
+  const resolvedCuisinePreferences = normalizeCuisinePreferences(cuisinePreferences);
+  const prefersNonTurkishCuisine = hasNonTurkishCuisine(resolvedCuisinePreferences);
+
   const context = {
     date,
     dayOfWeek: calculatedDayOfWeek,
@@ -56,7 +84,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     mealType: resolvedMealType,
     dietaryRestrictions,
     allergies,
-    cuisinePreferences,
+    cuisinePreferences: resolvedCuisinePreferences,
     timePreference,
     skillLevel,
     equipment: equipment.length > 0 ? equipment : DEFAULT_EQUIPMENT,
@@ -107,6 +135,10 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   }
   prompt += "- Kategori eşlemesi: Çorba -> soup, Salata -> salad, Meze -> meze, Tatlı -> dessert, Hamur İşi -> pastry.\n";
   prompt += "- Mutfak seçimi: Kullanıcının mutfak tercihleri varsa onlardan birini seç; yoksa Türk mutfağı seç.\n";
+  if (prefersNonTurkishCuisine) {
+    prompt +=
+      "- Mutfak tercihleri içinde Türk olmayan bir seçenek varsa mutlaka bu seçeneklerden birini seç; Türk mutfağına dönme.\n";
+  }
   prompt += "- Mutfak-kategori uyumu:\n";
   prompt += "  - Türk: Ana + Yan + (Çorba veya Salata/Meze). Ofis/gym bağlamında salata/meze önceliklendir.\n";
   prompt += "  - İtalyan: Ana (pasta/risotto) + Yan (fırın/ızgara sebze veya ekmek) + (Salata veya Antipasti/Meze).\n";
@@ -123,6 +155,12 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   prompt += "- weeklyContext verildiyse haftalık mantığa uy; özellikle repeatMode, ingredientSynergyFrom ve seasonalityHint ipuçlarını dikkate al.\n";
   prompt +=
     "- weeklyContext.seasonalityHint varsa mevsime uygun malzemelerle uyumlu yemekler seç.\n";
+  prompt +=
+    "- weeklyContext.reasoningHint varsa yalnızca reasoning değil, menü seçiminde de bu tonu uygula; klasik ev yemeği veya sokak lezzeti kombinasyonlarından kaçın ve daha özgün/modern tabaklar seç.\n";
+  prompt +=
+    "- Bu modda örnek olarak şunlardan uzak dur: köfte + patates/pilav, fırın kumpir, makarna, menemen, börek, klasik tavuk sote.\n";
+  prompt +=
+    "- reasoningHint içinde wow/modern vurgusu varsa mercimek, tarhana, ezogelin veya yayla gibi klasik çorbalardan kaçın.\n";
   prompt +=
     "- weeklyContext.ingredientSynergyFrom varsa reasoning içinde bunu açıkça belirt (örn: \"Dün akşam ... olduğu için bugün ...\").\n";
   prompt +=

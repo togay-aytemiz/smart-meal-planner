@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, Animated, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, Animated, Image, TouchableOpacity } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { Button } from '../../components/ui';
@@ -77,6 +77,10 @@ type MenuRequestPayload = {
         excludeFromPlan?: boolean;
     };
     mealType: MenuMealType;
+    weeklyContext?: {
+        reasoningHint?: string;
+        seasonalityHint?: string;
+    };
 };
 
 type MenuRecipeParams = MenuRequestPayload & {
@@ -205,6 +209,8 @@ const MEAL_ORDER: MenuMealType[] = ['breakfast', 'lunch', 'dinner'];
 const DEFAULT_SAMPLE_DAY: WeekdayKey = 'tuesday';
 const WEEKDAY_PRIORITY: WeekdayKey[] = ['tuesday', 'monday', 'wednesday', 'thursday', 'friday'];
 const WEEKEND_PRIORITY: WeekdayKey[] = ['saturday', 'sunday'];
+const WOW_REASONING_HINT =
+    'Sana daha wow ve modern tabaklar seçtim; klasik ev yemeği ve sokak lezzeti kombinasyonlarından uzak durdum.';
 
 const buildDateKey = (date: Date) => {
     const year = date.getFullYear();
@@ -346,6 +352,9 @@ const buildMenuRequest = (
             }
             : undefined,
         mealType,
+        weeklyContext: {
+            reasoningHint: WOW_REASONING_HINT,
+        },
     };
 };
 
@@ -428,151 +437,153 @@ export default function AnalysisScreen() {
         ]).start();
     }, [dispatch, fadeAnim, slideAnim]);
 
-    useEffect(() => {
-        if (userState.isLoading) {
-            return;
-        }
-
-        let isMounted = true;
-
-        const loadOnboardingSnapshot = async (): Promise<OnboardingSnapshot | null> => {
-            const fallback = (state.data ?? {}) as OnboardingSnapshot;
-            const userId = userState.user?.uid;
-
-            if (!userId) {
-                return fallback;
+    useFocusEffect(
+        useCallback(() => {
+            if (userState.isLoading) {
+                return;
             }
 
-            try {
-                const userDoc = await getDoc(doc(firestore(), 'Users', userId));
-                const data = userDoc.data();
-                const remoteSnapshot = data?.onboarding as OnboardingSnapshot | undefined;
-                return remoteSnapshot ?? fallback;
-            } catch (readError) {
-                console.warn('Failed to load onboarding data:', readError);
-                return fallback;
-            }
-        };
+            let isMounted = true;
 
-        const fetchSampleMenu = async () => {
-            setLoading(true);
-            setError(null);
-            if (isMounted) {
-                setMenuBundles({ breakfast: null, lunch: null, dinner: null });
-            }
+            const loadOnboardingSnapshot = async (): Promise<OnboardingSnapshot | null> => {
+                const fallback = (state.data ?? {}) as OnboardingSnapshot;
+                const userId = userState.user?.uid;
 
-            try {
-                const resolvedSnapshot = await loadOnboardingSnapshot();
-                if (!isMounted) {
-                    return;
+                if (!userId) {
+                    return fallback;
                 }
 
-                setSnapshot(resolvedSnapshot);
+                try {
+                    const userDoc = await getDoc(doc(firestore(), 'Users', userId));
+                    const data = userDoc.data();
+                    const remoteSnapshot = data?.onboarding as OnboardingSnapshot | undefined;
+                    return remoteSnapshot ?? fallback;
+                } catch (readError) {
+                    console.warn('Failed to load onboarding data:', readError);
+                    return fallback;
+                }
+            };
 
-                const routines = resolvedSnapshot?.routines ?? DEFAULT_ROUTINES;
-                const dayKey = pickSampleDayKey(routines);
-                const planForDay = buildMealPlan(routines[dayKey]);
-                const dateKey = buildDateKey(getNextWeekdayDate(dayKey));
-
-                setSampleDay({
-                    key: dayKey,
-                    label: DAY_LABELS[dayKey],
-                    dateKey,
-                    mealPlan: planForDay,
-                });
-
-                const mealTypes = MEAL_ORDER.filter((mealType) => planForDay[mealType]);
-                if (!mealTypes.length) {
-                    return;
+            const fetchSampleMenu = async () => {
+                setLoading(true);
+                setError(null);
+                if (isMounted) {
+                    setMenuBundles({ breakfast: null, lunch: null, dinner: null });
                 }
 
-                const userId = userState.user?.uid ?? 'anonymous';
-                const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>(
-                    'generateOpenAIMenu'
-                );
-                const callRecipes = functions.httpsCallable<
-                    { params: MenuRecipeParams },
-                    MenuRecipesCallResponse
-                >('generateOpenAIRecipe');
-
-                let lastError: string | null = null;
-                let loadedCount = 0;
-
-                const updateBundle = (mealType: MenuMealType, bundle: MenuBundle) => {
+                try {
+                    const resolvedSnapshot = await loadOnboardingSnapshot();
                     if (!isMounted) {
                         return;
                     }
-                    setMenuBundles((prev) => ({
-                        ...prev,
-                        [mealType]: bundle,
-                    }));
-                };
 
-                for (const mealType of mealTypes) {
-                    const request = buildMenuRequest(resolvedSnapshot, userId, dateKey, dayKey, mealType);
+                    setSnapshot(resolvedSnapshot);
 
-                    try {
-                        const firestoreMenu = await fetchMenuBundle(userId, dateKey, request.mealType);
-                        if (firestoreMenu) {
-                            updateBundle(mealType, firestoreMenu);
+                    const routines = resolvedSnapshot?.routines ?? DEFAULT_ROUTINES;
+                    const dayKey = pickSampleDayKey(routines);
+                    const planForDay = buildMealPlan(routines[dayKey]);
+                    const dateKey = buildDateKey(getNextWeekdayDate(dayKey));
+
+                    setSampleDay({
+                        key: dayKey,
+                        label: DAY_LABELS[dayKey],
+                        dateKey,
+                        mealPlan: planForDay,
+                    });
+
+                    const mealTypes = MEAL_ORDER.filter((mealType) => planForDay[mealType]);
+                    if (!mealTypes.length) {
+                        return;
+                    }
+
+                    const userId = userState.user?.uid ?? 'anonymous';
+                    const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>(
+                        'generateOpenAIMenu'
+                    );
+                    const callRecipes = functions.httpsCallable<
+                        { params: MenuRecipeParams },
+                        MenuRecipesCallResponse
+                    >('generateOpenAIRecipe');
+
+                    let lastError: string | null = null;
+                    let loadedCount = 0;
+
+                    const updateBundle = (mealType: MenuMealType, bundle: MenuBundle) => {
+                        if (!isMounted) {
+                            return;
+                        }
+                        setMenuBundles((prev) => ({
+                            ...prev,
+                            [mealType]: bundle,
+                        }));
+                    };
+
+                    for (const mealType of mealTypes) {
+                        const request = buildMenuRequest(resolvedSnapshot, userId, dateKey, dayKey, mealType);
+
+                        try {
+                            const menuResult = await callMenu({ request });
+                            const menuData = menuResult.data?.menu;
+
+                            if (!menuData?.items?.length) {
+                                throw new Error('Menü verisi alınamadı');
+                            }
+
+                            const recipeParams: MenuRecipeParams = {
+                                ...request,
+                                menu: menuData,
+                            };
+
+                            const recipesResult = await callRecipes({ params: recipeParams });
+                            const recipesData = recipesResult.data?.menuRecipes;
+
+                            if (!recipesData?.recipes?.length) {
+                                throw new Error('Tarif verisi alınamadı');
+                            }
+
+                            updateBundle(mealType, {
+                                menu: menuData,
+                                recipes: recipesData,
+                            });
                             loadedCount += 1;
                             continue;
+                        } catch (err: unknown) {
+                            lastError = getFunctionsErrorMessage(err);
                         }
-                    } catch (firestoreError) {
-                        console.warn('Menu Firestore read error:', firestoreError);
+
+                        try {
+                            const firestoreMenu = await fetchMenuBundle(userId, dateKey, request.mealType);
+                            if (firestoreMenu) {
+                                updateBundle(mealType, firestoreMenu);
+                                loadedCount += 1;
+                            }
+                        } catch (firestoreError) {
+                            console.warn('Menu Firestore read error:', firestoreError);
+                        }
                     }
 
-                    try {
-                        const menuResult = await callMenu({ request });
-                        const menuData = menuResult.data?.menu;
-
-                        if (!menuData?.items?.length) {
-                            throw new Error('Menü verisi alınamadı');
-                        }
-
-                        const recipeParams: MenuRecipeParams = {
-                            ...request,
-                            menu: menuData,
-                        };
-
-                        const recipesResult = await callRecipes({ params: recipeParams });
-                        const recipesData = recipesResult.data?.menuRecipes;
-
-                        if (!recipesData?.recipes?.length) {
-                            throw new Error('Tarif verisi alınamadı');
-                        }
-
-                        updateBundle(mealType, {
-                            menu: menuData,
-                            recipes: recipesData,
-                        });
-                        loadedCount += 1;
-                    } catch (err: unknown) {
-                        lastError = getFunctionsErrorMessage(err);
+                    if (lastError && loadedCount === 0 && isMounted) {
+                        setError(lastError);
+                    }
+                } catch (err: unknown) {
+                    console.error('Sample menu fetch error:', err);
+                    if (isMounted) {
+                        setError(getFunctionsErrorMessage(err));
+                    }
+                } finally {
+                    if (isMounted) {
+                        setLoading(false);
                     }
                 }
+            };
 
-                if (lastError && loadedCount === 0 && isMounted) {
-                    setError(lastError);
-                }
-            } catch (err: unknown) {
-                console.error('Sample menu fetch error:', err);
-                if (isMounted) {
-                    setError(getFunctionsErrorMessage(err));
-                }
-            } finally {
-                if (isMounted) {
-                    setLoading(false);
-                }
-            }
-        };
+            fetchSampleMenu();
 
-        fetchSampleMenu();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [state.data, userState.isLoading, userState.user?.uid]);
+            return () => {
+                isMounted = false;
+            };
+        }, [state.data, userState.isLoading, userState.user?.uid])
+    );
 
     const userName = snapshot?.profile?.name || state.data.profile?.name || 'Size';
     const plannedMealCount = useMemo(() => {
@@ -622,6 +633,12 @@ export default function AnalysisScreen() {
     const handleContinue = () => {
         dispatch({ type: 'SET_STEP', payload: 12 });
         router.push('/(onboarding)/paywall');
+    };
+
+    const handleOpenMeal = (mealType: MenuMealType, course: MenuRecipeCourse) => {
+        const fallbackDate = new Date().toISOString().split('T')[0];
+        const date = sampleDay?.dateKey ?? fallbackDate;
+        router.push({ pathname: '/cookbook/[course]', params: { course, mealType, date } });
     };
 
     const subtitleText = plannedMealCount > 0
@@ -681,7 +698,12 @@ export default function AnalysisScreen() {
                                 <View style={styles.sectionCards}>
                                     {section.items.length ? (
                                         section.items.map((item) => (
-                                            <View key={item.id} style={styles.mealCard}>
+                                            <TouchableOpacity
+                                                key={item.id}
+                                                activeOpacity={0.85}
+                                                style={styles.mealCard}
+                                                onPress={() => handleOpenMeal(section.id, item.course)}
+                                            >
                                                 <View style={[styles.mealMedia, { backgroundColor: item.mediaTone }]}>
                                                     <MaterialCommunityIcons
                                                         name={item.icon}
@@ -730,7 +752,7 @@ export default function AnalysisScreen() {
                                                     color={colors.iconMuted}
                                                     style={styles.chevron}
                                                 />
-                                            </View>
+                                            </TouchableOpacity>
                                         ))
                                     ) : (
                                         <View style={styles.emptyMealCard}>

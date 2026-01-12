@@ -31,9 +31,16 @@ const resolveMealType = (value: string | string[] | undefined): MenuMealType => 
 
 const buildMenuRecipesKey = (mealType: MenuMealType) => `${MENU_RECIPES_STORAGE_KEY}:${mealType}`;
 
+const resolveDate = (value: string | string[] | undefined) => {
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return value;
+    }
+    return new Date().toISOString().split('T')[0];
+};
+
 export default function CookbookDetailScreen() {
     const router = useRouter();
-    const { course, mealType } = useLocalSearchParams<{ course?: string; mealType?: string }>();
+    const { course, mealType, date } = useLocalSearchParams<{ course?: string; mealType?: string; date?: string }>();
     const { state: userState } = useUser();
     const [recipe, setRecipe] = useState<MenuRecipe | null>(null);
     const [loading, setLoading] = useState(true);
@@ -57,11 +64,11 @@ export default function CookbookDetailScreen() {
                 }
 
                 const userId = userState.user?.uid ?? 'anonymous';
-                const today = new Date().toISOString().split('T')[0];
+                const resolvedDate = resolveDate(date);
                 const resolvedMealType = resolveMealType(mealType);
 
                 try {
-                    const firestoreMenu = await fetchMenuBundle(userId, today, resolvedMealType);
+                    const firestoreMenu = await fetchMenuBundle(userId, resolvedDate, resolvedMealType);
                     const match = firestoreMenu?.recipes.recipes.find((item) => item.course === courseKey);
                     if (match && isMounted) {
                         setRecipe(match);

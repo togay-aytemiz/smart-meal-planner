@@ -19,6 +19,7 @@ export function onboardingToMenuRequest(
   options?: {
     existingPantry?: string[];
     avoidIngredients?: string[];
+    avoidItemNames?: string[];
     maxPrepTime?: number;
     maxCookTime?: number;
     generateImage?: boolean;
@@ -36,7 +37,7 @@ export function onboardingToMenuRequest(
   // MVP: For testing, use Monday routine if no date provided
   let dayOfWeek: string;
   let routineDate: string;
-  
+
   if (date) {
     // Use provided date
     routineDate = date;
@@ -58,7 +59,7 @@ export function onboardingToMenuRequest(
 
   // Get routine for this day
   const routine = onboarding.routines?.[dayOfWeek as keyof typeof onboarding.routines];
-  
+
   // MVP: Log if using default Monday routine
   if (!date) {
     console.log(`[MVP Testing] Using ${dayOfWeek} routine from onboarding for menu generation`);
@@ -81,19 +82,20 @@ export function onboardingToMenuRequest(
     // Day-specific context
     routine: routine
       ? {
-          type: routine.type,
-          gymTime: routine.gymTime,
-          officeMealToGo: routine.officeMealToGo,
-          officeBreakfastAtHome: routine.officeBreakfastAtHome,
-          schoolBreakfast: routine.schoolBreakfast,
-          remoteMeals: routine.remoteMeals,
-          excludeFromPlan: routine.excludeFromPlan,
-        }
+        type: routine.type,
+        gymTime: routine.gymTime,
+        officeMealToGo: routine.officeMealToGo,
+        officeBreakfastAtHome: routine.officeBreakfastAtHome,
+        schoolBreakfast: routine.schoolBreakfast,
+        remoteMeals: routine.remoteMeals,
+        excludeFromPlan: routine.excludeFromPlan,
+      }
       : undefined,
 
     // Additional context
     existingPantry: options?.existingPantry,
     avoidIngredients: options?.avoidIngredients,
+    avoidItemNames: options?.avoidItemNames,
     maxPrepTime: options?.maxPrepTime,
     maxCookTime: options?.maxCookTime,
 

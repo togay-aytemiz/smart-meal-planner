@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { ScreenHeader, ReasoningBubble } from '../../components/ui';
 import { functions } from '../../config/firebase';
 import { useUser } from '../../contexts/user-context';
@@ -398,14 +398,19 @@ const ensureWeeklyMenu = async ({
     userId,
     weekStart,
     onboarding,
+    singleDay,
 }: {
     userId: string;
     weekStart: string;
     onboarding: OnboardingSnapshot | null;
+    singleDay?: string;
 }): Promise<{ cache: WeeklyMenuCache | null; error: string | null }> => {
-    const cached = await loadWeeklyMenuCache(userId);
-    if (cached?.weekStart === weekStart) {
-        return { cache: cached, error: null };
+    // If requesting full week, check cache first
+    if (!singleDay) {
+        const cached = await loadWeeklyMenuCache(userId);
+        if (cached?.weekStart === weekStart) {
+            return { cache: cached, error: null };
+        }
     }
 
     try {
@@ -417,20 +422,60 @@ const ensureWeeklyMenu = async ({
             request: {
                 userId,
                 weekStart,
+                ...(singleDay ? { singleDay } : {}),
                 ...(onboarding ? { onboarding } : {}),
             },
         });
         const resolvedWeekStart = response.data?.weekStart ?? weekStart;
-        const cache: WeeklyMenuCache = {
-            weekStart: resolvedWeekStart,
-            generatedAt: new Date().toISOString(),
-        };
-        await persistWeeklyMenuCache(userId, cache);
-        return { cache, error: null };
+
+        // Only cache if we generated the full week
+        if (!singleDay) {
+            const cache: WeeklyMenuCache = {
+                weekStart: resolvedWeekStart,
+                generatedAt: new Date().toISOString(),
+            };
+            await persistWeeklyMenuCache(userId, cache);
+            return { cache, error: null };
+        }
+
+        return { cache: null, error: null };
     } catch (error) {
         console.warn('Weekly menu generation failed:', error);
         return { cache: null, error: getFunctionsErrorMessage(error) };
     }
+};
+
+// Generate remaining days in background (fire and forget)
+const generateRemainingDaysInBackground = (
+    userId: string,
+    weekStart: string,
+    onboarding: OnboardingSnapshot | null,
+    excludeDay: string
+) => {
+    // Fire and forget - don't await
+    (async () => {
+        try {
+            const callWeeklyMenu = functions.httpsCallable<
+                { request: WeeklyMenuRequest },
+                WeeklyMenuResponse
+            >('generateWeeklyMenu');
+            await callWeeklyMenu({
+                request: {
+                    userId,
+                    weekStart,
+                    ...(onboarding ? { onboarding } : {}),
+                },
+            });
+            // Cache the full week once complete
+            await persistWeeklyMenuCache(userId, {
+                weekStart,
+                generatedAt: new Date().toISOString(),
+            });
+            console.log('Background menu generation complete');
+        } catch (error) {
+            console.warn('Background menu generation failed:', error);
+        }
+    })();
 };
 
 export default function TodayScreen() {
@@ -458,6 +503,15 @@ export default function TodayScreen() {
     const [loading, setLoading] = useState(true);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const navigation = useNavigation();
+
+    useEffect(() => {
+        navigation.setOptions({
+            tabBarStyle: {
+                display: (loading && isInitialLoading) ? 'none' : undefined
+            }
+        });
+    }, [loading, isInitialLoading, navigation]);
 
     const selectedRoutine = weeklyRoutine[getDayKey(selectedDay.date)];
     const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
@@ -596,11 +650,27 @@ export default function TodayScreen() {
                     setMenuBundles(cachedBundles);
                 }
 
-                const weeklyResult = await ensureWeeklyMenu({
-                    userId,
-                    weekStart,
-                    onboarding: resolvedSnapshot,
-                });
+                // Check if we already have cached week
+                const existingCache = await loadWeeklyMenuCache(userId);
+                const isWeekCached = existingCache?.weekStart === weekStart;
+
+                // Progressive loading: generate today first, then remaining days async
+                if (!isWeekCached) {
+                    // Step 1: Generate only today's menu (fast)
+                    const todayResult = await ensureWeeklyMenu({
+                        userId,
+                        weekStart,
+                        onboarding: resolvedSnapshot,
+                        singleDay: dateKey,
+                    });
+
+                    if (todayResult.error && isMounted) {
+                        setError(todayResult.error);
+                    }
+
+                    // Step 2: Start background generation for remaining days (fire and forget)
+                    generateRemainingDaysInBackground(userId, weekStart, resolvedSnapshot, dateKey);
+                }
 
                 const updateBundle = (mealType: MealSectionKey, bundle: MenuBundle) => {
                     if (!isMounted) {
@@ -613,7 +683,7 @@ export default function TodayScreen() {
                 };
 
                 let loadedCount = 0;
-                let lastError: string | null = weeklyResult.error;
+                let lastError: string | null = null;
 
                 for (const mealType of mealTypes) {
                     try {
@@ -853,8 +923,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     loadingText: {
-        ...typography.body,
-        color: colors.textSecondary,
+        ...typography.h3,
+        color: colors.textPrimary,
         textAlign: 'center',
         marginTop: spacing.md,
     },

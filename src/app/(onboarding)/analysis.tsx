@@ -1,17 +1,14 @@
-import { View, Text, StyleSheet, ScrollView, Animated, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { Button, ReasoningBubble } from '../../components/ui';
-import { functions } from '../../config/firebase';
 import { useOnboarding, type RoutineDay, type WeeklyRoutine } from '../../contexts/onboarding-context';
-import { useUser } from '../../contexts/user-context';
+import { useSampleMenu } from '../../contexts/sample-menu-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows } from '../../theme/spacing';
-import { fetchMenuBundle, type MenuBundle } from '../../utils/menu-storage';
 import type { MenuDecision, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -126,6 +123,7 @@ type MealSectionData = {
     iconColor: string;
     items: MealItem[];
     emptyMessage: string;
+    isLoading: boolean;
 };
 
 
@@ -407,27 +405,23 @@ const buildEmptyMessage = (isLoading: boolean, errorText: string | null) => {
 export default function AnalysisScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
-    const { state: userState } = useUser();
+    const {
+        menuBundles,
+        loadingStates,
+        error,
+        sampleDay: contextSampleDay,
+        snapshot: contextSnapshot,
+    } = useSampleMenu();
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
 
-    const [menuBundles, setMenuBundles] = useState<Record<MenuMealType, MenuBundle | null>>({
-        breakfast: null,
-        lunch: null,
-        dinner: null,
-    });
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [snapshot, setSnapshot] = useState<OnboardingSnapshot | null>(null);
-    const [sampleDay, setSampleDay] = useState<SampleDay>(() => {
-        const date = getNextWeekdayDate(DEFAULT_SAMPLE_DAY);
-        return {
-            key: DEFAULT_SAMPLE_DAY,
-            label: DAY_LABELS[DEFAULT_SAMPLE_DAY],
-            dateKey: buildDateKey(date),
-            mealPlan: buildMealPlan(DEFAULT_ROUTINES[DEFAULT_SAMPLE_DAY]),
-        };
-    });
+    // Fallback sample day if context hasn't loaded yet
+    const sampleDay = contextSampleDay ?? {
+        key: DEFAULT_SAMPLE_DAY as WeekdayKey,
+        label: DAY_LABELS[DEFAULT_SAMPLE_DAY],
+        dateKey: buildDateKey(getNextWeekdayDate(DEFAULT_SAMPLE_DAY)),
+        mealPlan: buildMealPlan(DEFAULT_ROUTINES[DEFAULT_SAMPLE_DAY]),
+    };
 
     useEffect(() => {
         dispatch({ type: 'SET_STEP', payload: 11 });
@@ -437,159 +431,7 @@ export default function AnalysisScreen() {
         ]).start();
     }, [dispatch, fadeAnim, slideAnim]);
 
-    useFocusEffect(
-        useCallback(() => {
-            if (userState.isLoading) {
-                return;
-            }
-
-            let isMounted = true;
-
-            const loadOnboardingSnapshot = async (): Promise<OnboardingSnapshot | null> => {
-                const fallback = (state.data ?? {}) as OnboardingSnapshot;
-                const userId = userState.user?.uid;
-
-                if (!userId) {
-                    return fallback;
-                }
-
-                try {
-                    const userDoc = await getDoc(doc(firestore(), 'Users', userId));
-                    const data = userDoc.data();
-                    const remoteSnapshot = data?.onboarding as OnboardingSnapshot | undefined;
-                    return remoteSnapshot ?? fallback;
-                } catch (readError) {
-                    console.warn('Failed to load onboarding data:', readError);
-                    return fallback;
-                }
-            };
-
-            const fetchSampleMenu = async () => {
-                const hasExistingMenu = Object.values(menuBundles).some(
-                    (bundle) => bundle?.recipes?.recipes?.length
-                );
-
-                setLoading(!hasExistingMenu);
-                setError(null);
-                if (isMounted && !hasExistingMenu) {
-                    setMenuBundles({ breakfast: null, lunch: null, dinner: null });
-                }
-
-                try {
-                    const resolvedSnapshot = await loadOnboardingSnapshot();
-                    if (!isMounted) {
-                        return;
-                    }
-
-                    setSnapshot(resolvedSnapshot);
-
-                    const routines = resolvedSnapshot?.routines ?? DEFAULT_ROUTINES;
-                    const dayKey = pickSampleDayKey(routines);
-                    const planForDay = buildMealPlan(routines[dayKey]);
-                    const dateKey = buildDateKey(getNextWeekdayDate(dayKey));
-
-                    setSampleDay({
-                        key: dayKey,
-                        label: DAY_LABELS[dayKey],
-                        dateKey,
-                        mealPlan: planForDay,
-                    });
-
-                    const mealTypes = MEAL_ORDER.filter((mealType) => planForDay[mealType]);
-                    if (!mealTypes.length) {
-                        return;
-                    }
-
-                    const userId = userState.user?.uid ?? 'anonymous';
-                    const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>(
-                        'generateOpenAIMenu'
-                    );
-                    const callRecipes = functions.httpsCallable<
-                        { params: MenuRecipeParams },
-                        MenuRecipesCallResponse
-                    >('generateOpenAIRecipe');
-
-                    let lastError: string | null = null;
-                    let loadedCount = 0;
-
-                    const updateBundle = (mealType: MenuMealType, bundle: MenuBundle) => {
-                        if (!isMounted) {
-                            return;
-                        }
-                        setMenuBundles((prev) => ({
-                            ...prev,
-                            [mealType]: bundle,
-                        }));
-                    };
-
-                    for (const mealType of mealTypes) {
-                        const request = buildMenuRequest(resolvedSnapshot, userId, dateKey, dayKey, mealType);
-
-                        try {
-                            const menuResult = await callMenu({ request });
-                            const menuData = menuResult.data?.menu;
-
-                            if (!menuData?.items?.length) {
-                                throw new Error('Menü verisi alınamadı');
-                            }
-
-                            const recipeParams: MenuRecipeParams = {
-                                ...request,
-                                menu: menuData,
-                            };
-
-                            const recipesResult = await callRecipes({ params: recipeParams });
-                            const recipesData = recipesResult.data?.menuRecipes;
-
-                            if (!recipesData?.recipes?.length) {
-                                throw new Error('Tarif verisi alınamadı');
-                            }
-
-                            updateBundle(mealType, {
-                                menu: menuData,
-                                recipes: recipesData,
-                            });
-                            loadedCount += 1;
-                            continue;
-                        } catch (err: unknown) {
-                            lastError = getFunctionsErrorMessage(err);
-                        }
-
-                        try {
-                            const firestoreMenu = await fetchMenuBundle(userId, dateKey, request.mealType);
-                            if (firestoreMenu) {
-                                updateBundle(mealType, firestoreMenu);
-                                loadedCount += 1;
-                            }
-                        } catch (firestoreError) {
-                            console.warn('Menu Firestore read error:', firestoreError);
-                        }
-                    }
-
-                    if (lastError && loadedCount === 0 && isMounted) {
-                        setError(lastError);
-                    }
-                } catch (err: unknown) {
-                    console.error('Sample menu fetch error:', err);
-                    if (isMounted) {
-                        setError(getFunctionsErrorMessage(err));
-                    }
-                } finally {
-                    if (isMounted) {
-                        setLoading(false);
-                    }
-                }
-            };
-
-            fetchSampleMenu();
-
-            return () => {
-                isMounted = false;
-            };
-        }, [menuBundles, state.data, userState.isLoading, userState.user?.uid])
-    );
-
-    const userName = snapshot?.profile?.name || state.data.profile?.name || 'Size';
+    const userName = contextSnapshot?.profile?.name || state.data.profile?.name || 'Size';
     const plannedMealCount = useMemo(() => {
         const plan = sampleDay?.mealPlan;
         return plan ? getMealCount(plan) : 0;
@@ -606,6 +448,7 @@ export default function AnalysisScreen() {
 
             const meta = MEAL_META[mealType];
             const items = buildMealItems(menuBundles[mealType]?.recipes?.recipes ?? []);
+            const isLoading = loadingStates[mealType];
             sections.push({
                 id: mealType,
                 title: meta.label,
@@ -613,26 +456,71 @@ export default function AnalysisScreen() {
                 tint: meta.tint,
                 iconColor: meta.iconColor,
                 items,
-                emptyMessage: buildEmptyMessage(loading, error),
+                emptyMessage: isLoading ? '' : (error ? 'Bu öğün hazırlanamadı.' : 'Öneri hazırlanıyor.'),
+                isLoading,
             });
         }
 
         return sections;
-    }, [error, loading, menuBundles, sampleDay]);
+    }, [error, loadingStates, menuBundles, sampleDay]);
+
     const mealCount = mealSections.length;
+    const [displayedText, setDisplayedText] = useState('');
+    const [messageIndex, setMessageIndex] = useState(0);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const LOADING_REASONING_MESSAGES = useMemo(() => [
+        "Haftalık rutini inceliyorum... 🧐",
+        "Sevmediğin malzemeleri ayıkladım! 🚫",
+        "Sana en uygun lezzetleri seçiyorum... 👩‍🍳",
+        "Kalori dengesini ayarlıyorum... ⚖️",
+        "Ofis günleri için pratik çözümler düşünüyorum... 💼",
+        "Akşam yemekleri için wow etkisi yaratıyorum! ✨",
+        "Son rötuşları yapıyorum... 🎨"
+    ], []);
+
+    useEffect(() => {
+        const allLoaded = !loadingStates.breakfast && !loadingStates.lunch && !loadingStates.dinner;
+        if (allLoaded) return;
+
+        const currentMessage = LOADING_REASONING_MESSAGES[messageIndex];
+        const typeSpeed = isDeleting ? 30 : 50;
+
+        const timer = setTimeout(() => {
+            if (!isDeleting && displayedText === currentMessage) {
+                // Determine wait time based on whether it's the full message or just a pause
+                setTimeout(() => setIsDeleting(true), 1500);
+            } else if (isDeleting && displayedText === '') {
+                setIsDeleting(false);
+                setMessageIndex((prev) => (prev + 1) % LOADING_REASONING_MESSAGES.length);
+            } else {
+                setDisplayedText(
+                    currentMessage.substring(0, displayedText.length + (isDeleting ? -1 : 1))
+                );
+            }
+        }, typeSpeed);
+
+        return () => clearTimeout(timer);
+    }, [displayedText, isDeleting, messageIndex, loadingStates, LOADING_REASONING_MESSAGES]);
 
     const reasoningText = useMemo(() => {
+        const allLoaded = !loadingStates.breakfast && !loadingStates.lunch && !loadingStates.dinner;
+
+        if (!allLoaded) {
+            return displayedText;
+        }
+
         const order: MenuMealType[] = ['dinner', 'lunch', 'breakfast'];
         for (const mealType of order) {
-            const text = menuBundles[mealType]?.menu.reasoning?.trim();
+            const text = menuBundles[mealType]?.menu?.reasoning?.trim();
             if (text) {
                 return text;
             }
         }
         return '';
-    }, [menuBundles]);
+    }, [menuBundles, loadingStates, displayedText]);
 
-    const showReasoning = !error && reasoningText.length > 0;
+    const showReasoning = !error;
 
     const handleContinue = () => {
         dispatch({ type: 'SET_STEP', payload: 12 });
@@ -680,8 +568,8 @@ export default function AnalysisScreen() {
                     ) : null}
 
                     {mealSections.length ? (
-                        mealSections.map((section) => (
-                            <View key={section.id} style={styles.section}>
+                        mealSections.map((section, index) => (
+                            <View key={section.id} style={[styles.section, index > 0 && { marginTop: spacing.lg }]}>
                                 <View style={styles.sectionHeader}>
                                     <View style={[styles.sectionIcon, { backgroundColor: section.tint }]}>
                                         <MaterialCommunityIcons
@@ -729,7 +617,7 @@ export default function AnalysisScreen() {
                                                         </View>
                                                     </View>
                                                     <Text style={styles.mealTitle} numberOfLines={1}>
-                                                        {item.title}
+                                                        {item.title.charAt(0).toUpperCase() + item.title.slice(1)}
                                                     </Text>
                                                     <View style={styles.mealFooterRow}>
                                                         <View style={styles.calorieRow}>
@@ -754,12 +642,18 @@ export default function AnalysisScreen() {
                                         ))
                                     ) : (
                                         <View style={styles.emptyMealCard}>
-                                            <MaterialCommunityIcons
-                                                name="calendar-blank-outline"
-                                                size={16}
-                                                color={colors.textMuted}
-                                            />
-                                            <Text style={styles.emptyMealText}>{section.emptyMessage}</Text>
+                                            {section.isLoading ? (
+                                                <ActivityIndicator size="small" color={colors.textMuted} />
+                                            ) : (
+                                                <MaterialCommunityIcons
+                                                    name="calendar-blank-outline"
+                                                    size={16}
+                                                    color={colors.textMuted}
+                                                />
+                                            )}
+                                            <Text style={styles.emptyMealText}>
+                                                {section.isLoading ? 'Menü hazırlanıyor...' : section.emptyMessage}
+                                            </Text>
                                         </View>
                                     )}
                                 </View>

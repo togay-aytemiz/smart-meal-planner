@@ -175,8 +175,8 @@ export default function RoutinesScreen() {
                 <Text style={styles.title}>Haftalık Rutinler</Text>
                 <Text style={styles.subtitle}>
                     {members.length > 1
-                        ? `${activeMember.name} için değişiklik yapmak istediğiniz günlere tıklayın`
-                        : 'Değişiklik yapmak istediğiniz günlere tıklayın'}
+                        ? `${activeMember.name} için değişiklik yapmak istediğiniz günlere dokunun`
+                        : 'Değişiklik yapmak istediğiniz günlere dokunun'}
                 </Text>
             </View>
 
@@ -264,7 +264,7 @@ export default function RoutinesScreen() {
                             pointerEvents="none"
                         >
                             <Text style={styles.hintEmoji}>👆</Text>
-                            <Text style={styles.hintText}>Değiştirmek için tıkla</Text>
+                            <Text style={styles.hintText}>Değiştirmek için dokun</Text>
                         </Animated.View>
                     )}
                 </View>

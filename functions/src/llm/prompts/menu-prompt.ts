@@ -56,6 +56,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     routine,
     existingPantry,
     avoidIngredients,
+    avoidItemNames,
     maxPrepTime,
     maxCookTime,
     previousPreferences,
@@ -91,6 +92,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     routine: routine ?? null,
     existingPantry: existingPantry ?? null,
     avoidIngredients: avoidIngredients ?? null,
+    avoidItemNames: avoidItemNames ?? null,
     maxPrepTime: maxPrepTime ?? null,
     maxCookTime: maxCookTime ?? null,
     previousPreferences: previousPreferences ?? null,
@@ -105,6 +107,11 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   prompt += "- Onboarding ve gün bazlı bağlam verilerini kullan; soru sorma.\n";
   prompt += "- items alanı { course, name } içeren 1-4 öğelik bir dizi olmalı.\n";
   prompt += "- Menü Mantık Matrisi'ni uygula: mutfağa göre doğru öğün yapısı kur ve kültür dışı kombinasyonlardan kaçın.\n";
+
+  if (avoidItemNames && avoidItemNames.length > 0) {
+    prompt += `- ÇEŞİTLİLİK KURALI: Bu hafta şu yemekler zaten kullanıldı, ASLA bunlardan birini veya benzerini önerme: ${avoidItemNames.join(", ")}.\n`;
+    prompt += "- Bu listedeki yemeklerin türevlerini de önerme (örn: Mercimek Çorbası listedeyse Süzme Mercimek de önerme). Kesinlikle farklı bir alternatif bul.\n";
+  }
   if (resolvedMealType === "dinner") {
     prompt +=
       "- 3 + 1 kuralı: Ana yemek + yan yemek + (salata/meze veya çorba). Bu şema 3 öğe beklediği için yalnızca bu 3 bileşeni üret; içecek gibi opsiyonel +1'i ekleme.\n";
@@ -163,8 +170,17 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     "- reasoningHint içinde wow/modern vurgusu varsa mercimek, tarhana, ezogelin veya yayla gibi klasik çorbalardan kaçın.\n";
   prompt +=
     "- weeklyContext.ingredientSynergyFrom varsa reasoning içinde bunu açıkça belirt (örn: \"Dün akşam ... olduğu için bugün ...\").\n";
-  prompt +=
-    "- weeklyContext.reasoningHint varsa reasoning içinde bu ipucunu doğal şekilde kullan.\n";
+
+  if (weeklyContext?.leftoverMainDish) {
+    prompt += `- ZORUNLU ANA YEMEK: "${weeklyContext.leftoverMainDish}".\n`;
+    prompt += "- Bu yemeği ana yemek (main) olarak kullanmalısın. Adını değiştirebilirsin ama içerik aynı olmalı.\n";
+    prompt += "- YAN YEMEK VE SALATA/MEZE KESİNLİKLE FARKLI OLMALI. Önceki günün aynısını asla önerme.\n";
+    prompt += "- Amacımız: \"Aynı ana yemek, tamamen farklı bir tabak deneyimi\". Yan ürünlerle çeşitlilik yarat.\n";
+    prompt += "- reasoning: \"Dün akşam\" yerine \"Bu yemeği verimli planlama için iki günlük düşündüm\" gibi daha profesyonel/zamansız bir dil kullan. \"Dün yediğin\" deme (belki kullanıcı bugün başladı).\n";
+  } else if (weeklyContext?.reasoningHint) {
+    prompt += "- weeklyContext.reasoningHint varsa reasoning içinde bu ipucunu doğal şekilde kullan.\n";
+  }
+
   prompt += `- menuType alanı \"${resolvedMealType}\" olmalı.\n`;
   prompt += "- cuisine alanı seçilen mutfak türü olmalı (Türkçe).\n";
   prompt += "- Menü öğeleri birbiriyle uyumlu olmalı.\n";

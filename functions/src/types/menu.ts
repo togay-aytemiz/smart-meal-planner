@@ -23,6 +23,7 @@ export type WeeklyContext = {
   };
   reasoningHint?: string;
   seasonalityHint?: string;
+  leftoverMainDish?: string; // Force usage of a specific main dish (for COET)
 };
 
 export interface MenuDecision {
@@ -40,23 +41,23 @@ export interface DailyMenu {
   id: string;
   userId: string;
   date: string; // YYYY-MM-DD format
-  
+
   // Day context (from user routine)
   dayOfWeek: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
   routineType: "office" | "remote" | "gym" | "school" | "off";
-  
+
   // Default: Single meal (dinner)
   dinner?: MenuMeal;
-  
+
   // Future: Full daily menu
   breakfast?: MenuMeal;
   lunch?: MenuMeal;
   snacks?: MenuMeal[];
-  
+
   // Reasoning/Explanation (from LLM)
   reasoning: string; // "Neden bu menü?" - LLM'in açıklaması
   // Örnek: "Salı günü spor demişsin ve ben de buna göre yüksek proteinli, post-workout recovery için ideal bir akşam yemeği öneriyorum. Bu yemek kas onarımı için gerekli protein ve karbonhidrat dengesini sağlıyor."
-  
+
   // User context used for generation
   context: {
     dietaryRestrictions: string[];
@@ -69,7 +70,7 @@ export interface DailyMenu {
     gymDay?: boolean;
     portableRequired?: boolean; // for office/remote days
   };
-  
+
   // Feedback & Learning (Future - Post-MVP)
   feedback?: {
     liked?: string[]; // recipe IDs user liked
@@ -77,13 +78,13 @@ export interface DailyMenu {
     swapped?: string[]; // recipe IDs user swapped
     notes?: string; // user notes/feedback
   };
-  
+
   // LLM Metadata
   generatedBy: "openai" | "gemini";
   generatedAt: Date;
   generationCost: number;
   promptHash?: string; // For caching similar prompts
-  
+
   // Timestamps
   createdAt: Date;
   updatedAt: Date;
@@ -95,14 +96,14 @@ export interface MenuMeal {
   servings: number; // Adjusted servings for this meal
   isLocked: boolean; // User locked this meal
   isAiSuggested: boolean; // true if AI generated, false if user added
-  
+
   // Future: User modifications
   modifications?: {
     swappedIngredients?: Array<{ from: string; to: string }>;
     adjustedServings?: number; // Original vs adjusted
     notes?: string;
   };
-  
+
   // Statistics
   suggestedAt?: Date;
   viewedAt?: Date;
@@ -117,7 +118,7 @@ export interface MenuGenerationRequest {
   userId: string;
   date: string; // YYYY-MM-DD
   dayOfWeek?: string; // Auto-calculated from date if not provided
-  
+
   // User preferences (from onboarding)
   dietaryRestrictions: string[];
   allergies: string[];
@@ -126,7 +127,7 @@ export interface MenuGenerationRequest {
   skillLevel: "beginner" | "intermediate" | "expert";
   equipment: string[];
   householdSize: number;
-  
+
   // Day-specific context
   routine?: {
     type: "office" | "remote" | "gym" | "school" | "off";
@@ -137,13 +138,14 @@ export interface MenuGenerationRequest {
     remoteMeals?: ("breakfast" | "lunch" | "dinner")[];
     excludeFromPlan?: boolean;
   };
-  
+
   // Additional context
   existingPantry?: string[];
   avoidIngredients?: string[];
+  avoidItemNames?: string[];
   maxPrepTime?: number;
   maxCookTime?: number;
-  
+
   // Future: User feedback to incorporate
   previousPreferences?: {
     likedRecipes?: string[]; // Recipe IDs
@@ -151,13 +153,13 @@ export interface MenuGenerationRequest {
     avoidIngredients?: string[]; // Additional avoid list from feedback
     preferredCuisines?: string[]; // Learned preferences
   };
-  
+
   // Default: Generate single meal (breakfast/lunch/dinner)
   mealType: MealType; // Future: "full"
 
   // Weekly planning context (optional)
   weeklyContext?: WeeklyContext;
-  
+
   // Image generation
   generateImage?: boolean;
 }
@@ -165,6 +167,7 @@ export interface MenuGenerationRequest {
 export type WeeklyMenuGenerationRequest = {
   userId?: string;
   weekStart?: string; // YYYY-MM-DD
+  singleDay?: string; // YYYY-MM-DD - if provided, only generate this day
   onboarding?: Partial<OnboardingData>;
   repeatMode?: "consecutive" | "spaced";
   existingPantry?: string[];

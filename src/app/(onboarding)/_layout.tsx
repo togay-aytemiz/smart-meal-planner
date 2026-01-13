@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Text, Animated } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useRef } from 'react';
 import { OnboardingProvider, useOnboarding, TOTAL_STEPS } from '../../contexts/onboarding-context';
+import { SampleMenuProvider } from '../../contexts/sample-menu-context';
 import { ProgressBar } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -97,7 +98,9 @@ function OnboardingLayoutContent() {
 export default function OnboardingLayout() {
     return (
         <OnboardingProvider>
-            <OnboardingLayoutContent />
+            <SampleMenuProvider>
+                <OnboardingLayoutContent />
+            </SampleMenuProvider>
         </OnboardingProvider>
     );
 }

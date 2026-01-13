@@ -375,6 +375,7 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 ## Future Roadmap
 
 ### Short-term
+- [ ] **New Week Planning Flow (Deferred):** When starting a new week, prompt user for their weekly plan and consider previous week's menus to avoid repetition
 - Third-party calendar integration (Google, Apple)
 - Pantry tracking
 - Batch cooking suggestions

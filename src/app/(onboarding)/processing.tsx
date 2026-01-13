@@ -1,11 +1,17 @@
-import { View, Text, StyleSheet, Animated, Easing, Image } from 'react-native';
+import { View, Text, StyleSheet, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
-import { useOnboarding } from '../../contexts/onboarding-context';
+import { useOnboarding, type WeeklyRoutine } from '../../contexts/onboarding-context';
+import { useSampleMenu } from '../../contexts/sample-menu-context';
+import { useUser } from '../../contexts/user-context';
+
+const STORAGE_KEY = '@onboarding_data';
 
 const LOADING_MESSAGES = [
     "Rutinleriniz analiz ediliyor...",
@@ -15,10 +21,26 @@ const LOADING_MESSAGES = [
     "Haftalık planınız oluşturuluyor..."
 ];
 
+type OnboardingSnapshot = {
+    profile?: { name?: string };
+    householdSize?: number;
+    dietary?: { restrictions?: string[]; allergies?: string[] };
+    cuisine?: { selected?: string[] };
+    cooking?: {
+        timePreference?: 'quick' | 'balanced' | 'elaborate';
+        skillLevel?: 'beginner' | 'intermediate' | 'expert';
+        equipment?: string[];
+    };
+    routines?: WeeklyRoutine;
+};
+
 export default function ProcessingScreen() {
     const router = useRouter();
-    const { dispatch } = useOnboarding();
+    const { state, dispatch } = useOnboarding();
+    const { state: userState } = useUser();
+    const { startLoading, waitForFirstMeal, hasStarted } = useSampleMenu();
     const [messageIndex, setMessageIndex] = useState(0);
+    const hasNavigatedRef = useRef(false);
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -44,20 +66,51 @@ export default function ProcessingScreen() {
             setTimeout(() => {
                 setMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
             }, 200);
-        }, 1500);
-
-        // Auto advance after 6 seconds (roughly 4 messages)
-        const timeout = setTimeout(() => {
-            clearInterval(messageInterval);
-            dispatch({ type: 'SET_STEP', payload: 11 });
-            router.replace('/(onboarding)/analysis');
-        }, 6000);
+        }, 3000);
 
         return () => {
             clearInterval(messageInterval);
-            clearTimeout(timeout);
         };
     }, []);
+
+    // Start API loading and wait for first meal
+    useEffect(() => {
+        if (userState.isLoading || hasStarted || hasNavigatedRef.current) {
+            return;
+        }
+
+        const loadAndNavigate = async () => {
+            // Load onboarding snapshot
+            const userId = userState.user?.uid ?? 'anonymous';
+            let snapshot: OnboardingSnapshot | null = (state.data ?? {}) as OnboardingSnapshot;
+
+            if (userId !== 'anonymous') {
+                try {
+                    const userDoc = await getDoc(doc(firestore(), 'Users', userId));
+                    const data = userDoc.data();
+                    const remoteSnapshot = data?.onboarding as OnboardingSnapshot | undefined;
+                    snapshot = remoteSnapshot ?? snapshot;
+                } catch (readError) {
+                    console.warn('Failed to load onboarding data:', readError);
+                }
+            }
+
+            // Start loading meals in parallel
+            startLoading(userId, snapshot);
+
+            // Wait for first meal to be ready
+            const success = await waitForFirstMeal();
+
+            // Navigate to analysis
+            if (!hasNavigatedRef.current) {
+                hasNavigatedRef.current = true;
+                dispatch({ type: 'SET_STEP', payload: 11 });
+                router.replace('/(onboarding)/analysis');
+            }
+        };
+
+        loadAndNavigate();
+    }, [userState.isLoading, hasStarted]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -82,16 +135,15 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
-        // Removed justifyContent: 'center' to allow consistent top spacing
         alignItems: 'center',
     },
     content: {
         alignItems: 'center',
         paddingHorizontal: spacing.xl,
-        marginTop: '40%', // Push down slightly but not vertically centered
+        marginTop: '40%',
     },
     iconContainer: {
-        width: 150, // Increased slightly for the gif
+        width: 150,
         height: 150,
         justifyContent: 'center',
         alignItems: 'center',
@@ -105,6 +157,6 @@ const styles = StyleSheet.create({
         ...typography.h3,
         color: colors.textPrimary,
         textAlign: 'center',
-        minHeight: 60, // Prevent layout shift
+        minHeight: 60,
     },
 });

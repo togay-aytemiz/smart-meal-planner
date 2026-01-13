@@ -107,7 +107,7 @@ export default function WelcomeScreen() {
 
                     <Text style={styles.title}>Akıllı Yemek Planlama</Text>
                     <Text style={styles.subtitle}>
-                        "Bugün ne pişirsem?" derdine son ver, hatta bu hafta gibi de olabilir
+                        Haftalık menünü akıllıca planla, "ne pişirsem" derdinden kurtul
                     </Text>
                 </Animated.View>
 

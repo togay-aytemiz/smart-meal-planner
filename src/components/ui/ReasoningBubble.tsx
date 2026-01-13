@@ -8,7 +8,8 @@ interface ReasoningBubbleProps {
 }
 
 export function ReasoningBubble({ text }: ReasoningBubbleProps) {
-    if (!text) return null;
+    // Always render to prevent layout jump, use placeholder space if empty
+    const displayText = text || " ";
 
     return (
         <View style={styles.container}>
@@ -19,7 +20,7 @@ export function ReasoningBubble({ text }: ReasoningBubbleProps) {
             />
             <View style={styles.bubble}>
                 <Text style={styles.title}>Neden bu menü?</Text>
-                <Text style={styles.text}>{text}</Text>
+                <Text style={styles.text}>{displayText}</Text>
             </View>
         </View>
     );
@@ -57,5 +58,6 @@ const styles = StyleSheet.create({
         ...typography.bodySmall,
         color: colors.textSecondary,
         lineHeight: 20,
+        minHeight: 40, // 2 lines
     },
 });

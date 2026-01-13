@@ -159,6 +159,16 @@ const findRecipeLink = (links: RecipeLink[], course: MenuRecipeCourse, name?: st
   return links.find((link) => normalizeText(link.name) === normalizedName) ?? null;
 };
 
+const findExistingRecipe = async (hash: string): Promise<string | null> => {
+  const db = getDb();
+  const snapshot = await db.collection("recipes")
+    .where("hash", "==", hash)
+    .limit(1)
+    .get();
+
+  return snapshot.empty ? null : snapshot.docs[0].id;
+};
+
 const buildMenuDocument = ({
   menu,
   params,
@@ -561,11 +571,12 @@ const buildWeeklyContext = ({
   seasonalityHint,
 });
 
+
 const buildRepeatReasoning = () =>
-  "Dün akşam pişirdiğin yemeği bugün tekrar planladım, böylece hazırlık süresini kısalttım.";
+  "Bu yemeği verimli bir mutfak planlaması için (Cook Once Eat Twice) iki günlük düşündüm. Yanına taze ve farklı eşlikçiler ekleyerek çeşitliliği korudum.";
 
 const buildGenericRepeatReasoning = () =>
-  "Bu öğünü haftalık dengeyi korumak için tekrar planladım.";
+  "Haftalık dengeyi gözeterek bu öğünü tekrar değerlendirdim.";
 
 // Test Gemini LLM endpoint
 export const testGemini = onCall(async (request) => {
@@ -698,24 +709,41 @@ export const generateOpenAIRecipe = onCall(async (request) => {
     const menuRef = db.collection("menus").doc(menuDocId);
     const batch = db.batch();
 
-    const recipeLinks = menuRecipes.recipes.map((recipe) => {
-      const recipeRef = recipesRef.doc();
-      const recipeDoc = buildRecipeDocument({
-        recipe,
-        menu: params.menu,
-        menuId: menuDocId,
-        userId,
-        provider,
-      });
+    const recipeLinks: RecipeLink[] = [];
+    let reusedCount = 0;
 
-      batch.set(recipeRef, recipeDoc);
+    for (const recipe of menuRecipes.recipes) {
+      const hash = buildRecipeHash(recipe, params.menu.cuisine);
+      const existingId = await findExistingRecipe(hash);
 
-      return {
-        id: recipeRef.id,
-        course: recipe.course,
-        name: recipe.name,
-      };
-    });
+      if (existingId) {
+        // Reuse existing recipe
+        console.log(`Reusing existing recipe: ${recipe.name} (hash: ${hash.slice(0, 8)})`);
+        recipeLinks.push({
+          id: existingId,
+          course: recipe.course,
+          name: recipe.name,
+        });
+        reusedCount += 1;
+      } else {
+        // Create new recipe
+        const recipeRef = recipesRef.doc();
+        const recipeDoc = buildRecipeDocument({
+          recipe,
+          menu: params.menu,
+          menuId: menuDocId,
+          userId,
+          provider,
+        });
+
+        batch.set(recipeRef, recipeDoc);
+        recipeLinks.push({
+          id: recipeRef.id,
+          course: recipe.course,
+          name: recipe.name,
+        });
+      }
+    }
 
     const menuDoc = buildMenuDocument({
       menu: params.menu,
@@ -731,6 +759,8 @@ export const generateOpenAIRecipe = onCall(async (request) => {
     return {
       success: true,
       menuRecipes,
+      reusedRecipeCount: reusedCount,
+      newRecipeCount: menuRecipes.recipes.length - reusedCount,
       model: openai.getName(),
       timestamp: new Date().toISOString(),
     };
@@ -786,16 +816,23 @@ export const generateWeeklyMenu = onCall(async (request) => {
     const lunchAssignments = assignLunchSlots(weekDays);
     const dinnerAssignments = assignDinnerSlots(weekDays, repeatMode);
 
-    const assignments = [
+    let assignments = [
       ...breakfastAssignments,
       ...lunchAssignments,
       ...dinnerAssignments,
     ];
 
+    // Filter to single day if requested
+    const singleDay = payload.singleDay;
+    if (singleDay) {
+      assignments = assignments.filter((a) => a.date === singleDay);
+    }
+
     if (!assignments.length) {
       return {
         success: true,
         weekStart,
+        singleDay: singleDay ?? null,
         totalMenus: 0,
         uniqueMenus: 0,
         recipesCreated: 0,
@@ -805,11 +842,17 @@ export const generateWeeklyMenu = onCall(async (request) => {
 
     const uniqueSlots = new Map<string, MealAssignment>();
     for (const assignment of assignments) {
-      const slotKey = `${assignment.mealType}:${assignment.slotId}`;
+      let slotKey = `${assignment.mealType}:${assignment.slotId}`;
+      if (assignment.isRepeatFromPreviousDay) {
+        slotKey += ":repeat";
+      }
       if (!uniqueSlots.has(slotKey)) {
         uniqueSlots.set(slotKey, assignment);
       }
     }
+
+    const usedDishNames = new Set<string>();
+    const createdRecipeHashes = new Map<string, string>(); // Hash -> ID (for batch deduplication)
 
     const openai = new OpenAIProvider();
     const provider = openai.getName();
@@ -832,12 +875,14 @@ export const generateWeeklyMenu = onCall(async (request) => {
 
     const buildMenuRequest = (
       assignment: MealAssignment,
-      ingredientSynergyFrom?: WeeklyContext["ingredientSynergyFrom"]
+      ingredientSynergyFrom?: WeeklyContext["ingredientSynergyFrom"],
+      leftoverMainDish?: string
     ): MenuGenerationRequest => {
       const baseRequest = onboardingToMenuRequest(onboarding, assignment.date, {
         mealType: assignment.mealType,
         existingPantry: payload.existingPantry,
         avoidIngredients: payload.avoidIngredients,
+        avoidItemNames: Array.from(usedDishNames),
         maxPrepTime: payload.maxPrepTime,
         maxCookTime: payload.maxCookTime,
         generateImage: payload.generateImage,
@@ -851,6 +896,10 @@ export const generateWeeklyMenu = onCall(async (request) => {
         seasonalityHint: getSeasonalityHint(parseISODate(assignment.date)),
       });
 
+      if (leftoverMainDish) {
+        weeklyContext.leftoverMainDish = leftoverMainDish;
+      }
+
       return {
         ...baseRequest,
         userId,
@@ -861,9 +910,10 @@ export const generateWeeklyMenu = onCall(async (request) => {
     const generateSlot = async (
       slotKey: string,
       assignment: MealAssignment,
-      ingredientSynergyFrom?: WeeklyContext["ingredientSynergyFrom"]
+      ingredientSynergyFrom?: WeeklyContext["ingredientSynergyFrom"],
+      leftoverMainDish?: string
     ) => {
-      const menuRequest = buildMenuRequest(assignment, ingredientSynergyFrom);
+      const menuRequest = buildMenuRequest(assignment, ingredientSynergyFrom, leftoverMainDish);
       const menuResponse = await openai.generateMenu(menuRequest);
       const menu = menuResponse as unknown as MenuDecision;
 
@@ -873,6 +923,13 @@ export const generateWeeklyMenu = onCall(async (request) => {
           "Menu response is invalid"
         );
       }
+
+      // Accumulate generated dish names to avoid repetition
+      menu.items.forEach((item) => {
+        if (item.name) {
+          usedDishNames.add(item.name);
+        }
+      });
 
       if (menu.menuType !== assignment.mealType) {
         menu.menuType = assignment.mealType;
@@ -893,7 +950,36 @@ export const generateWeeklyMenu = onCall(async (request) => {
       }
 
       const menuDocId = buildMenuDocId(userId, assignment.date, menu.menuType);
-      const recipeLinks = menuRecipes.recipes.map((recipe) => {
+
+      // Process recipes with deduplication (parallel for speed, but coordinated via map)
+      const recipeLinks = await Promise.all(menuRecipes.recipes.map(async (recipe) => {
+        const hash = buildRecipeHash(recipe, menu.cuisine);
+
+        // 1. Check in-memory batch cache (created in this request)
+        if (createdRecipeHashes.has(hash)) {
+          const existingId = createdRecipeHashes.get(hash)!;
+          // console.log(`Reusing IN-BATCH recipe: ${recipe.name}`);
+          return {
+            id: existingId,
+            course: recipe.course,
+            name: recipe.name,
+          };
+        }
+
+        // 2. Check Firestore (globally existing)
+        const existingId = await findExistingRecipe(hash);
+        if (existingId) {
+          // console.log(`Reusing FIRESTORE recipe: ${recipe.name}`);
+          // Cache for subsequent slots in this request
+          createdRecipeHashes.set(hash, existingId);
+          return {
+            id: existingId,
+            course: recipe.course,
+            name: recipe.name,
+          };
+        }
+
+        // 3. Create new
         const recipeRef = recipesRef.doc();
         const recipeDoc = buildRecipeDocument({
           recipe,
@@ -905,12 +991,15 @@ export const generateWeeklyMenu = onCall(async (request) => {
 
         batch.set(recipeRef, recipeDoc);
 
+        // Register in cache
+        createdRecipeHashes.set(hash, recipeRef.id);
+
         return {
           id: recipeRef.id,
           course: recipe.course,
           name: recipe.name,
         };
-      });
+      }));
 
       recipeCount += recipeLinks.length;
 
@@ -934,7 +1023,19 @@ export const generateWeeklyMenu = onCall(async (request) => {
       .sort(([, first], [, second]) => first.dayIndex - second.dayIndex);
 
     for (const [slotKey, assignment] of dinnerSlots) {
-      await generateSlot(slotKey, assignment);
+      let leftoverMainDish: string | undefined;
+
+      if (assignment.isRepeatFromPreviousDay) {
+        // Parent key is the base slotId (without :repeat suffix)
+        // Our uniqueSlots map keys are "dinner:D1" and "dinner:D1:repeat"
+        // So parent is "dinner:D1"
+        const parentKey = `dinner:${assignment.slotId}`;
+        const parentResult = slotResults.get(parentKey);
+        if (parentResult?.mainDishName) {
+          leftoverMainDish = parentResult.mainDishName;
+        }
+      }
+      await generateSlot(slotKey, assignment, undefined, leftoverMainDish);
     }
 
     const breakfastSlots = Array.from(uniqueSlots.entries())
@@ -954,19 +1055,23 @@ export const generateWeeklyMenu = onCall(async (request) => {
       const previousDinner = previousDay
         ? dinnerAssignmentsByDate.get(previousDay.date)
         : undefined;
+
+      // Previous dinner might be fresh (D1) or repeat (D1).
+      // We need to construct the correct key to find the result.
       const previousDinnerKey = previousDinner
-        ? `dinner:${previousDinner.slotId}`
+        ? `dinner:${previousDinner.slotId}${previousDinner.isRepeatFromPreviousDay ? ":repeat" : ""}`
         : null;
+
       const previousDinnerMenu = previousDinnerKey
         ? slotResults.get(previousDinnerKey)
         : undefined;
       const ingredientSynergyFrom: WeeklyContext["ingredientSynergyFrom"] | undefined =
         previousDinner && previousDinnerMenu?.mainDishName
           ? {
-              mealType: "dinner",
-              date: previousDinner.date,
-              mainDishName: previousDinnerMenu.mainDishName,
-            }
+            mealType: "dinner",
+            date: previousDinner.date,
+            mainDishName: previousDinnerMenu.mainDishName,
+          }
           : undefined;
 
       await generateSlot(slotKey, assignment, ingredientSynergyFrom);
@@ -1035,6 +1140,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
     return {
       success: true,
       weekStart,
+      singleDay: singleDay ?? null,
       totalMenus: menuCount,
       uniqueMenus: slotResults.size,
       recipesCreated: recipeCount,

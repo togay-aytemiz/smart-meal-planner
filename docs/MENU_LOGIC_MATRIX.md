@@ -2,6 +2,8 @@
 
 Bu doküman, menü oluşturma motorunun mutfağa göre doğru öğün yapısını kurmasını ve kültür dışı kombinasyonları (örneğin "sushi yanına mercimek çorbası") engellemesini hedefler.
 
+> Not: MVP kapsamında yalnızca akşam menüsü üretilir. Kahvaltı ve öğle matrisleri sonraki adımlara ertelenmiştir.
+
 ## 1. Temel İlke: 3 + 1 Kuralı
 
 Mobil kullanıcı deneyimi için ideal denge:

@@ -160,7 +160,7 @@ const WEEKDAY_INDEX: Record<WeekdayKey, number> = {
 const MEAL_META: Record<MenuMealType, { label: string; icon: IconName; tint: string; iconColor: string }> = {
     breakfast: { label: 'Kahvaltı', icon: 'coffee-outline', tint: colors.accentSoft, iconColor: colors.primaryDark },
     lunch: { label: 'Öğle', icon: 'weather-sunny', tint: colors.warningLight, iconColor: colors.warning },
-    dinner: { label: 'Akşam', icon: 'silverware-fork-knife', tint: colors.surfaceMuted, iconColor: colors.textPrimary },
+    dinner: { label: 'Bugünün menüsü', icon: 'silverware-fork-knife', tint: colors.surfaceMuted, iconColor: colors.textPrimary },
 };
 
 const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; mediaTone: string }> = {
@@ -203,7 +203,7 @@ const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; med
 
 const COURSE_ORDER: MenuRecipeCourse[] = ['soup', 'main', 'side', 'pastry', 'salad', 'meze', 'dessert'];
 
-const MEAL_ORDER: MenuMealType[] = ['breakfast', 'lunch', 'dinner'];
+const MEAL_ORDER: MenuMealType[] = ['dinner'];
 const DEFAULT_SAMPLE_DAY: WeekdayKey = 'tuesday';
 const WEEKDAY_PRIORITY: WeekdayKey[] = ['tuesday', 'monday', 'wednesday', 'thursday', 'friday'];
 const WEEKEND_PRIORITY: WeekdayKey[] = ['saturday', 'sunday'];
@@ -227,8 +227,7 @@ const getNextWeekdayDate = (weekday: WeekdayKey) => {
     return nextDate;
 };
 
-const getMealCount = (plan: MealPlan) =>
-    Number(plan.breakfast) + Number(plan.lunch) + Number(plan.dinner);
+const getMealCount = (plan: MealPlan) => Number(plan.dinner);
 
 const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
     if (!routine) {
@@ -237,37 +236,6 @@ const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
 
     if (routine.excludeFromPlan) {
         return { breakfast: false, lunch: false, dinner: false };
-    }
-
-    if (routine.type === 'office') {
-        return {
-            breakfast: routine.officeBreakfastAtHome === 'yes',
-            lunch: routine.officeMealToGo === 'yes',
-            dinner: true,
-        };
-    }
-
-    if (routine.type === 'remote') {
-        if (routine.remoteMeals?.length) {
-            return {
-                breakfast: routine.remoteMeals.includes('breakfast'),
-                lunch: routine.remoteMeals.includes('lunch'),
-                dinner: routine.remoteMeals.includes('dinner'),
-            };
-        }
-        return { breakfast: true, lunch: true, dinner: true };
-    }
-
-    if (routine.type === 'school') {
-        return {
-            breakfast: routine.schoolBreakfast === 'yes',
-            lunch: false,
-            dinner: true,
-        };
-    }
-
-    if (routine.type === 'gym' || routine.type === 'off') {
-        return { breakfast: true, lunch: true, dinner: true };
     }
 
     return { breakfast: false, lunch: false, dinner: true };
@@ -301,14 +269,14 @@ const pickSampleDayKey = (routines: WeeklyRoutine): WeekdayKey => {
     };
 
     const weekdayChoice =
-        pickByMinMeals(WEEKDAY_PRIORITY, 2)
+        pickByMinMeals(WEEKDAY_PRIORITY, 1)
         ?? pickByMaxMeals(WEEKDAY_PRIORITY);
     if (weekdayChoice) {
         return weekdayChoice;
     }
 
     const weekendChoice =
-        pickByMinMeals(WEEKEND_PRIORITY, 2)
+        pickByMinMeals(WEEKEND_PRIORITY, 1)
         ?? pickByMaxMeals(WEEKEND_PRIORITY);
     if (weekendChoice) {
         return weekendChoice;
@@ -397,9 +365,9 @@ const buildEmptyMessage = (isLoading: boolean, errorText: string | null) => {
         return 'Menü hazırlanıyor.';
     }
     if (errorText) {
-        return 'Bu öğün hazırlanamadı.';
+        return 'Menü hazırlanamadı.';
     }
-    return 'Öneri hazırlanıyor.';
+    return 'Menü hazırlanıyor.';
 };
 
 export default function AnalysisScreen() {
@@ -456,7 +424,7 @@ export default function AnalysisScreen() {
                 tint: meta.tint,
                 iconColor: meta.iconColor,
                 items,
-                emptyMessage: isLoading ? '' : (error ? 'Bu öğün hazırlanamadı.' : 'Öneri hazırlanıyor.'),
+                emptyMessage: isLoading ? '' : (error ? 'Menü hazırlanamadı.' : 'Menü hazırlanıyor.'),
                 isLoading,
             });
         }
@@ -464,19 +432,17 @@ export default function AnalysisScreen() {
         return sections;
     }, [error, loadingStates, menuBundles, sampleDay]);
 
-    const mealCount = mealSections.length;
     const [displayedText, setDisplayedText] = useState('');
     const [messageIndex, setMessageIndex] = useState(0);
     const [isDeleting, setIsDeleting] = useState(false);
 
     const LOADING_REASONING_MESSAGES = useMemo(() => [
-        "Haftalık rutini inceliyorum... 🧐",
-        "Sevmediğin malzemeleri ayıkladım! 🚫",
-        "Sana en uygun lezzetleri seçiyorum... 👩‍🍳",
-        "Kalori dengesini ayarlıyorum... ⚖️",
-        "Ofis günleri için pratik çözümler düşünüyorum... 💼",
-        "Akşam yemekleri için wow etkisi yaratıyorum! ✨",
-        "Son rötuşları yapıyorum... 🎨"
+        'Haftalık rutinini inceliyorum...',
+        'Akşam menüsü için öncelikleri netleştiriyorum...',
+        'Hazırlık süresini optimize ediyorum...',
+        'Mevsime uygun malzemeleri seçiyorum...',
+        'Lezzet dengesini kuruyorum...',
+        'Son dokunuşları yapıyorum...',
     ], []);
 
     useEffect(() => {
@@ -510,7 +476,7 @@ export default function AnalysisScreen() {
             return displayedText;
         }
 
-        const order: MenuMealType[] = ['dinner', 'lunch', 'breakfast'];
+        const order: MenuMealType[] = ['dinner'];
         for (const mealType of order) {
             const text = menuBundles[mealType]?.menu?.reasoning?.trim();
             if (text) {
@@ -527,15 +493,18 @@ export default function AnalysisScreen() {
         router.push('/(onboarding)/paywall');
     };
 
-    const handleOpenMeal = (mealType: MenuMealType, course: MenuRecipeCourse) => {
+    const handleOpenMeal = (mealType: MenuMealType, course: MenuRecipeCourse, recipeName: string) => {
         const fallbackDate = new Date().toISOString().split('T')[0];
         const date = sampleDay?.dateKey ?? fallbackDate;
-        router.push({ pathname: '/cookbook/[course]', params: { course, mealType, date } });
+        router.push({
+            pathname: '/cookbook/[course]',
+            params: { course, mealType, date, recipeName },
+        });
     };
 
     const subtitleText = plannedMealCount > 0
-        ? `Alışkanlıklarınıza ve hedeflerinize göre oluşturduğumuz ${plannedMealCount} öğünlük örnek bir gün:`
-        : 'Alışkanlıklarınıza ve hedeflerinize göre oluşturduğumuz örnek bir gün:';
+        ? 'Alışkanlıklarınıza ve hedeflerinize göre oluşturduğumuz örnek bir akşam menüsü:'
+        : 'Alışkanlıklarınıza ve hedeflerinize göre oluşturduğumuz örnek bir gün menüsü:';
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -558,17 +527,14 @@ export default function AnalysisScreen() {
 
                     <View style={styles.dayHeader}>
                         <Text style={styles.dayTitle}>Örnek {sampleDay.label} Günü</Text>
-                        <View style={styles.mealCountPill}>
-                            <Text style={styles.mealCountText}>{mealCount} öğün</Text>
-                        </View>
                     </View>
 
                     {showReasoning ? (
                         <ReasoningBubble text={reasoningText} />
                     ) : null}
 
-                    {mealSections.length ? (
-                        mealSections.map((section, index) => (
+                {mealSections.length ? (
+                    mealSections.map((section, index) => (
                             <View key={section.id} style={[styles.section, index > 0 && { marginTop: spacing.lg }]}>
                                 <View style={styles.sectionHeader}>
                                     <View style={[styles.sectionIcon, { backgroundColor: section.tint }]}>
@@ -588,7 +554,7 @@ export default function AnalysisScreen() {
                                                 key={item.id}
                                                 activeOpacity={0.85}
                                                 style={styles.mealCard}
-                                                onPress={() => handleOpenMeal(section.id, item.course)}
+                                                onPress={() => handleOpenMeal(section.id, item.course, item.title)}
                                             >
                                                 <View style={[styles.mealMedia, { backgroundColor: item.mediaTone }]}>
                                                     <MaterialCommunityIcons
@@ -666,7 +632,7 @@ export default function AnalysisScreen() {
                                 size={18}
                                 color={colors.textMuted}
                             />
-                            <Text style={styles.emptyText}>Bu gün için öğün planlanmadı.</Text>
+                            <Text style={styles.emptyText}>Bu gün için menü planlanmadı.</Text>
                         </View>
                     )}
                 </Animated.View>
@@ -727,18 +693,6 @@ const styles = StyleSheet.create({
     dayTitle: {
         ...typography.h3,
         color: colors.textPrimary,
-    },
-    mealCountPill: {
-        backgroundColor: colors.surface,
-        borderRadius: radius.full,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-        borderWidth: 1,
-        borderColor: colors.borderLight,
-    },
-    mealCountText: {
-        ...typography.caption,
-        color: colors.textSecondary,
     },
     section: {
         gap: spacing.md,

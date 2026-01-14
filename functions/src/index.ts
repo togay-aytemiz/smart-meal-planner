@@ -239,8 +239,6 @@ type WeekDayContext = {
   isWeekend: boolean;
 };
 
-type LunchContext = "portable" | "fresh";
-
 type MealAssignment = {
   date: string;
   dayOfWeek: WeekdayKey;
@@ -248,7 +246,6 @@ type MealAssignment = {
   mealType: MealType;
   slotId: string;
   isRepeatFromPreviousDay?: boolean;
-  lunchContext?: LunchContext;
 };
 
 const DAY_KEYS: WeekdayKey[] = [
@@ -354,54 +351,7 @@ const resolveMealPlan = (routine: RoutineDay | undefined): MealPlan => {
     return { breakfast: false, lunch: false, dinner: false };
   }
 
-  if (routine.type === "office") {
-    return {
-      breakfast: routine.officeBreakfastAtHome === "yes",
-      lunch: routine.officeMealToGo === "yes",
-      dinner: true,
-    };
-  }
-
-  if (routine.type === "remote") {
-    if (routine.remoteMeals?.length) {
-      return {
-        breakfast: routine.remoteMeals.includes("breakfast"),
-        lunch: routine.remoteMeals.includes("lunch"),
-        dinner: routine.remoteMeals.includes("dinner"),
-      };
-    }
-    return { breakfast: true, lunch: true, dinner: true };
-  }
-
-  if (routine.type === "school") {
-    return {
-      breakfast: routine.schoolBreakfast === "yes",
-      lunch: false,
-      dinner: true,
-    };
-  }
-
-  if (routine.type === "gym" || routine.type === "off") {
-    return { breakfast: true, lunch: true, dinner: true };
-  }
-
   return { breakfast: false, lunch: false, dinner: true };
-};
-
-const getLunchContext = (routine: RoutineDay | undefined): LunchContext => {
-  if (!routine) {
-    return "fresh";
-  }
-
-  if (
-    routine.type === "office" ||
-    routine.type === "school" ||
-    routine.officeMealToGo === "yes"
-  ) {
-    return "portable";
-  }
-
-  return "fresh";
 };
 
 const getSeasonalityHint = (date: Date) => {
@@ -433,80 +383,6 @@ const buildWeekDays = (weekStart: Date, routines: WeeklyRoutine): WeekDayContext
       isWeekend: WEEKEND_KEYS.has(dayOfWeek),
     };
   });
-};
-
-const assignBreakfastSlots = (days: WeekDayContext[]): MealAssignment[] => {
-  let weekdayToggle = 0;
-  const assignments: MealAssignment[] = [];
-
-  for (const day of days) {
-    if (!day.plan.breakfast) {
-      continue;
-    }
-
-    const slotId = day.isWeekend ? "C" : weekdayToggle % 2 === 0 ? "A" : "B";
-    if (!day.isWeekend) {
-      weekdayToggle += 1;
-    }
-
-    assignments.push({
-      date: day.date,
-      dayOfWeek: day.dayOfWeek,
-      dayIndex: day.dayIndex,
-      mealType: "breakfast",
-      slotId,
-    });
-  }
-
-  return assignments;
-};
-
-const assignLunchSlots = (days: WeekDayContext[]): MealAssignment[] => {
-  const lunchDays = days.filter((day) => day.plan.lunch);
-  if (!lunchDays.length) {
-    return [];
-  }
-
-  const uniqueCount = lunchDays.length >= 4 ? 4 : Math.max(1, Math.min(3, lunchDays.length));
-  const slots = Array.from({ length: uniqueCount }, (_, index) => `L${index + 1}`);
-  const slotContexts = new Map<string, LunchContext>();
-  const assignments: MealAssignment[] = [];
-  let slotIndex = 0;
-  let prevSlot: string | null = null;
-
-  for (const day of lunchDays) {
-    const lunchContext = getLunchContext(day.routine);
-    let attempts = 0;
-    let slotId = slots[slotIndex % slots.length];
-
-    while (attempts < slots.length) {
-      const assignedContext = slotContexts.get(slotId);
-      const isCompatible = !assignedContext || assignedContext === lunchContext;
-      const isConsecutive = prevSlot === slotId && slots.length > 1;
-
-      if (isCompatible && !isConsecutive) {
-        break;
-      }
-
-      slotIndex += 1;
-      slotId = slots[slotIndex % slots.length];
-      attempts += 1;
-    }
-
-    slotContexts.set(slotId, lunchContext);
-    assignments.push({
-      date: day.date,
-      dayOfWeek: day.dayOfWeek,
-      dayIndex: day.dayIndex,
-      mealType: "lunch",
-      slotId,
-      lunchContext,
-    });
-    prevSlot = slotId;
-    slotIndex += 1;
-  }
-
-  return assignments;
 };
 
 const assignDinnerSlots = (
@@ -812,15 +688,9 @@ export const generateWeeklyMenu = onCall(async (request) => {
     const repeatMode = payload.repeatMode ?? "consecutive";
 
     const weekDays = buildWeekDays(weekStartDate, onboarding.routines);
-    const breakfastAssignments = assignBreakfastSlots(weekDays);
-    const lunchAssignments = assignLunchSlots(weekDays);
     const dinnerAssignments = assignDinnerSlots(weekDays, repeatMode);
 
-    let assignments = [
-      ...breakfastAssignments,
-      ...lunchAssignments,
-      ...dinnerAssignments,
-    ];
+    let assignments = [...dinnerAssignments];
 
     // Filter to single day if requested
     const singleDay = payload.singleDay;
@@ -1013,11 +883,6 @@ export const generateWeeklyMenu = onCall(async (request) => {
       });
     };
 
-    const dinnerAssignmentsByDate = new Map<string, MealAssignment>();
-    for (const assignment of dinnerAssignments) {
-      dinnerAssignmentsByDate.set(assignment.date, assignment);
-    }
-
     const dinnerSlots = Array.from(uniqueSlots.entries())
       .filter(([, assignment]) => assignment.mealType === "dinner")
       .sort(([, first], [, second]) => first.dayIndex - second.dayIndex);
@@ -1036,45 +901,6 @@ export const generateWeeklyMenu = onCall(async (request) => {
         }
       }
       await generateSlot(slotKey, assignment, undefined, leftoverMainDish);
-    }
-
-    const breakfastSlots = Array.from(uniqueSlots.entries())
-      .filter(([, assignment]) => assignment.mealType === "breakfast")
-      .sort(([, first], [, second]) => first.dayIndex - second.dayIndex);
-
-    for (const [slotKey, assignment] of breakfastSlots) {
-      await generateSlot(slotKey, assignment);
-    }
-
-    const lunchSlots = Array.from(uniqueSlots.entries())
-      .filter(([, assignment]) => assignment.mealType === "lunch")
-      .sort(([, first], [, second]) => first.dayIndex - second.dayIndex);
-
-    for (const [slotKey, assignment] of lunchSlots) {
-      const previousDay = weekDays[assignment.dayIndex - 1];
-      const previousDinner = previousDay
-        ? dinnerAssignmentsByDate.get(previousDay.date)
-        : undefined;
-
-      // Previous dinner might be fresh (D1) or repeat (D1).
-      // We need to construct the correct key to find the result.
-      const previousDinnerKey = previousDinner
-        ? `dinner:${previousDinner.slotId}${previousDinner.isRepeatFromPreviousDay ? ":repeat" : ""}`
-        : null;
-
-      const previousDinnerMenu = previousDinnerKey
-        ? slotResults.get(previousDinnerKey)
-        : undefined;
-      const ingredientSynergyFrom: WeeklyContext["ingredientSynergyFrom"] | undefined =
-        previousDinner && previousDinnerMenu?.mainDishName
-          ? {
-            mealType: "dinner",
-            date: previousDinner.date,
-            mainDishName: previousDinnerMenu.mainDishName,
-          }
-          : undefined;
-
-      await generateSlot(slotKey, assignment, ingredientSynergyFrom);
     }
 
     const slotFirstDates = new Map<string, string>();

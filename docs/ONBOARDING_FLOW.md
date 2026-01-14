@@ -143,8 +143,6 @@
 - **Headline**: "Your personalized week is ready!"
 - **Brief**: "Based on your goal to [Goal] and your busy [schedule context]..."
 - **Sample Day Card**:
-  - 🌅 **Breakfast**: Quick Oatmeal *(Because you have an early meeting)*
-  - ☀️ **Lunch**: Leftover Chicken Salad *(Utilizing last night's dinner)*
   - 🌙 **Dinner**: 20-Min Sheet Pan Fajitas *(Because Tuesday is gym day)*
   - 👶 *(If child)*: "Kid-friendly portion prepared separately"
 - **CTA**: "Unlock Full Weekly Plan"
@@ -218,7 +216,7 @@
 - Exact gym hours/days
 - Detailed per-person dietary restrictions
 - Specific work schedule times
-- Meal type preferences (skip breakfast, office lunch)
+- Meal type preferences (breakfast/lunch, post-MVP)
 - Cuisine preferences per person
 
 ---

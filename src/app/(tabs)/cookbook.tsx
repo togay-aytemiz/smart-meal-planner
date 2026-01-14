@@ -375,8 +375,8 @@ export default function CookbookScreen() {
         }
     }, [userState.isLoading, userState.user?.uid]);
 
-    const handleOpenRecipe = (course: MenuRecipeCourse) => {
-        router.push({ pathname: '/cookbook/[course]', params: { course } });
+    const handleOpenRecipe = (course: MenuRecipeCourse, recipeName: string) => {
+        router.push({ pathname: '/cookbook/[course]', params: { course, recipeName } });
     };
 
     return (
@@ -416,7 +416,7 @@ export default function CookbookScreen() {
                                 <TouchableOpacity
                                     key={`${recipe.course}-${recipe.name}`}
                                     activeOpacity={0.85}
-                                    onPress={() => handleOpenRecipe(recipe.course)}
+                                    onPress={() => handleOpenRecipe(recipe.course, recipe.name)}
                                 >
                                     <View style={styles.recipeCard}>
                                         <View

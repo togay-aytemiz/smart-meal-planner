@@ -124,7 +124,7 @@ const WEEKDAY_INDEX: Record<WeekdayKey, number> = {
     monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6,
 };
 
-const MEAL_ORDER: MenuMealType[] = ['breakfast', 'lunch', 'dinner'];
+const MEAL_ORDER: MenuMealType[] = ['dinner'];
 const DEFAULT_SAMPLE_DAY: WeekdayKey = 'tuesday';
 const WEEKDAY_PRIORITY: WeekdayKey[] = ['tuesday', 'monday', 'wednesday', 'thursday', 'friday'];
 const WEEKEND_PRIORITY: WeekdayKey[] = ['saturday', 'sunday'];
@@ -146,36 +146,11 @@ const getNextWeekdayDate = (weekday: WeekdayKey) => {
     return nextDate;
 };
 
-const getMealCount = (plan: MealPlan) =>
-    Number(plan.breakfast) + Number(plan.lunch) + Number(plan.dinner);
+const getMealCount = (plan: MealPlan) => Number(plan.dinner);
 
 const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
     if (!routine) return { breakfast: false, lunch: false, dinner: true };
     if (routine.excludeFromPlan) return { breakfast: false, lunch: false, dinner: false };
-
-    if (routine.type === 'office') {
-        return {
-            breakfast: routine.officeBreakfastAtHome === 'yes',
-            lunch: routine.officeMealToGo === 'yes',
-            dinner: true,
-        };
-    }
-    if (routine.type === 'remote') {
-        if (routine.remoteMeals?.length) {
-            return {
-                breakfast: routine.remoteMeals.includes('breakfast'),
-                lunch: routine.remoteMeals.includes('lunch'),
-                dinner: routine.remoteMeals.includes('dinner'),
-            };
-        }
-        return { breakfast: true, lunch: true, dinner: true };
-    }
-    if (routine.type === 'school') {
-        return { breakfast: routine.schoolBreakfast === 'yes', lunch: false, dinner: true };
-    }
-    if (routine.type === 'gym' || routine.type === 'off') {
-        return { breakfast: true, lunch: true, dinner: true };
-    }
     return { breakfast: false, lunch: false, dinner: true };
 };
 
@@ -199,10 +174,10 @@ const pickSampleDayKey = (routines: WeeklyRoutine): WeekdayKey => {
         return bestCount > 0 ? bestDay : null;
     };
 
-    const weekdayChoice = pickByMinMeals(WEEKDAY_PRIORITY, 2) ?? pickByMaxMeals(WEEKDAY_PRIORITY);
+    const weekdayChoice = pickByMinMeals(WEEKDAY_PRIORITY, 1) ?? pickByMaxMeals(WEEKDAY_PRIORITY);
     if (weekdayChoice) return weekdayChoice;
 
-    const weekendChoice = pickByMinMeals(WEEKEND_PRIORITY, 2) ?? pickByMaxMeals(WEEKEND_PRIORITY);
+    const weekendChoice = pickByMinMeals(WEEKEND_PRIORITY, 1) ?? pickByMaxMeals(WEEKEND_PRIORITY);
     if (weekendChoice) return weekendChoice;
 
     return DEFAULT_SAMPLE_DAY;

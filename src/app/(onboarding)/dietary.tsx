@@ -16,7 +16,7 @@ const DIETARY_RESTRICTIONS = [
     { key: 'dairy-free', label: 'Süt Ürünsüz', emoji: '🥛' },
     { key: 'low-carb', label: 'Düşük Karbonhidrat', emoji: '🍞' },
     { key: 'keto', label: 'Keto', emoji: '🥑' },
-    { key: 'halal', label: 'Helal', emoji: '🍖' },
+    { key: 'high-protein', label: 'Protein Ağırlıklı', emoji: '💪' },
 ];
 
 const COMMON_ALLERGIES = [

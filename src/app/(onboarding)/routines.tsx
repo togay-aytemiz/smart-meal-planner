@@ -143,14 +143,6 @@ export default function RoutinesScreen() {
         updateMemberRoutine(newRoutine);
     };
 
-    const toggleRemoteMeal = (meal: 'breakfast' | 'lunch' | 'dinner') => {
-        const currentMeals = currentRoutine[selectedDay].remoteMeals ?? [];
-        const nextMeals = currentMeals.includes(meal)
-            ? currentMeals.filter(item => item !== meal)
-            : [...currentMeals, meal];
-        updateDayDetails({ remoteMeals: nextMeals });
-    };
-
     const handleContinue = () => {
         if (activeMemberIndex < members.length - 1) {
             // Go to next member
@@ -321,101 +313,6 @@ export default function RoutinesScreen() {
                                                 label="Akşam"
                                                 selected={currentRoutine[selectedDay].gymTime === 'evening'}
                                                 onPress={() => updateDayDetails({ gymTime: 'evening' })}
-                                            />
-                                        </View>
-                                    </View>
-                                </View>
-                            </View>
-                        )}
-                        {currentRoutine[selectedDay].type === 'remote' && (
-                            <View style={styles.detailSection}>
-                                <View style={styles.detailItemLast}>
-                                    <Text style={styles.detailTitle}>Evde hangi öğünleri yiyorsun?</Text>
-                                    <View style={styles.tagRow}>
-                                        <View style={styles.tagItem}>
-                                            <SelectableTag
-                                                label="Sabah"
-                                                selected={currentRoutine[selectedDay].remoteMeals?.includes('breakfast') ?? false}
-                                                onPress={() => toggleRemoteMeal('breakfast')}
-                                            />
-                                        </View>
-                                        <View style={styles.tagItem}>
-                                            <SelectableTag
-                                                label="Öğle"
-                                                selected={currentRoutine[selectedDay].remoteMeals?.includes('lunch') ?? false}
-                                                onPress={() => toggleRemoteMeal('lunch')}
-                                            />
-                                        </View>
-                                        <View style={styles.tagItem}>
-                                            <SelectableTag
-                                                label="Akşam"
-                                                selected={currentRoutine[selectedDay].remoteMeals?.includes('dinner') ?? false}
-                                                onPress={() => toggleRemoteMeal('dinner')}
-                                            />
-                                        </View>
-                                    </View>
-                                </View>
-                            </View>
-                        )}
-                        {currentRoutine[selectedDay].type === 'office' && (
-                            <View style={styles.detailSection}>
-                                <View style={styles.detailItem}>
-                                    <Text style={styles.detailTitle}>Ofise yemek götürüyor musun?</Text>
-                                    <View style={styles.tagRow}>
-                                        <View style={styles.tagItem}>
-                                            <SelectableTag
-                                                label="Evet"
-                                                selected={currentRoutine[selectedDay].officeMealToGo === 'yes'}
-                                                onPress={() => updateDayDetails({ officeMealToGo: 'yes' })}
-                                            />
-                                        </View>
-                                        <View style={styles.tagItem}>
-                                            <SelectableTag
-                                                label="Hayır"
-                                                selected={currentRoutine[selectedDay].officeMealToGo === 'no'}
-                                                onPress={() => updateDayDetails({ officeMealToGo: 'no' })}
-                                            />
-                                        </View>
-                                    </View>
-                                </View>
-                                <View style={styles.detailItemLast}>
-                                    <Text style={styles.detailTitle}>Kahvaltını evde mi yapıyorsun?</Text>
-                                    <View style={styles.tagRow}>
-                                        <View style={styles.tagItem}>
-                                            <SelectableTag
-                                                label="Evet"
-                                                selected={currentRoutine[selectedDay].officeBreakfastAtHome === 'yes'}
-                                                onPress={() => updateDayDetails({ officeBreakfastAtHome: 'yes' })}
-                                            />
-                                        </View>
-                                        <View style={styles.tagItem}>
-                                            <SelectableTag
-                                                label="Hayır"
-                                                selected={currentRoutine[selectedDay].officeBreakfastAtHome === 'no'}
-                                                onPress={() => updateDayDetails({ officeBreakfastAtHome: 'no' })}
-                                            />
-                                        </View>
-                                    </View>
-                                </View>
-                            </View>
-                        )}
-                        {currentRoutine[selectedDay].type === 'school' && (
-                            <View style={styles.detailSection}>
-                                <View style={styles.detailItemLast}>
-                                    <Text style={styles.detailTitle}>Okul günlerinde kahvaltı yapılıyor mu?</Text>
-                                    <View style={styles.tagRow}>
-                                        <View style={styles.tagItem}>
-                                            <SelectableTag
-                                                label="Evet"
-                                                selected={currentRoutine[selectedDay].schoolBreakfast === 'yes'}
-                                                onPress={() => updateDayDetails({ schoolBreakfast: 'yes' })}
-                                            />
-                                        </View>
-                                        <View style={styles.tagItem}>
-                                            <SelectableTag
-                                                label="Hayır"
-                                                selected={currentRoutine[selectedDay].schoolBreakfast === 'no'}
-                                                onPress={() => updateDayDetails({ schoolBreakfast: 'no' })}
                                             />
                                         </View>
                                     </View>

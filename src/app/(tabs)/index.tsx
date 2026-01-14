@@ -308,37 +308,6 @@ const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
         return { breakfast: false, lunch: false, dinner: false };
     }
 
-    if (routine.type === 'office') {
-        return {
-            breakfast: routine.officeBreakfastAtHome === 'yes',
-            lunch: routine.officeMealToGo === 'yes',
-            dinner: true,
-        };
-    }
-
-    if (routine.type === 'remote') {
-        if (routine.remoteMeals?.length) {
-            return {
-                breakfast: routine.remoteMeals.includes('breakfast'),
-                lunch: routine.remoteMeals.includes('lunch'),
-                dinner: routine.remoteMeals.includes('dinner'),
-            };
-        }
-        return { breakfast: true, lunch: true, dinner: true };
-    }
-
-    if (routine.type === 'school') {
-        return {
-            breakfast: routine.schoolBreakfast === 'yes',
-            lunch: false,
-            dinner: true,
-        };
-    }
-
-    if (routine.type === 'gym' || routine.type === 'off') {
-        return { breakfast: true, lunch: true, dinner: true };
-    }
-
     return { breakfast: false, lunch: false, dinner: true };
 };
 
@@ -371,11 +340,7 @@ const buildEmptyMessage = (meal: MealSectionKey, isLoading: boolean, error?: str
         return 'Menü hazırlanıyor.';
     }
 
-    if (meal === 'dinner') {
-        return 'Akşam menüsü henüz hazırlanmadı.';
-    }
-
-    return 'Bu öğün için menü henüz hazırlanmadı.';
+    return 'Menü henüz hazırlanmadı.';
 };
 
 const getFunctionsErrorMessage = (error: unknown) => {
@@ -517,6 +482,7 @@ export default function TodayScreen() {
     const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
 
     const mealPlan = useMemo(() => buildMealPlan(selectedRoutine), [selectedRoutine]);
+    const menuTitle = selectedDay.isToday ? 'Bugünün menüsü' : 'Günün menüsü';
     const mealItemsByType = useMemo(() => {
         const buildItems = (mealType: MealSectionKey) => {
             const bundle = menuBundles[mealType];
@@ -561,18 +527,17 @@ export default function TodayScreen() {
             sections.push({
                 id: 'dinner',
                 ...SECTION_META.dinner,
+                title: menuTitle,
                 items,
                 emptyMessage: items.length ? undefined : buildEmptyMessage('dinner', loading, error),
             });
         }
 
         return sections;
-    }, [error, loading, mealItemsByType, mealPlan.breakfast, mealPlan.dinner, mealPlan.lunch]);
-
-    const mealCount = mealSections.length;
+    }, [error, loading, mealItemsByType, mealPlan.breakfast, mealPlan.dinner, mealPlan.lunch, menuTitle]);
 
     const reasoningText = useMemo(() => {
-        const order: MealSectionKey[] = ['dinner', 'lunch', 'breakfast'];
+        const order: MealSectionKey[] = ['dinner'];
         for (const mealType of order) {
             const text = menuBundles[mealType]?.menu.reasoning?.trim();
             if (text) {
@@ -630,6 +595,14 @@ export default function TodayScreen() {
                 );
                 const weekStart = resolveWeekStartKey(activeDate);
 
+                if (!mealTypes.length) {
+                    if (isMounted) {
+                        setMenuBundles({ breakfast: null, lunch: null, dinner: null });
+                        setError(null);
+                    }
+                    return;
+                }
+
                 const cachedBundles: Record<MealSectionKey, MenuBundle | null> = {
                     breakfast: null,
                     lunch: null,
@@ -650,27 +623,7 @@ export default function TodayScreen() {
                     setMenuBundles(cachedBundles);
                 }
 
-                // Check if we already have cached week
-                const existingCache = await loadWeeklyMenuCache(userId);
-                const isWeekCached = existingCache?.weekStart === weekStart;
-
-                // Progressive loading: generate today first, then remaining days async
-                if (!isWeekCached) {
-                    // Step 1: Generate only today's menu (fast)
-                    const todayResult = await ensureWeeklyMenu({
-                        userId,
-                        weekStart,
-                        onboarding: resolvedSnapshot,
-                        singleDay: dateKey,
-                    });
-
-                    if (todayResult.error && isMounted) {
-                        setError(todayResult.error);
-                    }
-
-                    // Step 2: Start background generation for remaining days (fire and forget)
-                    generateRemainingDaysInBackground(userId, weekStart, resolvedSnapshot, dateKey);
-                }
+                const hasCachedMenu = mealTypes.some((mealType) => Boolean(cachedBundles[mealType]));
 
                 const updateBundle = (mealType: MealSectionKey, bundle: MenuBundle) => {
                     if (!isMounted) {
@@ -682,31 +635,54 @@ export default function TodayScreen() {
                     }));
                 };
 
-                let loadedCount = 0;
-                let lastError: string | null = null;
+                const loadMenusFromFirestore = async () => {
+                    let loadedCount = 0;
+                    let lastError: string | null = null;
 
-                for (const mealType of mealTypes) {
-                    try {
-                        const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType);
-                        if (firestoreMenu) {
-                            updateBundle(mealType, firestoreMenu);
-                            await persistMenuCache(dateKey, mealType, {
-                                menu: firestoreMenu.menu,
-                                recipes: firestoreMenu.recipes,
-                                cachedAt: new Date().toISOString(),
-                            });
-                            loadedCount += 1;
+                    for (const mealType of mealTypes) {
+                        try {
+                            const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType);
+                            if (firestoreMenu) {
+                                updateBundle(mealType, firestoreMenu);
+                                await persistMenuCache(dateKey, mealType, {
+                                    menu: firestoreMenu.menu,
+                                    recipes: firestoreMenu.recipes,
+                                    cachedAt: new Date().toISOString(),
+                                });
+                                loadedCount += 1;
+                            }
+                        } catch (firestoreError) {
+                            console.warn('Menu Firestore read error:', firestoreError);
+                            if (!lastError) {
+                                lastError = 'Menü yüklenemedi.';
+                            }
                         }
-                    } catch (firestoreError) {
-                        console.warn('Menu Firestore read error:', firestoreError);
-                        if (!lastError) {
-                            lastError = 'Menü yüklenemedi.';
-                        }
+                    }
+
+                    return { loadedCount, lastError };
+                };
+
+                let { loadedCount, lastError } = await loadMenusFromFirestore();
+
+                if (!hasCachedMenu && loadedCount === 0) {
+                    const todayResult = await ensureWeeklyMenu({
+                        userId,
+                        weekStart,
+                        onboarding: resolvedSnapshot,
+                        singleDay: dateKey,
+                    });
+
+                    if (todayResult.error && isMounted) {
+                        setError(todayResult.error);
+                    } else {
+                        const retry = await loadMenusFromFirestore();
+                        loadedCount = retry.loadedCount;
+                        lastError = retry.lastError;
                     }
                 }
 
                 if (isMounted) {
-                    if (loadedCount === 0 && lastError) {
+                    if (!hasCachedMenu && loadedCount === 0 && lastError) {
                         setError(lastError);
                     } else {
                         setError(null);
@@ -734,9 +710,12 @@ export default function TodayScreen() {
 
     const displayName = userName.trim() ? `${greeting} ${userName}` : greeting;
 
-    const handleOpenMeal = (mealType: MealSectionKey, course: MenuRecipeCourse) => {
+    const handleOpenMeal = (mealType: MealSectionKey, course: MenuRecipeCourse, recipeName: string) => {
         const date = selectedDay?.key ?? buildDateKey(new Date());
-        router.push({ pathname: '/cookbook/[course]', params: { course, mealType, date } });
+        router.push({
+            pathname: '/cookbook/[course]',
+            params: { course, mealType, date, recipeName },
+        });
     };
 
     if (loading && isInitialLoading) {
@@ -812,9 +791,6 @@ export default function TodayScreen() {
                         <Text style={styles.dayTitle}>{selectedDayLabel}</Text>
                         <Text style={styles.daySubtitle}>{selectedDaySubtitle}</Text>
                     </View>
-                    <View style={styles.mealCountPill}>
-                        <Text style={styles.mealCountText}>{mealCount} öğün</Text>
-                    </View>
                 </View>
 
                 {isHoliday ? (
@@ -844,7 +820,7 @@ export default function TodayScreen() {
                                         key={item.id}
                                         activeOpacity={0.85}
                                         style={styles.mealCard}
-                                        onPress={() => handleOpenMeal(section.id, item.course)}
+                                        onPress={() => handleOpenMeal(section.id, item.course, item.title)}
                                     >
                                         <View style={[styles.mealMedia, { backgroundColor: item.mediaTone }]}>
                                             <MaterialCommunityIcons
@@ -1046,18 +1022,6 @@ const styles = StyleSheet.create({
         ...typography.bodySmall,
         color: colors.textMuted,
         marginTop: spacing.xs,
-    },
-    mealCountPill: {
-        backgroundColor: colors.surface,
-        borderRadius: radius.full,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-        borderWidth: 1,
-        borderColor: colors.borderLight,
-    },
-    mealCountText: {
-        ...typography.caption,
-        color: colors.textSecondary,
     },
     section: {
         gap: spacing.md,

@@ -118,6 +118,7 @@ export interface MenuGenerationRequest {
   userId: string;
   date: string; // YYYY-MM-DD
   dayOfWeek?: string; // Auto-calculated from date if not provided
+  onboardingHash?: string;
 
   // User preferences (from onboarding)
   dietaryRestrictions: string[];
@@ -169,6 +170,7 @@ export type WeeklyMenuGenerationRequest = {
   weekStart?: string; // YYYY-MM-DD
   singleDay?: string; // YYYY-MM-DD - if provided, only generate this day
   onboarding?: Partial<OnboardingData>;
+  onboardingHash?: string;
   repeatMode?: "consecutive" | "spaced";
   existingPantry?: string[];
   avoidIngredients?: string[];

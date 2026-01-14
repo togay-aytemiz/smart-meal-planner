@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, type R
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { functions } from '../config/firebase';
 import { fetchMenuBundle, type MenuBundle } from '../utils/menu-storage';
+import { buildOnboardingHash, type OnboardingSnapshot } from '../utils/onboarding-hash';
 import type { MenuDecision, MenuRecipesResponse, MenuRecipeCourse } from '../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from './onboarding-context';
 
@@ -24,19 +25,6 @@ type SampleDay = {
     label: string;
     dateKey: string;
     mealPlan: MealPlan;
-};
-
-type OnboardingSnapshot = {
-    profile?: { name?: string };
-    householdSize?: number;
-    dietary?: { restrictions?: string[]; allergies?: string[] };
-    cuisine?: { selected?: string[] };
-    cooking?: {
-        timePreference?: 'quick' | 'balanced' | 'elaborate';
-        skillLevel?: 'beginner' | 'intermediate' | 'expert';
-        equipment?: string[];
-    };
-    routines?: WeeklyRoutine;
 };
 
 type MenuRequestPayload = {
@@ -64,6 +52,7 @@ type MenuRequestPayload = {
         reasoningHint?: string;
         seasonalityHint?: string;
     };
+    onboardingHash?: string;
 };
 
 type MenuRecipeParams = MenuRequestPayload & { menu: MenuDecision };
@@ -191,7 +180,8 @@ const buildMenuRequest = (
     userId: string,
     date: string,
     dayKey: WeekdayKey,
-    mealType: MenuMealType
+    mealType: MenuMealType,
+    onboardingHash?: string | null
 ): MenuRequestPayload => {
     const routines = snapshot?.routines ?? DEFAULT_ROUTINES;
     const routine = routines?.[dayKey];
@@ -233,6 +223,7 @@ const buildMenuRequest = (
         } : undefined,
         mealType,
         weeklyContext: { reasoningHint: reasoningContext },
+        ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
     };
 };
 
@@ -276,6 +267,7 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
         const dayKey = pickSampleDayKey(routines);
         const planForDay = buildMealPlan(routines[dayKey]);
         const dateKey = buildDateKey(getNextWeekdayDate(dayKey));
+        const onboardingHash = buildOnboardingHash(onboardingData);
 
         const sampleDay: SampleDay = {
             key: dayKey,
@@ -305,7 +297,7 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
 
         // Parallel meal generation
         const fetchMeal = async (mealType: MenuMealType) => {
-            const request = buildMenuRequest(onboardingData, userId, dateKey, dayKey, mealType);
+            const request = buildMenuRequest(onboardingData, userId, dateKey, dayKey, mealType, onboardingHash);
 
             try {
                 const menuResult = await callMenu({ request });
@@ -340,7 +332,7 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
 
             // Fallback: try Firestore
             try {
-                const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType);
+                const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType, onboardingHash);
                 if (firestoreMenu) {
                     setState((prev) => {
                         const isFirstMeal = !prev.firstMealReady;

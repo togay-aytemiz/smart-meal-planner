@@ -6,6 +6,7 @@ type FirestoreMenuDoc = {
     cuisine: string;
     totalTimeMinutes: number;
     reasoning?: string;
+    onboardingHash?: string | null;
     items:
         | Array<{ course: MenuRecipeCourse; name: string; recipeId: string }>
         | {
@@ -83,7 +84,8 @@ export const buildMenuDocId = (userId: string, date: string, menuType: MenuMealT
 export const fetchMenuBundle = async (
     userId: string,
     date: string,
-    menuType: MenuRecipesResponse['menuType']
+    menuType: MenuRecipesResponse['menuType'],
+    expectedOnboardingHash?: string | null
 ): Promise<MenuBundle | null> => {
     const menuId = buildMenuDocId(userId, date, menuType);
     const menuSnap = await getDoc(doc(firestore(), 'menus', menuId));
@@ -95,6 +97,13 @@ export const fetchMenuBundle = async (
     const menuData = menuSnap.data() as FirestoreMenuDoc | undefined;
     if (!menuData) {
         return null;
+    }
+
+    if (typeof expectedOnboardingHash === 'string') {
+        const storedHash = typeof menuData.onboardingHash === 'string' ? menuData.onboardingHash : null;
+        if (!storedHash || storedHash !== expectedOnboardingHash) {
+            return null;
+        }
     }
 
     const resolvedItems = resolveMenuItems(menuData);

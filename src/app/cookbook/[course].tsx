@@ -9,8 +9,10 @@ import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import MealDetail from '../../components/cookbook/meal-detail';
 import { fetchMenuBundle } from '../../utils/menu-storage';
+import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
 import { MenuDecision, MenuMealType, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 
+const STORAGE_KEY = '@smart_meal_planner:onboarding';
 const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
 
 const normalizeCourse = (value: string | string[] | undefined): MenuRecipeCourse | null => {
@@ -38,23 +40,62 @@ const resolveRecipeName = (value: string | string[] | undefined) => {
 
 const normalizeText = (value: string) => value.trim().toLowerCase();
 
-const buildMenuRecipesKey = (mealType: MenuMealType) => `${MENU_RECIPES_STORAGE_KEY}:${mealType}`;
+const buildMenuRecipesKey = (userId: string, mealType: MenuMealType) =>
+    `${MENU_RECIPES_STORAGE_KEY}:${userId}:${mealType}`;
 const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
 
 type MenuCache = {
     menu: MenuDecision;
     recipes: MenuRecipesResponse;
     cachedAt: string;
+    onboardingHash?: string;
 };
 
-const buildMenuCacheKey = (date: string, mealType: MenuMealType) =>
-    `${MENU_CACHE_STORAGE_KEY}:${date}:${mealType}`;
+type MenuRecipesCache = {
+    data: MenuRecipesResponse;
+    cachedAt: string;
+    onboardingHash?: string;
+};
+
+const buildMenuCacheKey = (userId: string, date: string, mealType: MenuMealType) =>
+    `${MENU_CACHE_STORAGE_KEY}:${userId}:${date}:${mealType}`;
 
 const resolveDate = (value: string | string[] | undefined) => {
     if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
         return value;
     }
     return new Date().toISOString().split('T')[0];
+};
+
+const parseMenuRecipesCache = (
+    raw: string | null,
+    expectedOnboardingHash?: string | null
+): MenuRecipesResponse | null => {
+    if (!raw) {
+        return null;
+    }
+
+    const parsed = JSON.parse(raw) as MenuRecipesCache | MenuRecipesResponse;
+
+    if ('recipes' in parsed) {
+        if (typeof expectedOnboardingHash === 'string') {
+            return null;
+        }
+        return parsed;
+    }
+
+    const data = parsed.data;
+    if (!data?.recipes?.length) {
+        return null;
+    }
+
+    if (typeof expectedOnboardingHash === 'string') {
+        if (!parsed.onboardingHash || parsed.onboardingHash !== expectedOnboardingHash) {
+            return null;
+        }
+    }
+
+    return data;
 };
 
 export default function CookbookDetailScreen() {
@@ -92,6 +133,11 @@ export default function CookbookDetailScreen() {
                 const resolvedMealType = resolveMealType(mealType);
                 const resolvedRecipeName = resolveRecipeName(recipeName);
                 const normalizedRecipeName = resolvedRecipeName ? normalizeText(resolvedRecipeName) : null;
+                const onboardingRaw = await AsyncStorage.getItem(STORAGE_KEY);
+                const onboardingStored = onboardingRaw
+                    ? (JSON.parse(onboardingRaw) as { data?: OnboardingSnapshot })
+                    : null;
+                const onboardingHash = buildOnboardingHash(onboardingStored?.data ?? null);
 
                 const findRecipeMatch = (recipes: MenuRecipe[]) => {
                     if (normalizedRecipeName) {
@@ -107,15 +153,25 @@ export default function CookbookDetailScreen() {
                 };
 
                 try {
-                    const firestoreMenu = await fetchMenuBundle(userId, resolvedDate, resolvedMealType);
+                    const firestoreMenu = await fetchMenuBundle(
+                        userId,
+                        resolvedDate,
+                        resolvedMealType,
+                        onboardingHash
+                    );
                     const match = firestoreMenu?.recipes?.recipes
                         ? findRecipeMatch(firestoreMenu.recipes.recipes)
                         : null;
                     if (match && isMounted) {
                         setRecipe(match);
+                        const recipesCache: MenuRecipesCache = {
+                            data: firestoreMenu.recipes,
+                            cachedAt: new Date().toISOString(),
+                            onboardingHash: onboardingHash ?? undefined,
+                        };
                         await AsyncStorage.setItem(
-                            buildMenuRecipesKey(resolvedMealType),
-                            JSON.stringify(firestoreMenu.recipes)
+                            buildMenuRecipesKey(userId, resolvedMealType),
+                            JSON.stringify(recipesCache)
                         );
                         return;
                     }
@@ -125,16 +181,21 @@ export default function CookbookDetailScreen() {
 
                 try {
                     const cachedMenuRaw = await AsyncStorage.getItem(
-                        buildMenuCacheKey(resolvedDate, resolvedMealType)
+                        buildMenuCacheKey(userId, resolvedDate, resolvedMealType)
                     );
                     if (cachedMenuRaw) {
                         const cachedMenu = JSON.parse(cachedMenuRaw) as MenuCache;
-                        const match = cachedMenu?.recipes?.recipes
-                            ? findRecipeMatch(cachedMenu.recipes.recipes)
-                            : null;
-                        if (match && isMounted) {
-                            setRecipe(match);
-                            return;
+                        const hasHashMismatch =
+                            typeof onboardingHash === 'string' &&
+                            (!cachedMenu.onboardingHash || cachedMenu.onboardingHash !== onboardingHash);
+                        if (!hasHashMismatch) {
+                            const match = cachedMenu?.recipes?.recipes
+                                ? findRecipeMatch(cachedMenu.recipes.recipes)
+                                : null;
+                            if (match && isMounted) {
+                                setRecipe(match);
+                                return;
+                            }
                         }
                     }
                 } catch (cacheError) {
@@ -142,14 +203,10 @@ export default function CookbookDetailScreen() {
                 }
 
                 const raw =
-                    (await AsyncStorage.getItem(buildMenuRecipesKey(resolvedMealType))) ??
+                    (await AsyncStorage.getItem(buildMenuRecipesKey(userId, resolvedMealType))) ??
                     (await AsyncStorage.getItem(MENU_RECIPES_STORAGE_KEY));
-                if (!raw) {
-                    throw new Error('Tarif bulunamadı');
-                }
-
-                const parsed = JSON.parse(raw) as MenuRecipesResponse;
-                if (!parsed?.recipes?.length) {
+                const parsed = parseMenuRecipesCache(raw, onboardingHash);
+                if (!parsed) {
                     throw new Error('Tarif bulunamadı');
                 }
 

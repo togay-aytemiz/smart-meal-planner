@@ -24,6 +24,7 @@ export function onboardingToMenuRequest(
     maxCookTime?: number;
     generateImage?: boolean;
     mealType?: MealType;
+    onboardingHash?: string;
     previousPreferences?: {
       likedRecipes?: string[];
       dislikedRecipes?: string[];
@@ -69,6 +70,7 @@ export function onboardingToMenuRequest(
     userId: "", // Will be set by the service
     date: routineDate,
     dayOfWeek,
+    onboardingHash: options?.onboardingHash,
 
     // User preferences from onboarding
     dietaryRestrictions: onboarding.dietary.restrictions || [],

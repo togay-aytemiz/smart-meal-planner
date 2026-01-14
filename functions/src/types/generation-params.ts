@@ -21,6 +21,7 @@ export function onboardingToMenuRecipeParams(
     maxPrepTime?: number;
     maxCookTime?: number;
     generateImage?: boolean;
+    onboardingHash?: string;
     previousPreferences?: {
       likedRecipes?: string[];
       dislikedRecipes?: string[];

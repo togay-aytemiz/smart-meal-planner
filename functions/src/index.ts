@@ -184,7 +184,7 @@ const buildMenuDocument = ({
 }): DocumentData => {
   const menuItems = menu.items.map((item) => {
     const link = findRecipeLink(recipeLinks, item.course as MenuRecipeCourse, item.name);
-    if (!link) {
+  if (!link) {
       throw new Error("Menu recipe mapping is incomplete");
     }
     return {
@@ -194,7 +194,7 @@ const buildMenuDocument = ({
     };
   });
 
-  return {
+  const doc: DocumentData = {
     userId,
     date: params.date,
     dayOfWeek: params.dayOfWeek ?? null,
@@ -210,6 +210,12 @@ const buildMenuDocument = ({
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };
+
+  if (params.onboardingHash) {
+    doc.onboardingHash = params.onboardingHash;
+  }
+
+  return doc;
 };
 
 const buildMenuDocId = (userId: string, date: string, menuType: string) =>
@@ -759,6 +765,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
         maxPrepTime: payload.maxPrepTime,
         maxCookTime: payload.maxCookTime,
         generateImage: payload.generateImage,
+        onboardingHash: payload.onboardingHash,
       });
       const weeklyContext = buildWeeklyContext({
         weekStart,
@@ -930,6 +937,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
         maxPrepTime: payload.maxPrepTime,
         maxCookTime: payload.maxCookTime,
         generateImage: payload.generateImage,
+        onboardingHash: payload.onboardingHash,
       });
 
       const menuParams: MenuRecipeGenerationParams = {

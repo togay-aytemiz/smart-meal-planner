@@ -20,6 +20,7 @@ import { typography } from '../../theme/typography';
 import { spacing, radius, shadows, hitSlop } from '../../theme/spacing';
 import { formatLongDateTr, getGreeting } from '../../utils/dates';
 import { fetchMenuBundle, type MenuBundle } from '../../utils/menu-storage';
+import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
 import type { MenuDecision, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
@@ -66,30 +67,11 @@ type MealPlan = {
     dinner: boolean;
 };
 
-type OnboardingSnapshot = {
-    profile?: {
-        name?: string;
-    };
-    householdSize?: number;
-    dietary?: {
-        restrictions?: string[];
-        allergies?: string[];
-    };
-    cuisine?: {
-        selected?: string[];
-    };
-    cooking?: {
-        timePreference?: 'quick' | 'balanced' | 'elaborate';
-        skillLevel?: 'beginner' | 'intermediate' | 'expert';
-        equipment?: string[];
-    };
-    routines?: WeeklyRoutine;
-};
-
 type WeeklyMenuRequest = {
     userId: string;
     weekStart?: string;
     onboarding?: OnboardingSnapshot;
+    onboardingHash?: string;
     repeatMode?: 'consecutive' | 'spaced';
     existingPantry?: string[];
     avoidIngredients?: string[];
@@ -111,6 +93,7 @@ type WeeklyMenuResponse = {
 type WeeklyMenuCache = {
     weekStart: string;
     generatedAt: string;
+    onboardingHash?: string;
 };
 
 type FunctionsErrorDetails = {
@@ -250,22 +233,36 @@ type MenuCache = {
     menu: MenuDecision;
     recipes: MenuRecipesResponse;
     cachedAt: string;
+    onboardingHash?: string;
 };
 
-const buildMenuCacheKey = (date: string, mealType: MenuMealType) =>
-    `${MENU_CACHE_STORAGE_KEY}:${date}:${mealType}`;
+type MenuRecipesCache = {
+    data: MenuRecipesResponse;
+    cachedAt: string;
+    onboardingHash?: string;
+};
 
-const buildMenuRecipesKey = (mealType: MenuMealType) => `${MENU_RECIPES_STORAGE_KEY}:${mealType}`;
+const buildMenuCacheKey = (userId: string, date: string, mealType: MenuMealType) =>
+    `${MENU_CACHE_STORAGE_KEY}:${userId}:${date}:${mealType}`;
+
+const buildMenuRecipesKey = (userId: string, mealType: MenuMealType) =>
+    `${MENU_RECIPES_STORAGE_KEY}:${userId}:${mealType}`;
 
 const buildWeeklyCacheKey = (userId: string) => `${WEEKLY_MENU_CACHE_KEY}:${userId}`;
 
-const loadWeeklyMenuCache = async (userId: string) => {
+const loadWeeklyMenuCache = async (userId: string, expectedOnboardingHash?: string | null) => {
     try {
         const raw = await AsyncStorage.getItem(buildWeeklyCacheKey(userId));
         if (!raw) {
             return null;
         }
-        return JSON.parse(raw) as WeeklyMenuCache;
+        const parsed = JSON.parse(raw) as WeeklyMenuCache;
+        if (typeof expectedOnboardingHash === 'string') {
+            if (!parsed.onboardingHash || parsed.onboardingHash !== expectedOnboardingHash) {
+                return null;
+            }
+        }
+        return parsed;
     } catch (error) {
         console.warn('Weekly menu cache read error:', error);
         return null;
@@ -280,23 +277,39 @@ const persistWeeklyMenuCache = async (userId: string, data: WeeklyMenuCache) => 
     }
 };
 
-const loadMenuCache = async (date: string, mealType: MenuMealType) => {
+const loadMenuCache = async (
+    userId: string,
+    date: string,
+    mealType: MenuMealType,
+    expectedOnboardingHash?: string | null
+) => {
     try {
-        const raw = await AsyncStorage.getItem(buildMenuCacheKey(date, mealType));
+        const raw = await AsyncStorage.getItem(buildMenuCacheKey(userId, date, mealType));
         if (!raw) {
             return null;
         }
-        return JSON.parse(raw) as MenuCache;
+        const parsed = JSON.parse(raw) as MenuCache;
+        if (typeof expectedOnboardingHash === 'string') {
+            if (!parsed.onboardingHash || parsed.onboardingHash !== expectedOnboardingHash) {
+                return null;
+            }
+        }
+        return parsed;
     } catch (error) {
         console.warn('Menu cache read error:', error);
         return null;
     }
 };
 
-const persistMenuCache = async (date: string, mealType: MenuMealType, data: MenuCache) => {
+const persistMenuCache = async (userId: string, date: string, mealType: MenuMealType, data: MenuCache) => {
     try {
-        await AsyncStorage.setItem(buildMenuCacheKey(date, mealType), JSON.stringify(data));
-        await AsyncStorage.setItem(buildMenuRecipesKey(mealType), JSON.stringify(data.recipes));
+        await AsyncStorage.setItem(buildMenuCacheKey(userId, date, mealType), JSON.stringify(data));
+        const recipesCache: MenuRecipesCache = {
+            data: data.recipes,
+            cachedAt: data.cachedAt,
+            onboardingHash: data.onboardingHash,
+        };
+        await AsyncStorage.setItem(buildMenuRecipesKey(userId, mealType), JSON.stringify(recipesCache));
     } catch (error) {
         console.warn('Menu cache write error:', error);
     }
@@ -366,16 +379,18 @@ const ensureWeeklyMenu = async ({
     userId,
     weekStart,
     onboarding,
+    onboardingHash,
     singleDay,
 }: {
     userId: string;
     weekStart: string;
     onboarding: OnboardingSnapshot | null;
+    onboardingHash?: string | null;
     singleDay?: string;
 }): Promise<{ cache: WeeklyMenuCache | null; error: string | null }> => {
     // If requesting full week, check cache first
     if (!singleDay) {
-        const cached = await loadWeeklyMenuCache(userId);
+        const cached = await loadWeeklyMenuCache(userId, onboardingHash);
         if (cached?.weekStart === weekStart) {
             return { cache: cached, error: null };
         }
@@ -392,6 +407,7 @@ const ensureWeeklyMenu = async ({
                 weekStart,
                 ...(singleDay ? { singleDay } : {}),
                 ...(onboarding ? { onboarding } : {}),
+                ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
             },
         });
         const resolvedWeekStart = response.data?.weekStart ?? weekStart;
@@ -401,6 +417,7 @@ const ensureWeeklyMenu = async ({
             const cache: WeeklyMenuCache = {
                 weekStart: resolvedWeekStart,
                 generatedAt: new Date().toISOString(),
+                ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
             };
             await persistWeeklyMenuCache(userId, cache);
             return { cache, error: null };
@@ -418,6 +435,7 @@ const generateRemainingDaysInBackground = (
     userId: string,
     weekStart: string,
     onboarding: OnboardingSnapshot | null,
+    onboardingHash: string | null,
     excludeDay: string
 ) => {
     // Fire and forget - don't await
@@ -432,12 +450,14 @@ const generateRemainingDaysInBackground = (
                     userId,
                     weekStart,
                     ...(onboarding ? { onboarding } : {}),
+                    ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
                 },
             });
             // Cache the full week once complete
             await persistWeeklyMenuCache(userId, {
                 weekStart,
                 generatedAt: new Date().toISOString(),
+                ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
             });
             console.log('Background menu generation complete');
         } catch (error) {
@@ -584,6 +604,8 @@ export default function TodayScreen() {
                     return;
                 }
 
+                const onboardingHash = buildOnboardingHash(resolvedSnapshot);
+
                 setUserName(resolvedSnapshot?.profile?.name ?? '');
                 setWeeklyRoutine(resolvedSnapshot?.routines ?? DEFAULT_ROUTINES);
 
@@ -613,7 +635,7 @@ export default function TodayScreen() {
                 };
 
                 for (const mealType of mealTypes) {
-                    const cachedMenu = await loadMenuCache(dateKey, mealType);
+                    const cachedMenu = await loadMenuCache(userId, dateKey, mealType, onboardingHash);
                     if (cachedMenu) {
                         cachedBundles[mealType] = {
                             menu: cachedMenu.menu,
@@ -644,13 +666,14 @@ export default function TodayScreen() {
 
                     for (const mealType of mealTypes) {
                         try {
-                            const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType);
+                            const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType, onboardingHash);
                             if (firestoreMenu) {
                                 updateBundle(mealType, firestoreMenu);
-                                await persistMenuCache(dateKey, mealType, {
+                                await persistMenuCache(userId, dateKey, mealType, {
                                     menu: firestoreMenu.menu,
                                     recipes: firestoreMenu.recipes,
                                     cachedAt: new Date().toISOString(),
+                                    onboardingHash: onboardingHash ?? undefined,
                                 });
                                 loadedCount += 1;
                             }
@@ -672,6 +695,7 @@ export default function TodayScreen() {
                         userId,
                         weekStart,
                         onboarding: resolvedSnapshot,
+                        onboardingHash,
                         singleDay: dateKey,
                     });
 

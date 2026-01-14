@@ -3,10 +3,28 @@
  */
 
 import { MenuRecipeGenerationParams } from "../../types/generation-params";
-import { RECIPE_JSON_SCHEMA } from "../schemas/recipe-schema";
-
-const RECIPE_SCHEMA_STRING = JSON.stringify(RECIPE_JSON_SCHEMA, null, 2);
-const DEFAULT_EQUIPMENT = ["ocak", "tencere", "tava", "fırın"];
+const compactValue = (value: unknown): unknown => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : undefined;
+  }
+  if (Array.isArray(value)) {
+    const cleaned = value
+      .map((item) => compactValue(item))
+      .filter((item) => item !== undefined);
+    return cleaned.length ? cleaned : undefined;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .map(([key, val]) => [key, compactValue(val)])
+      .filter(([, val]) => val !== undefined);
+    return entries.length ? Object.fromEntries(entries) : undefined;
+  }
+  return value;
+};
 
 export function buildSystemPrompt(): string {
   return [
@@ -32,16 +50,17 @@ export function buildRecipePrompt(params: MenuRecipeGenerationParams): string {
   const menuType = menu.menuType ?? "dinner";
   const menuItems = Array.isArray(menu.items) ? menu.items : [];
 
-  const context = {
-    householdSize,
-    dietaryRestrictions,
-    allergies,
-    cuisinePreferences,
-    timePreference,
-    skillLevel,
-    equipment: equipment.length > 0 ? equipment : DEFAULT_EQUIPMENT,
-    routine: routine ?? null,
-  };
+  const context =
+    (compactValue({
+      householdSize,
+      dietaryRestrictions: dietaryRestrictions?.length ? dietaryRestrictions : undefined,
+      allergies: allergies?.length ? allergies : undefined,
+      cuisinePreferences: cuisinePreferences?.length ? cuisinePreferences : undefined,
+      timePreference,
+      skillLevel,
+      equipment: equipment.length > 0 ? equipment : undefined,
+      routine: routine ?? undefined,
+    }) as Record<string, unknown>) ?? {};
 
   let prompt = `Kullanıcı bağlamı (JSON):\n${JSON.stringify(context, null, 2)}\n\n`;
   prompt += `Seçilen menü (JSON):\n${JSON.stringify(menu, null, 2)}\n\n`;
@@ -59,10 +78,11 @@ export function buildRecipePrompt(params: MenuRecipeGenerationParams): string {
   prompt += "- Kategori eşlemesi: Ana Yemek -> main, Yan Yemek -> side, Çorba -> soup, Salata -> salad, Meze -> meze, Tatlı -> dessert, Hamur İşi -> pastry.\n";
   prompt += `- servings alanı ${householdSize} olmalı.\n`;
   prompt += `- menuType alanı \"${menuType}\" olmalı.\n`;
-  prompt += "- Tarifler Türkçe olmalı ve Türk ev mutfağına uygun olmalı.\n";
+  prompt += "- Tarifler Türkçe olmalı ve ev mutfağına uygun olmalı.\n";
   prompt += "- cuisine alanı menüdeki cuisine değeri ile aynı olmalı.\n";
   prompt += "- brief alanı 2-3 cümlelik, davetkar ve net bir Türkçe özet olmalı (120-180 karakter).\n";
   prompt += "- Zaman tercihini dikkate al (hızlı/dengeli/zahmetli).\n";
+  prompt += "- Ekipman listesi yoksa temel mutfak ekipmanlarını varsay.\n";
   prompt += "- Malzemeler Türkiye'de kolay bulunan ürünler olmalı.\n";
   prompt += "- Malzeme ölçüleri Türk mutfak birimleriyle olmalı.\n";
   prompt += "- Malzeme unit değerleri şemadaki enum ile aynı olmalı.\n";
@@ -80,9 +100,8 @@ export function buildRecipePrompt(params: MenuRecipeGenerationParams): string {
   prompt += "- UI metni, emoji veya sohbet dili kullanma.\n";
   prompt += "- Markdown kullanma.\n";
   prompt += "- Yalnızca JSON çıktısı üret.\n";
-
-  prompt += "\nJSON Schema:\n";
-  prompt += `${RECIPE_SCHEMA_STRING}\n`;
+  prompt +=
+    '\nÇıktı formatı (JSON): { "menuType": "dinner", "cuisine": "...", "totalTimeMinutes": 30, "recipes": [ { "course": "main", "name": "...", "brief": "...", "servings": 2, "prepTimeMinutes": 10, "cookTimeMinutes": 20, "totalTimeMinutes": 30, "ingredients": [], "instructions": [], "macrosPerServing": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0 } } ] }';
 
   return prompt;
 }

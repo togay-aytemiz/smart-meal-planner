@@ -180,6 +180,9 @@ const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; med
     },
 };
 
+const CARD_GRADIENT_BASE64 =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAACVGAYAAADc5P5VAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABVSURBVHgB7c6xDYAwDABBE2ZkFqZgL/ZmL2ZgJ0pCQ8VH+cv3yWfMzBfZ7/f7/f7+9X1/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f3+/v38/p/d7f1Y5+xIAAAAASUVORK5CYII=';
+
 const SECTION_META: Record<MealSectionKey, { title: string; icon: IconName; tint: string; iconColor: string }> = {
     breakfast: {
         title: 'Kahvaltı',
@@ -822,52 +825,49 @@ export default function TodayScreen() {
                                         style={styles.mealCard}
                                         onPress={() => handleOpenMeal(section.id, item.course, item.title)}
                                     >
-                                        <View style={[styles.mealMedia, { backgroundColor: item.mediaTone }]}>
-                                            <MaterialCommunityIcons
-                                                name={item.icon}
-                                                size={24}
-                                                color={colors.textPrimary}
-                                            />
-                                        </View>
-                                        <View style={styles.mealContent}>
-                                            <View style={styles.mealMetaRow}>
-                                                <View style={styles.metaItem}>
-                                                    <MaterialCommunityIcons
-                                                        name={item.categoryIcon}
-                                                        size={12}
-                                                        color={colors.textMuted}
-                                                    />
-                                                    <Text style={styles.metaText}>{item.category}</Text>
-                                                </View>
-                                                <View style={styles.metaItem}>
-                                                    <MaterialCommunityIcons
-                                                        name="clock-outline"
-                                                        size={12}
-                                                        color={colors.textMuted}
-                                                    />
-                                                    <Text style={styles.metaText}>{item.timeMinutes} dk</Text>
-                                                </View>
+                                        <View style={[styles.mealHero, { backgroundColor: item.mediaTone }]} />
+                                        <MaterialCommunityIcons
+                                            name={item.icon}
+                                            size={72}
+                                            color={colors.textPrimary}
+                                            style={styles.mealHeroIcon}
+                                        />
+                                        <Image
+                                            source={{ uri: CARD_GRADIENT_BASE64 }}
+                                            style={styles.mealGradient}
+                                            resizeMode="stretch"
+                                        />
+                                        <View style={styles.mealChips}>
+                                            <View style={styles.mealChip}>
+                                                <MaterialCommunityIcons
+                                                    name={item.categoryIcon}
+                                                    size={12}
+                                                    color={colors.textInverse}
+                                                />
+                                                <Text style={styles.mealChipText}>{item.category}</Text>
                                             </View>
-                                            <Text style={styles.mealTitle} numberOfLines={1}>
+                                            <View style={styles.mealChip}>
+                                                <MaterialCommunityIcons
+                                                    name="clock-outline"
+                                                    size={12}
+                                                    color={colors.textInverse}
+                                                />
+                                                <Text style={styles.mealChipText}>{item.timeMinutes} dk</Text>
+                                            </View>
+                                            <View style={styles.mealChip}>
+                                                <MaterialCommunityIcons
+                                                    name="fire"
+                                                    size={12}
+                                                    color={colors.textInverse}
+                                                />
+                                                <Text style={styles.mealChipText}>{item.calories} kcal</Text>
+                                            </View>
+                                        </View>
+                                        <View style={styles.mealTitleRow}>
+                                            <Text style={styles.mealTitle} numberOfLines={2}>
                                                 {item.title}
                                             </Text>
-                                            <View style={styles.mealFooterRow}>
-                                                <View style={styles.calorieRow}>
-                                                    <MaterialCommunityIcons
-                                                        name="fire"
-                                                        size={12}
-                                                        color={colors.accent}
-                                                    />
-                                                    <Text style={styles.calorieText}>{item.calories} kcal</Text>
-                                                </View>
-                                            </View>
                                         </View>
-                                        <MaterialCommunityIcons
-                                            name="chevron-right"
-                                            size={18}
-                                            color={colors.iconMuted}
-                                            style={styles.chevron}
-                                        />
                                     </TouchableOpacity>
                                 ))
                             ) : (
@@ -1046,70 +1046,65 @@ const styles = StyleSheet.create({
         gap: spacing.md,
     },
     mealCard: {
-        flexDirection: 'row',
-        alignItems: 'stretch',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
+        minHeight: 180,
+        borderRadius: radius.lg,
         overflow: 'hidden',
-        minHeight: 80,
-        ...shadows.md,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        ...shadows.sm,
     },
-    mealMedia: {
-        width: 80,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderTopLeftRadius: 16,
-        borderBottomLeftRadius: 16,
-        borderTopRightRadius: 0,
-        borderBottomRightRadius: 0,
+    mealHero: {
+        ...StyleSheet.absoluteFillObject,
     },
-    mealContent: {
-        flex: 1,
-        paddingVertical: spacing.sm + 4,
-        paddingHorizontal: spacing.sm + 4,
-        gap: spacing.xs,
-        justifyContent: 'center',
+    mealHeroIcon: {
+        position: 'absolute',
+        right: spacing.lg,
+        top: spacing.lg,
+        opacity: 0.18,
     },
-    mealMetaRow: {
+    mealGradient: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 120,
+        opacity: 0.8,
+    },
+    mealChips: {
+        position: 'absolute',
+        top: spacing.sm,
+        left: spacing.sm,
+        right: spacing.sm,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: spacing.xs,
     },
-    metaItem: {
+    mealChip: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
+        backgroundColor: 'rgba(0, 0, 0, 0.35)',
+        borderRadius: radius.full,
+        paddingVertical: 4,
+        paddingHorizontal: spacing.sm,
     },
-    metaText: {
+    mealChipText: {
         ...typography.caption,
         fontSize: 11,
         lineHeight: 14,
-        color: colors.textMuted,
+        color: colors.textInverse,
+    },
+    mealTitleRow: {
+        position: 'absolute',
+        left: spacing.md,
+        right: spacing.md,
+        bottom: spacing.md,
     },
     mealTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        lineHeight: 22,
-        color: colors.textPrimary,
-    },
-    mealFooterRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    calorieRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.xs,
-    },
-    calorieText: {
-        ...typography.caption,
-        color: colors.textSecondary,
-    },
-    chevron: {
-        alignSelf: 'center',
-        marginLeft: spacing.sm,
-        marginRight: spacing.sm + 4,
+        ...typography.h3,
+        color: colors.textInverse,
     },
     emptyMealCard: {
         flexDirection: 'row',

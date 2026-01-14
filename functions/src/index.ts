@@ -448,12 +448,6 @@ const buildWeeklyContext = ({
 });
 
 
-const buildRepeatReasoning = () =>
-  "Bu yemeği verimli bir mutfak planlaması için (Cook Once Eat Twice) iki günlük düşündüm. Yanına taze ve farklı eşlikçiler ekleyerek çeşitliliği korudum.";
-
-const buildGenericRepeatReasoning = () =>
-  "Haftalık dengeyi gözeterek bu öğünü tekrar değerlendirdim.";
-
 // Test Gemini LLM endpoint
 export const testGemini = onCall(async (request) => {
   try {
@@ -736,23 +730,32 @@ export const generateWeeklyMenu = onCall(async (request) => {
         menu: MenuDecision;
         recipeLinks: RecipeLink[];
         mainDishName?: string;
-        ingredientSynergyUsed?: boolean;
       }
     >();
 
     let recipeCount = 0;
     let menuCount = 0;
 
+    const normalizeDishName = (value: string) =>
+      value.trim().toLocaleLowerCase("tr-TR");
+
     const buildMenuRequest = (
       assignment: MealAssignment,
       ingredientSynergyFrom?: WeeklyContext["ingredientSynergyFrom"],
       leftoverMainDish?: string
     ): MenuGenerationRequest => {
+      const avoidItemNames = Array.from(usedDishNames);
+      const cleanedAvoidItemNames = leftoverMainDish
+        ? avoidItemNames.filter(
+            (name) =>
+              normalizeDishName(name) !== normalizeDishName(leftoverMainDish)
+          )
+        : avoidItemNames;
       const baseRequest = onboardingToMenuRequest(onboarding, assignment.date, {
         mealType: assignment.mealType,
         existingPantry: payload.existingPantry,
         avoidIngredients: payload.avoidIngredients,
-        avoidItemNames: Array.from(usedDishNames),
+        avoidItemNames: cleanedAvoidItemNames.length ? cleanedAvoidItemNames : undefined,
         maxPrepTime: payload.maxPrepTime,
         maxCookTime: payload.maxCookTime,
         generateImage: payload.generateImage,
@@ -879,7 +882,6 @@ export const generateWeeklyMenu = onCall(async (request) => {
         menu,
         recipeLinks,
         mainDishName,
-        ingredientSynergyUsed: Boolean(ingredientSynergyFrom),
       });
     };
 
@@ -903,13 +905,10 @@ export const generateWeeklyMenu = onCall(async (request) => {
       await generateSlot(slotKey, assignment, undefined, leftoverMainDish);
     }
 
-    const slotFirstDates = new Map<string, string>();
-    for (const [slotKey, assignment] of uniqueSlots) {
-      slotFirstDates.set(slotKey, assignment.date);
-    }
-
     for (const assignment of assignments) {
-      const slotKey = `${assignment.mealType}:${assignment.slotId}`;
+      const slotKey = assignment.isRepeatFromPreviousDay
+        ? `${assignment.mealType}:${assignment.slotId}:repeat`
+        : `${assignment.mealType}:${assignment.slotId}`;
       const slotResult = slotResults.get(slotKey);
 
       if (!slotResult) {
@@ -919,18 +918,8 @@ export const generateWeeklyMenu = onCall(async (request) => {
         );
       }
 
-      const isFirstOccurrence = slotFirstDates.get(slotKey) === assignment.date;
-      let reasoning = slotResult.menu.reasoning;
-
-      if (assignment.mealType === "dinner" && assignment.isRepeatFromPreviousDay) {
-        reasoning = buildRepeatReasoning();
-      } else if (!isFirstOccurrence && slotResult.ingredientSynergyUsed) {
-        reasoning = buildGenericRepeatReasoning();
-      }
-
       const menuForDay: MenuDecision = {
         ...slotResult.menu,
-        reasoning,
         menuType: assignment.mealType,
       };
 

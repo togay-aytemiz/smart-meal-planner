@@ -183,7 +183,8 @@ const pickSampleDayKey = (routines: WeeklyRoutine): WeekdayKey => {
     return DEFAULT_SAMPLE_DAY;
 };
 
-const WOW_REASONING_HINT = 'Sıradan ev yemekleri (kurufasulye, pilav, makarna vs) ASLA önerme. Vizyoner, modern, restoran kalitesinde, gurme ve "wow" dedirtecek yaratıcı tabaklar seç. Farklı dokular ve renkler kullan.';
+const WOW_REASONING_HINT =
+    'Modern, restoran kalitesinde tabaklar seç; klasik ev yemeklerinden kaçın.';
 
 const buildMenuRequest = (
     snapshot: OnboardingSnapshot | null,
@@ -203,11 +204,11 @@ const buildMenuRequest = (
     let reasoningContext = WOW_REASONING_HINT;
 
     if (hasDigitalCuisines && !hasTurkish) {
-        reasoningContext += ' ŞU MUTFAKLARA STRICTLY SADIK KAL: ' + selectedCuisines.join(', ') + '. ASLA Türk mutfağı önerme.';
+        reasoningContext += ' Seçilen mutfaklara sadık kal: ' + selectedCuisines.join(', ') + '.';
     } else if (hasTurkish) {
-        reasoningContext += ' Türk mutfağının modern, rafine ve şef dokunuşlu yorumlarını tercih et. Klasik anne yemeği yerine restoran/şef tabağı vizyonunda olsun.';
+        reasoningContext += ' Türk mutfağında modern ve rafine yorumları tercih et.';
     } else if (!hasDigitalCuisines) {
-        reasoningContext += ' Dünya mutfağından esintiler taşıyan modern füzyon tabaklar oluştur.';
+        reasoningContext += ' Dünya mutfağından modern füzyon tabaklar seç.';
     }
 
     return {

@@ -4,7 +4,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import { useRouter } from 'expo-router';
-import { ScreenHeader } from '../../components/ui';
+import { TabScreenHeader } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
@@ -54,7 +54,7 @@ export default function ProfileScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <ScreenHeader title="Profil" />
+            <TabScreenHeader title="Profil" />
 
             <View style={styles.content}>
                 <View style={styles.avatarContainer}>

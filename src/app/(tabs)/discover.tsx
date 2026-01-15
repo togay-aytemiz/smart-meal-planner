@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ScreenHeader } from '../../components/ui';
+import { TabScreenHeader } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
@@ -8,7 +8,7 @@ import { spacing } from '../../theme/spacing';
 export default function DiscoverScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <ScreenHeader title="Keşfet" />
+            <TabScreenHeader title="Keşfet" />
 
             <View style={styles.content}>
                 <View style={styles.placeholder}>

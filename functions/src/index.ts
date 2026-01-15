@@ -55,6 +55,24 @@ type RecipeLink = {
 };
 
 const normalizeText = (value: string) => value.trim().toLowerCase();
+const normalizePantryValue = (value: string) =>
+  value
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("tr-TR");
+const buildPantryCacheId = (normalizedKey: string) =>
+  createHash("sha256").update(normalizedKey).digest("hex");
+
+type PantryNormalizationRequest = {
+  items: string[];
+  locale?: string;
+};
+
+type PantryNormalizedItem = {
+  input: string;
+  canonical: string;
+  normalized: string;
+};
 
 const buildRecipeHash = (recipe: MenuRecipe, cuisine: string) => {
   const ingredientKey = recipe.ingredients
@@ -515,6 +533,126 @@ export const testOpenAI = onCall(async (request) => {
       message,
       { message }
     );
+  }
+});
+
+export const normalizePantryItems = onCall(async (request) => {
+  try {
+    const payload = request.data as PantryNormalizationRequest | undefined;
+    const rawItems = payload?.items;
+
+    if (!Array.isArray(rawItems) || rawItems.length === 0) {
+      throw new functions.HttpsError(
+        "invalid-argument",
+        "Pantry items are required"
+      );
+    }
+
+    const cleanedItems = rawItems
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter((item) => item.length > 0);
+
+    if (!cleanedItems.length) {
+      throw new functions.HttpsError(
+        "invalid-argument",
+        "Pantry items are required"
+      );
+    }
+
+    const uniqueByKey = new Map<string, string>();
+    for (const item of cleanedItems) {
+      const key = normalizePantryValue(item);
+      if (!key || uniqueByKey.has(key)) {
+        continue;
+      }
+      uniqueByKey.set(key, item);
+    }
+
+    const db = getDb();
+    const cacheRefs = Array.from(uniqueByKey.keys()).map((key) =>
+      db.collection("pantry_normalizations").doc(buildPantryCacheId(key))
+    );
+    const cacheSnaps = await db.getAll(...cacheRefs);
+
+    const cachedByKey = new Map<string, string>();
+    cacheSnaps.forEach((snap) => {
+      if (!snap.exists) return;
+      const data = snap.data() as { canonicalName?: string; normalizedKey?: string };
+      if (data?.canonicalName && data?.normalizedKey) {
+        cachedByKey.set(data.normalizedKey, data.canonicalName);
+      }
+    });
+
+    const missingKeys = Array.from(uniqueByKey.keys()).filter(
+      (key) => !cachedByKey.has(key)
+    );
+
+    let modelName = "cache";
+    const llmByKey = new Map<string, string>();
+
+    if (missingKeys.length > 0) {
+      const inputs = missingKeys.map((key) => uniqueByKey.get(key) ?? key);
+      const openai = new OpenAIProvider();
+      modelName = openai.getName();
+
+      const response = await openai.normalizePantryItems(inputs);
+      const responseItems = (response as { items?: Array<{ input?: string; canonical?: string }> })
+        ?.items;
+
+      if (Array.isArray(responseItems)) {
+        responseItems.forEach((item) => {
+          const input = typeof item.input === "string" ? item.input : "";
+          const canonical = typeof item.canonical === "string" ? item.canonical.trim() : "";
+          if (!input || !canonical) return;
+          const key = normalizePantryValue(input);
+          if (!key) return;
+          llmByKey.set(key, canonical);
+        });
+      }
+
+      const batch = db.batch();
+      missingKeys.forEach((key) => {
+        const canonical = llmByKey.get(key);
+        if (!canonical) return;
+        const ref = db.collection("pantry_normalizations").doc(buildPantryCacheId(key));
+        batch.set(
+          ref,
+          {
+            input: uniqueByKey.get(key) ?? "",
+            normalizedKey: key,
+            canonicalName: canonical,
+            provider: modelName,
+            updatedAt: FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      });
+      await batch.commit();
+    }
+
+    const results: PantryNormalizedItem[] = cleanedItems.map((input) => {
+      const key = normalizePantryValue(input);
+      const canonical =
+        cachedByKey.get(key) || llmByKey.get(key) || input.trim();
+      return {
+        input,
+        canonical,
+        normalized: normalizePantryValue(canonical),
+      };
+    });
+
+    return {
+      success: true,
+      items: results,
+      model: modelName,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error: unknown) {
+    console.error("normalizePantryItems error:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to normalize pantry items";
+    throw new functions.HttpsError("internal", message, { message });
   }
 });
 

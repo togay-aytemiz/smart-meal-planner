@@ -12,7 +12,7 @@ import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useNavigation } from 'expo-router';
-import { ScreenHeader, ReasoningBubble } from '../../components/ui';
+import { TabScreenHeader, ReasoningBubble } from '../../components/ui';
 import { functions } from '../../config/firebase';
 import { useUser } from '../../contexts/user-context';
 import { colors } from '../../theme/colors';
@@ -762,8 +762,8 @@ export default function TodayScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+            <TabScreenHeader title={displayName} />
             <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-                <ScreenHeader title={displayName} size="compact" style={styles.header} />
 
                 <View style={styles.calendarRow}>
                     {weekDays.map((day) => {
@@ -927,9 +927,6 @@ const styles = StyleSheet.create({
         color: colors.textPrimary,
         textAlign: 'center',
         marginTop: spacing.md,
-    },
-    header: {
-        paddingHorizontal: 0,
     },
     contentContainer: {
         paddingHorizontal: spacing.lg,

@@ -1,13 +1,16 @@
-import { View, Text, StyleSheet, ScrollView, Animated, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { spacing } from '../../theme/spacing';
+import { spacing, radius } from '../../theme/spacing';
 import { Button, Input } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useUser } from '../../contexts/user-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
+import firestore, { doc, serverTimestamp, setDoc } from '@react-native-firebase/firestore';
+import { functions } from '../../config/firebase';
 
 // Mock detected items (simplified)
 const DETECTED_ITEMS = [
@@ -26,11 +29,13 @@ export default function InventoryScreen() {
 
     const insets = useSafeAreaInsets();
     const { finishOnboarding } = useOnboarding();
+    const { state: userState } = useUser();
 
-    // START with empty if manual, else detected
-    const [items, setItems] = useState<{ id: string, name: string }[]>(
-        isManualMode ? [] : DETECTED_ITEMS
-    );
+    const initialItems = isManualMode ? [] : DETECTED_ITEMS;
+    const [items, setItems] = useState<{ id: string; name: string }[]>(initialItems);
+    const [rawInput, setRawInput] = useState('');
+    const [step, setStep] = useState<'input' | 'loading' | 'review'>(isManualMode ? 'input' : 'review');
+    const [inputError, setInputError] = useState<string | null>(null);
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -43,17 +48,73 @@ export default function InventoryScreen() {
             duration: 800,
             useNativeDriver: true,
         }).start();
-
-        // If manual mode is active and we have no items initially, add one automatically
-        if (isManualMode && items.length === 0) {
-            handleManualAdd();
-        }
     }, []);
 
+    const tokenizeInput = (value: string) =>
+        value
+            .split(/[\n,;•]+/)
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0);
+
+    const normalizeToken = (value: string) =>
+        value
+            .trim()
+            .replace(/\s+/g, ' ')
+            .toLocaleLowerCase('tr-TR');
+
+    const formatDisplayName = (value: string) => {
+        const normalized = normalizeToken(value);
+        if (!normalized) return '';
+        return normalized.charAt(0).toLocaleUpperCase('tr-TR') + normalized.slice(1);
+    };
+
+    const buildItemsFromInput = (value: string) => {
+        const tokens = tokenizeInput(value);
+        const seen = new Set<string>();
+        return tokens.reduce<{ id: string; name: string }[]>((acc, token, index) => {
+            const normalized = normalizeToken(token);
+            if (!normalized || seen.has(normalized)) {
+                return acc;
+            }
+            seen.add(normalized);
+            acc.push({
+                id: `${Date.now()}-${index}`,
+                name: formatDisplayName(token),
+            });
+            return acc;
+        }, []);
+    };
+
     const handleFinish = async () => {
-        // Filter out empty items
         const validItems = items.filter(i => i.name.trim().length > 0);
-        // Here we would save validItems to backend
+        if (!validItems.length) {
+            setInputError('En az bir malzeme eklemelisin.');
+            return;
+        }
+        const userId = userState.user?.uid;
+        if (!userId) {
+            setInputError('Kullanıcı doğrulanamadı. Lütfen tekrar dene.');
+            return;
+        }
+
+        const pantryItems = validItems.map((item) => ({
+            name: item.name.trim(),
+            normalizedName: normalizeToken(item.name),
+            source: 'onboarding',
+        }));
+
+        await setDoc(
+            doc(firestore(), 'Users', userId),
+            {
+                pantry: {
+                    items: pantryItems,
+                    updatedAt: serverTimestamp(),
+                },
+                updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+        );
+
         await finishOnboarding();
         router.replace('/');
     };
@@ -79,6 +140,52 @@ export default function InventoryScreen() {
         setItems(prev => prev.map(item =>
             item.id === id ? { ...item, name: text } : item
         ));
+    };
+
+    const handleContinue = async () => {
+        if (step === 'review') {
+            await handleFinish();
+            return;
+        }
+
+        const parsedItems = buildItemsFromInput(rawInput);
+        if (!parsedItems.length) {
+            setInputError('Lütfen en az bir malzeme yaz.');
+            return;
+        }
+
+        setInputError(null);
+        setStep('loading');
+
+        try {
+            const normalizePantry = functions.httpsCallable<
+                { items: string[] },
+                { success: boolean; items: Array<{ input: string; canonical: string; normalized: string }> }
+            >('normalizePantryItems');
+            const response = await normalizePantry({
+                items: parsedItems.map((item) => item.name),
+            });
+            const normalizedItems = response.data?.items?.length
+                ? response.data.items
+                : parsedItems.map((item) => ({ canonical: item.name }));
+
+            setItems(
+                normalizedItems.map((item, index) => ({
+                    id: `${Date.now()}-${index}`,
+                    name: item.canonical.trim() || parsedItems[index]?.name || '',
+                }))
+            );
+            setStep('review');
+        } catch (error) {
+            console.warn('Pantry normalization failed, using local fallback', error);
+            setItems(parsedItems);
+            setStep('review');
+        }
+    };
+
+    const handleBackToInput = () => {
+        setRawInput(items.map((item) => item.name).join('\n'));
+        setStep('input');
     };
 
     return (
@@ -109,68 +216,122 @@ export default function InventoryScreen() {
                 <Text style={styles.title}>
                     {isManualMode ? "Dolabını Oluştur" : "İşte Bulduklarımız!"}
                 </Text>
-                <Text style={styles.subtitle} numberOfLines={1} adjustsFontSizeToFit>
+                <Text style={styles.subtitle} numberOfLines={2}>
                     {isManualMode
-                        ? "Buzdolabındaki malzemeleri ekleyerek başlayalım."
+                        ? "Malzemeleri alt alta veya virgülle yaz. Biz düzenleyip sana sunacağız."
                         : `Buzdolabında ${items.length} farklı malzeme tespit ettik.`
                     }
                 </Text>
             </View>
 
-            <View style={styles.actionButtons}>
-                <Button
-                    title="+ Manuel Ekle"
-                    variant="ghost"
-                    onPress={handleManualAdd}
-                    size="medium"
-                />
-            </View>
+            {step === 'review' ? (
+                <View style={styles.actionButtons}>
+                    <Button
+                        title="Satır Ekle"
+                        variant="ghost"
+                        onPress={handleManualAdd}
+                        size="medium"
+                    />
+                </View>
+            ) : null}
 
             <KeyboardAvoidingView
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
-                style={{ flex: 1 }}
+                style={styles.keyboardWrap}
                 keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
             >
-                <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                >
                     <Animated.View style={{ opacity: fadeAnim }}>
-                        {items.map((item) => (
-                            <View key={item.id} style={styles.itemRow}>
-                                <View style={{ flex: 1, marginRight: spacing.sm }}>
-                                    <Input
-                                        ref={(ref: TextInput | null) => { inputRefs.current[item.id] = ref; }}
-                                        value={item.name}
-                                        onChangeText={(text: string) => handleUpdate(item.id, text)}
-                                        placeholder="Malzeme adı..."
-                                        blurOnSubmit={false}
-                                        onSubmitEditing={handleManualAdd}
-                                        returnKeyType="next"
-                                    />
-                                </View>
-                                <TouchableOpacity
-                                    onPress={() => handleDelete(item.id)}
-                                    style={styles.deleteButton}
-                                >
-                                    <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textMuted} />
-                                </TouchableOpacity>
+                        {step === 'input' ? (
+                            <View style={styles.textAreaCard}>
+                                <Text style={styles.textAreaLabel}>Malzemelerin</Text>
+                                <TextInput
+                                    value={rawInput}
+                                    onChangeText={setRawInput}
+                                    placeholder="Örn: mercimek, roka, tavuk göğsü"
+                                    placeholderTextColor={colors.textMuted}
+                                    multiline
+                                    textAlignVertical="top"
+                                    style={styles.textArea}
+                                />
+                                {inputError ? (
+                                    <Text style={styles.errorText}>{inputError}</Text>
+                                ) : (
+                                    <Text style={styles.helperText}>Virgül veya satır ile ayırabilirsin.</Text>
+                                )}
                             </View>
-                        ))}
+                        ) : null}
+
+                        {step === 'loading' ? (
+                            <View style={styles.loadingState}>
+                                <ActivityIndicator size="small" color={colors.textMuted} />
+                                <Text style={styles.loadingTitle}>Malzemeleri düzenliyoruz</Text>
+                                <Text style={styles.loadingSubtitle}>Yazım hatalarını düzeltiyor, tekrarları ayıklıyoruz.</Text>
+                            </View>
+                        ) : null}
+
+                        {step === 'review' ? (
+                            items.map((item) => (
+                                <View key={item.id} style={styles.itemRow}>
+                                    <View style={{ flex: 1, marginRight: spacing.sm }}>
+                                        <Input
+                                            ref={(ref: TextInput | null) => { inputRefs.current[item.id] = ref; }}
+                                            value={item.name}
+                                            onChangeText={(text: string) => handleUpdate(item.id, text)}
+                                            placeholder="Malzeme adı..."
+                                            blurOnSubmit={false}
+                                            onSubmitEditing={handleManualAdd}
+                                            returnKeyType="next"
+                                        />
+                                    </View>
+                                    <TouchableOpacity
+                                        onPress={() => handleDelete(item.id)}
+                                        style={styles.deleteButton}
+                                    >
+                                        <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                </View>
+                            ))
+                        ) : null}
                     </Animated.View>
                 </ScrollView>
             </KeyboardAvoidingView>
 
             <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
                 <Button
-                    title="Planımı Oluştur"
-                    onPress={handleFinish}
+                    title={step === 'review' ? 'Planımı Oluştur' : 'Devam'}
+                    onPress={handleContinue}
                     fullWidth
                     size="large"
+                    loading={step === 'loading'}
+                    disabled={step === 'loading'}
                 />
+                {step === 'review' && isManualMode ? (
+                    <Button
+                        title="Metni Düzenle"
+                        variant="ghost"
+                        onPress={handleBackToInput}
+                        fullWidth
+                        size="medium"
+                        style={{ marginTop: spacing.xs }}
+                    />
+                ) : null}
             </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
+    keyboardWrap: {
+        flex: 1,
+    },
     navHeader: {
         paddingHorizontal: spacing.lg,
         height: 44,
@@ -206,6 +367,32 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.lg,
         paddingBottom: 100,
     },
+    textAreaCard: {
+        backgroundColor: colors.surface,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: colors.border,
+        padding: spacing.md,
+        gap: spacing.sm,
+    },
+    textAreaLabel: {
+        ...typography.label,
+        color: colors.textPrimary,
+    },
+    textArea: {
+        minHeight: 140,
+        fontSize: 16,
+        lineHeight: 22,
+        color: colors.textPrimary,
+    },
+    helperText: {
+        ...typography.caption,
+        color: colors.textMuted,
+    },
+    errorText: {
+        ...typography.caption,
+        color: colors.error,
+    },
     itemRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -228,6 +415,22 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginBottom: spacing.sm,
         gap: spacing.xs,
+    },
+    loadingState: {
+        alignItems: 'center',
+        paddingVertical: spacing.xl,
+        gap: spacing.sm,
+    },
+    loadingTitle: {
+        ...typography.h3,
+        color: colors.textPrimary,
+        textAlign: 'center',
+    },
+    loadingSubtitle: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        textAlign: 'center',
+        maxWidth: 260,
     },
     verticalDivider: {
         width: 1,

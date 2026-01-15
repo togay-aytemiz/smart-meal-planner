@@ -8,12 +8,15 @@ import { MenuGenerationRequest } from "../types/menu";
 import { MenuRecipeGenerationParams } from "../types/generation-params";
 import { buildMenuPrompt, buildMenuSystemPrompt } from "./prompts/menu-prompt";
 import { buildRecipePrompt, buildSystemPrompt as buildRecipeSystemPrompt } from "./prompts/recipe-prompt";
+import { buildCompletePantryPrompt } from "./prompts/pantry-prompt";
 import { getOpenAIMenuSchema } from "./schemas/menu-schema";
 import { getOpenAIRecipeSchema } from "./schemas/recipe-schema";
+import { getOpenAIPantrySchema } from "./schemas/pantry-schema";
 
 type OpenAIResponseFormat =
     | ReturnType<typeof getOpenAIMenuSchema>
-    | ReturnType<typeof getOpenAIRecipeSchema>;
+    | ReturnType<typeof getOpenAIRecipeSchema>
+    | ReturnType<typeof getOpenAIPantrySchema>;
 
 export class OpenAIProvider {
     private client: OpenAI;
@@ -106,6 +109,21 @@ export class OpenAIProvider {
         } catch (error) {
             console.error("OpenAI recipe generation error:", error);
             throw new Error(`OpenAI recipe generation failed: ${error}`);
+        }
+    }
+
+    async normalizePantryItems(inputs: string[]): Promise<Record<string, unknown>> {
+        try {
+            const { systemPrompt, userPrompt } = buildCompletePantryPrompt(inputs);
+
+            return await this.generateStructuredResponse(
+                systemPrompt,
+                userPrompt,
+                getOpenAIPantrySchema()
+            );
+        } catch (error) {
+            console.error("OpenAI pantry normalization error:", error);
+            throw new Error(`OpenAI pantry normalization failed: ${error}`);
         }
     }
 

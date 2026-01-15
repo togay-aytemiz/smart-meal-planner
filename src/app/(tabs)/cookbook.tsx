@@ -5,7 +5,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ScreenHeader } from '../../components/ui';
+import { TabScreenHeader } from '../../components/ui';
 import { useUser } from '../../contexts/user-context';
 import { colors } from '../../theme/colors';
 import { spacing, radius, shadows } from '../../theme/spacing';
@@ -402,7 +402,7 @@ export default function CookbookScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <ScreenHeader title="Tarifler" subtitle="Bugün için seçilen akşam menüsü" />
+            <TabScreenHeader title="Tarifler" subtitle="Bugün için seçilen akşam menüsü" />
 
             <ScrollView contentContainerStyle={styles.contentContainer}>
                 {loading && (

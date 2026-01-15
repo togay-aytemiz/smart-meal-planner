@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { TabScreenHeader, Input, Button } from '../../components/ui';
@@ -173,6 +173,12 @@ export default function GroceriesScreen() {
     const [isSaving, setIsSaving] = useState(false);
     const [showQuickAdd, setShowQuickAdd] = useState(false);
 
+    useEffect(() => {
+        if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+            UIManager.setLayoutAnimationEnabledExperimental(true);
+        }
+    }, []);
+
     const pantryNames = useMemo(
         () =>
             new Set(
@@ -270,10 +276,15 @@ export default function GroceriesScreen() {
                 { merge: true }
             );
             setNewPantryItem('');
-            setShowQuickAdd(false);
+            toggleQuickAdd(false);
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const toggleQuickAdd = (nextState: boolean) => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setShowQuickAdd(nextState);
     };
 
     const handleRemovePantryItem = async (normalizedName?: string) => {
@@ -425,7 +436,7 @@ export default function GroceriesScreen() {
                                             title="Vazgeç"
                                             variant="ghost"
                                             onPress={() => {
-                                                setShowQuickAdd(false);
+                                                toggleQuickAdd(false);
                                                 setNewPantryItem('');
                                             }}
                                             size="small"
@@ -442,7 +453,7 @@ export default function GroceriesScreen() {
                             ) : (
                                 <TouchableOpacity
                                     style={styles.quickAddButton}
-                                    onPress={() => setShowQuickAdd(true)}
+                                    onPress={() => toggleQuickAdd(true)}
                                     activeOpacity={0.9}
                                 >
                                     <MaterialCommunityIcons name="plus" size={18} color={colors.primary} />
@@ -605,7 +616,8 @@ const styles = StyleSheet.create({
     itemMeta: {
         position: 'absolute',
         right: spacing.md,
-        top: spacing.sm,
+        top: 0,
+        bottom: 0,
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
@@ -636,7 +648,6 @@ const styles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: radius.full,
-        backgroundColor: colors.surfaceMuted,
         alignItems: 'center',
         justifyContent: 'center',
     },

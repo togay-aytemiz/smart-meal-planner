@@ -14,10 +14,11 @@ export function buildPantryPrompt(inputs: string[]): string {
   const cleaned = inputs.map((item) => item.trim()).filter(Boolean);
 
   return [
-    "Görev: Aşağıdaki kullanıcı girişlerini tekilleştir ve kanonik malzeme adına dönüştür.",
+    "Görev: Aşağıdaki kullanıcı girişlerini mutfakta kullanılan malzemeler olarak organize et.",
+    "Her girdiyi tekilleştir ve kanonik malzeme adına dönüştür.",
     "Kurallar:",
     "- Sadece malzeme adı döndür; miktar, marka, sıfat veya tarif ekleme.",
-    "- Yazım hatalarını düzelt (ör: \"mercmek\" -> \"mercimek\").",
+    "- Yazım hatalarını düzelt (ör: \"mercmek\" -> \"mercimek\", \"gindi\" -> \"hindi\").",
     "- Aynı malzeme ise aynı kanonik adla döndür.",
     "- Belirsizse girdiyi olduğu gibi ama temizlenmiş döndür.",
     "- Türkçe isimler kullan; tekil form tercih et.",

@@ -61,7 +61,11 @@ const normalizePantryValue = (value: string) =>
     .replace(/\s+/g, " ")
     .toLocaleLowerCase("tr-TR");
 const buildPantryCacheId = (normalizedKey: string) =>
-  createHash("sha256").update(normalizedKey).digest("hex");
+  createHash("sha256").update(`v2:${normalizedKey}`).digest("hex");
+
+const toTitleCase = (str: string) => {
+  return str.toLocaleLowerCase('tr-TR').replace(/(?:^|\s|["'([{])+\S/g, match => match.toLocaleUpperCase('tr-TR'));
+};
 
 type PantryNormalizationRequest = {
   items: string[];
@@ -202,7 +206,7 @@ const buildMenuDocument = ({
 }): DocumentData => {
   const menuItems = menu.items.map((item) => {
     const link = findRecipeLink(recipeLinks, item.course as MenuRecipeCourse, item.name);
-  if (!link) {
+    if (!link) {
       throw new Error("Menu recipe mapping is incomplete");
     }
     return {
@@ -574,12 +578,15 @@ export const normalizePantryItems = onCall(async (request) => {
     );
     const cacheSnaps = await db.getAll(...cacheRefs);
 
-    const cachedByKey = new Map<string, string>();
+    const cachedByKey = new Map<string, { canonical: string; categoryId: string }>();
     cacheSnaps.forEach((snap) => {
       if (!snap.exists) return;
-      const data = snap.data() as { canonicalName?: string; normalizedKey?: string };
+      const data = snap.data() as { canonicalName?: string; normalizedKey?: string; categoryId?: string };
       if (data?.canonicalName && data?.normalizedKey) {
-        cachedByKey.set(data.normalizedKey, data.canonicalName);
+        cachedByKey.set(data.normalizedKey, {
+          canonical: data.canonicalName,
+          categoryId: data.categoryId || 'other'
+        });
       }
     });
 
@@ -588,7 +595,7 @@ export const normalizePantryItems = onCall(async (request) => {
     );
 
     let modelName = "cache";
-    const llmByKey = new Map<string, string>();
+    const llmByKey = new Map<string, { canonical: string; categoryId: string }>();
 
     if (missingKeys.length > 0) {
       const inputs = missingKeys.map((key) => uniqueByKey.get(key) ?? key);
@@ -596,31 +603,33 @@ export const normalizePantryItems = onCall(async (request) => {
       modelName = openai.getName();
 
       const response = await openai.normalizePantryItems(inputs);
-      const responseItems = (response as { items?: Array<{ input?: string; canonical?: string }> })
+      const responseItems = (response as { items?: Array<{ input?: string; canonical?: string; categoryId?: string }> })
         ?.items;
 
       if (Array.isArray(responseItems)) {
         responseItems.forEach((item) => {
           const input = typeof item.input === "string" ? item.input : "";
           const canonical = typeof item.canonical === "string" ? item.canonical.trim() : "";
+          const categoryId = typeof item.categoryId === "string" ? item.categoryId : "other";
           if (!input || !canonical) return;
           const key = normalizePantryValue(input);
           if (!key) return;
-          llmByKey.set(key, canonical);
+          llmByKey.set(key, { canonical, categoryId });
         });
       }
 
       const batch = db.batch();
       missingKeys.forEach((key) => {
-        const canonical = llmByKey.get(key);
-        if (!canonical) return;
+        const result = llmByKey.get(key);
+        if (!result) return;
         const ref = db.collection("pantry_normalizations").doc(buildPantryCacheId(key));
         batch.set(
           ref,
           {
             input: uniqueByKey.get(key) ?? "",
             normalizedKey: key,
-            canonicalName: canonical,
+            canonicalName: result.canonical,
+            categoryId: result.categoryId,
             provider: modelName,
             updatedAt: FieldValue.serverTimestamp(),
             createdAt: FieldValue.serverTimestamp(),
@@ -633,12 +642,20 @@ export const normalizePantryItems = onCall(async (request) => {
 
     const results: PantryNormalizedItem[] = cleanedItems.map((input) => {
       const key = normalizePantryValue(input);
-      const canonical =
-        cachedByKey.get(key) || llmByKey.get(key) || input.trim();
+      const cached = cachedByKey.get(key);
+      const llmResult = llmByKey.get(key);
+
+      let canonical = cached?.canonical || llmResult?.canonical || input.trim();
+      let categoryId = cached?.categoryId || llmResult?.categoryId || "other";
+
+      // Enforce Title Case
+      canonical = toTitleCase(canonical);
+
       return {
         input,
         canonical,
         normalized: normalizePantryValue(canonical),
+        categoryId,
       };
     });
 
@@ -652,6 +669,68 @@ export const normalizePantryItems = onCall(async (request) => {
     console.error("normalizePantryItems error:", error);
     const message =
       error instanceof Error ? error.message : "Failed to normalize pantry items";
+    throw new functions.HttpsError("internal", message, { message });
+  }
+});
+
+// Grocery list categorization endpoint
+type GroceryCategorizationRequest = {
+  items: Array<{
+    name: string;
+    amount?: string;
+    unit?: string;
+    meals: string[];
+  }>;
+};
+
+export const categorizeGroceryItems = onCall(async (request) => {
+  try {
+    const payload = request.data as GroceryCategorizationRequest | undefined;
+    const rawItems = payload?.items;
+
+    if (!Array.isArray(rawItems) || rawItems.length === 0) {
+      throw new functions.HttpsError(
+        "invalid-argument",
+        "Grocery items are required"
+      );
+    }
+
+    const openai = new OpenAIProvider();
+    const response = await openai.categorizeGroceryItems(rawItems);
+
+    const responseItems = (response as {
+      items?: Array<{
+        name: string;
+        amount?: string;
+        unit?: string;
+        meals: string[];
+        categoryId: string;
+      }>
+    })?.items;
+
+    if (!Array.isArray(responseItems)) {
+      throw new functions.HttpsError(
+        "internal",
+        "Invalid response from LLM"
+      );
+    }
+
+    // Apply Title Case to all item names
+    const categorizedItems = responseItems.map((item) => ({
+      ...item,
+      name: toTitleCase(item.name),
+    }));
+
+    return {
+      success: true,
+      items: categorizedItems,
+      model: openai.getName(),
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error: unknown) {
+    console.error("categorizeGroceryItems error:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to categorize grocery items";
     throw new functions.HttpsError("internal", message, { message });
   }
 });
@@ -891,9 +970,9 @@ export const generateWeeklyMenu = onCall(async (request) => {
       const avoidItemNames = Array.from(usedDishNames);
       const cleanedAvoidItemNames = leftoverMainDish
         ? avoidItemNames.filter(
-            (name) =>
-              normalizeDishName(name) !== normalizeDishName(leftoverMainDish)
-          )
+          (name) =>
+            normalizeDishName(name) !== normalizeDishName(leftoverMainDish)
+        )
         : avoidItemNames;
       const baseRequest = onboardingToMenuRequest(onboarding, assignment.date, {
         mealType: assignment.mealType,

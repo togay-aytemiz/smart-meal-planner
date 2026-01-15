@@ -10,12 +10,12 @@ service cloud.firestore {
     }
 
     match /menus/{menuId} {
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
       allow write: if false;
     }
 
     match /recipes/{recipeId} {
-      allow read: if request.auth != null && resource.data.source.userId == request.auth.uid;
+      allow read: if request.auth != null && (resource == null || resource.data.source.userId == request.auth.uid);
       allow write: if false;
     }
 

@@ -9,14 +9,17 @@ import { MenuRecipeGenerationParams } from "../types/generation-params";
 import { buildMenuPrompt, buildMenuSystemPrompt } from "./prompts/menu-prompt";
 import { buildRecipePrompt, buildSystemPrompt as buildRecipeSystemPrompt } from "./prompts/recipe-prompt";
 import { buildCompletePantryPrompt } from "./prompts/pantry-prompt";
+import { buildCompleteGroceryCategorizationPrompt, GroceryInputItem } from "./prompts/grocery-prompt";
 import { getOpenAIMenuSchema } from "./schemas/menu-schema";
 import { getOpenAIRecipeSchema } from "./schemas/recipe-schema";
 import { getOpenAIPantrySchema } from "./schemas/pantry-schema";
+import { getOpenAIGrocerySchema } from "./schemas/grocery-schema";
 
 type OpenAIResponseFormat =
     | ReturnType<typeof getOpenAIMenuSchema>
     | ReturnType<typeof getOpenAIRecipeSchema>
-    | ReturnType<typeof getOpenAIPantrySchema>;
+    | ReturnType<typeof getOpenAIPantrySchema>
+    | ReturnType<typeof getOpenAIGrocerySchema>;
 
 export class OpenAIProvider {
     private client: OpenAI;
@@ -127,7 +130,23 @@ export class OpenAIProvider {
         }
     }
 
+    async categorizeGroceryItems(items: GroceryInputItem[]): Promise<Record<string, unknown>> {
+        try {
+            const { systemPrompt, userPrompt } = buildCompleteGroceryCategorizationPrompt(items);
+
+            return await this.generateStructuredResponse(
+                systemPrompt,
+                userPrompt,
+                getOpenAIGrocerySchema()
+            );
+        } catch (error) {
+            console.error("OpenAI grocery categorization error:", error);
+            throw new Error(`OpenAI grocery categorization failed: ${error}`);
+        }
+    }
+
     getName(): string {
         return "openai";
     }
 }
+

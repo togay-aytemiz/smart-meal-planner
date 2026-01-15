@@ -1,3 +1,7 @@
+import { GROCERY_CATEGORIES } from '../prompts/shared-categories';
+
+const categoryEnumValues = GROCERY_CATEGORIES.map((c) => c.id);
+
 export const getOpenAIPantrySchema = () => ({
   type: "json_schema" as const,
   json_schema: {
@@ -12,8 +16,12 @@ export const getOpenAIPantrySchema = () => ({
             properties: {
               input: { type: "string" },
               canonical: { type: "string" },
+              categoryId: {
+                type: "string",
+                enum: categoryEnumValues,
+              },
             },
-            required: ["input", "canonical"],
+            required: ["input", "canonical", "categoryId"],
             additionalProperties: false,
           },
         },

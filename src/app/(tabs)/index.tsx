@@ -705,6 +705,15 @@ export default function TodayScreen() {
                         const retry = await loadMenusFromFirestore();
                         loadedCount = retry.loadedCount;
                         lastError = retry.lastError;
+
+                        // Start background generation for remaining days
+                        generateRemainingDaysInBackground(
+                            userId,
+                            weekStart,
+                            resolvedSnapshot,
+                            onboardingHash,
+                            dateKey
+                        );
                     }
                 }
 

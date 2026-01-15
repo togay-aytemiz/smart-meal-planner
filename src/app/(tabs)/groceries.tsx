@@ -1,14 +1,39 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, Platform, UIManager, Animated, ActivityIndicator, RefreshControl } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { TabScreenHeader, Input, Button } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows } from '../../theme/spacing';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import firestore, { doc, onSnapshot, serverTimestamp, setDoc } from '@react-native-firebase/firestore';
 import { functions } from '../../config/firebase';
 import { useUser } from '../../contexts/user-context';
+import { fetchMenuBundle } from '../../utils/menu-storage';
+import { buildOnboardingHash } from '../../utils/onboarding-hash';
+import { checkWeeklyMenuCompleteness, subscribeToMenuCompletion, MenuGenerationStatus } from '../../utils/menu-generation-status';
+
+// Category configuration (must match Cloud Function)
+const CATEGORY_TITLES: Record<string, string> = {
+    produce: 'Meyve & Sebze',
+    proteins: 'Et & Protein',
+    dairy: 'Süt Ürünleri',
+    grains: 'Tahıllar & Bakliyat',
+    spices: 'Baharatlar',
+    sauces: 'Sos & Çeşni',
+    bakery: 'Fırın & Ekmek',
+    frozen: 'Dondurulmuş',
+    beverages: 'İçecekler',
+    other: 'Diğer',
+};
+
+type MealUsage = {
+    recipeName: string;
+    course: 'main' | 'side' | 'appetizer' | 'soup' | 'salad' | 'dessert' | 'drink' | 'other';
+    day: string;
+    mealType: 'Kahvaltı' | 'Öğle' | 'Akşam';
+};
 
 type GroceryStatus = 'to-buy' | 'pantry';
 type GroceryItem = {
@@ -16,8 +41,37 @@ type GroceryItem = {
     name: string;
     amount?: string;
     status: GroceryStatus;
-    meals: string[];
+    meals: MealUsage[];
     normalizedName?: string;
+};
+
+const ExpandButton = ({ isExpanded }: { isExpanded: boolean }) => {
+    const rotateAnim = useMemo(() => new Animated.Value(isExpanded ? 1 : 0), []);
+
+    useEffect(() => {
+        Animated.timing(rotateAnim, {
+            toValue: isExpanded ? 1 : 0,
+            duration: 200,
+            useNativeDriver: true,
+        }).start();
+    }, [isExpanded]);
+
+    const rotate = rotateAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '-180deg'],
+    });
+
+    return (
+        <View style={styles.usageButton}>
+            <Animated.View style={{ transform: [{ rotate }] }}>
+                <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={24}
+                    color={colors.textSecondary}
+                />
+            </Animated.View>
+        </View>
+    );
 };
 
 type GroceryCategory = {
@@ -34,49 +88,24 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
     { key: 'pantry', label: 'Dolapta' },
 ];
 
-const GROCERY_CATEGORIES: GroceryCategory[] = [
-    {
-        id: 'produce',
-        title: 'Meyve & Sebze',
-        items: [
-            { id: 'prod-1', name: 'Domates', amount: '4 adet', status: 'to-buy', meals: ['Akşam Menüsü', 'Salata'] },
-            { id: 'prod-2', name: 'Roka', amount: '1 bağ', status: 'to-buy', meals: ['Meze', 'Salata'] },
-            { id: 'prod-3', name: 'Limon', amount: '2 adet', status: 'to-buy', meals: ['Sos', 'Tatlı'] },
-        ],
-    },
-    {
-        id: 'dairy',
-        title: 'Süt Ürünleri',
-        items: [
-            { id: 'dairy-2', name: 'Parmesan', amount: '100 g', status: 'to-buy', meals: ['Ana Yemek'] },
-        ],
-    },
-    {
-        id: 'proteins',
-        title: 'Et & Protein',
-        items: [
-            { id: 'prot-1', name: 'Tavuk Göğsü', amount: '600 g', status: 'to-buy', meals: ['Ana Yemek'] },
-        ],
-    },
-    {
-        id: 'pantry',
-        title: 'Kuru Gıdalar',
-        items: [
-            { id: 'pan-2', name: 'Zeytinyağı', amount: '500 ml', status: 'to-buy', meals: ['Sos', 'Salata'] },
-        ],
-    },
-    {
-        id: 'bakery',
-        title: 'Fırın & Ekmek',
-        items: [
-            { id: 'bak-1', name: 'Baget', amount: '1 adet', status: 'to-buy', meals: ['Yan Yemek'] },
-        ],
-    },
-];
+
 
 type PantryItem = {
     name: string;
     normalizedName: string;
+};
+
+const getCourseIcon = (course: MealUsage['course']): keyof typeof MaterialCommunityIcons.glyphMap => {
+    switch (course) {
+        case 'main': return 'food-steak';
+        case 'side': return 'food-drumstick';
+        case 'soup': return 'bowl-mix';
+        case 'salad': return 'leaf';
+        case 'appetizer': return 'food-croissant';
+        case 'dessert': return 'cupcake';
+        case 'drink': return 'cup';
+        default: return 'silverware-fork-knife';
+    }
 };
 
 const CATEGORY_CONFIG = [
@@ -136,6 +165,53 @@ const buildWeekRange = () => {
     return `${format(start)} - ${format(end)} Plan`;
 };
 
+const buildWeekDateKeys = () => {
+    const now = new Date();
+    const dayIndex = (now.getDay() + 6) % 7; // Monday = 0
+    const start = new Date(now);
+    start.setDate(now.getDate() - dayIndex);
+
+    const keys: { dateKey: string; label: string }[] = [];
+    const labels = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const year = d.getFullYear();
+        const month = `${d.getMonth() + 1}`.padStart(2, '0');
+        const day = `${d.getDate()}`.padStart(2, '0');
+        keys.push({
+            dateKey: `${year}-${month}-${day}`,
+            label: labels[i]
+        });
+    }
+    return keys;
+};
+
+const categorizeItems = (items: GroceryItem[]): GroceryCategory[] => {
+    const buckets = new Map<string, GroceryCategory>();
+    // Pre-fill all categories to order them as per config
+    CATEGORY_CONFIG.forEach((config) => {
+        buckets.set(config.id, { id: config.id, title: config.title, items: [] });
+    });
+    // Add 'other' category for unmatched items
+    buckets.set('other', { id: 'other', title: 'Diğer', items: [] });
+
+    items.forEach((item) => {
+        const normalized = item.normalizedName || normalizeName(item.name);
+        const match = CATEGORY_CONFIG.find((config) =>
+            config.keywords.some((keyword) => normalized.includes(keyword))
+        );
+        const categoryId = match?.id ?? 'other';
+        const category = buckets.get(categoryId);
+        if (category) {
+            category.items.push(item);
+        }
+    });
+
+    return Array.from(buckets.values()).filter((category) => category.items.length > 0);
+};
+
 const normalizeName = (value: string) =>
     value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
 
@@ -169,15 +245,154 @@ export default function GroceriesScreen() {
     const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
     const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
     const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+    const [groceryCategories, setGroceryCategories] = useState<GroceryCategory[]>([]);
+    const [loading, setLoading] = useState(true);
     const [newPantryItem, setNewPantryItem] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [showQuickAdd, setShowQuickAdd] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [menuStatus, setMenuStatus] = useState<MenuGenerationStatus | null>(null);
+    const [isMenuGenerating, setIsMenuGenerating] = useState(false);
+    const pollCleanupRef = useRef<(() => void) | null>(null);
 
     useEffect(() => {
         if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
             UIManager.setLayoutAnimationEnabledExperimental(true);
         }
     }, []);
+
+    const fetchWeeklyGroceries = useCallback(async () => {
+        const userId = userState.user?.uid;
+        if (!userId) {
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+
+        // First, check if menu generation is complete
+        const status = await checkWeeklyMenuCompleteness(userId);
+        setMenuStatus(status);
+
+        if (!status.complete) {
+            // Menu is still generating - start polling
+            setIsMenuGenerating(true);
+            setLoading(false);
+
+            // Clean up any existing poll
+            if (pollCleanupRef.current) {
+                pollCleanupRef.current();
+            }
+
+            // Start polling for completion
+            pollCleanupRef.current = subscribeToMenuCompletion(
+                userId,
+                (newStatus) => {
+                    setMenuStatus(newStatus);
+                    if (newStatus.complete) {
+                        setIsMenuGenerating(false);
+                        // Trigger a refresh to load the grocery list
+                        fetchWeeklyGroceries();
+                    }
+                },
+                5000 // Poll every 5 seconds
+            );
+            return;
+        }
+
+        // Menu is complete - proceed to fetch groceries
+        setIsMenuGenerating(false);
+
+        try {
+            const weekDates = buildWeekDateKeys();
+            const allIngredients = new Map<string, GroceryItem>();
+            const onboardingHash = buildOnboardingHash(null); // Or pass actual onboarding if needed
+
+            const processMeal = (
+                dateLabel: string,
+                mealType: 'Kahvaltı' | 'Öğle' | 'Akşam',
+                recipeName: string,
+                course: string,
+                items: { name: string; amount?: string | number; unit?: string }[]
+            ) => {
+                items.forEach((ing) => {
+                    const normalized = normalizeName(ing.name);
+                    const existing = allIngredients.get(normalized);
+                    const mealUsage: MealUsage = {
+                        recipeName,
+                        course: (course as MealUsage['course']) || 'other',
+                        day: dateLabel,
+                        mealType,
+                    };
+
+                    if (existing) {
+                        // Check if this exact meal usage already exists
+                        const exists = existing.meals.some(
+                            m => m.recipeName === recipeName && m.day === dateLabel
+                        );
+                        if (!exists) {
+                            existing.meals.push(mealUsage);
+                        }
+                    } else {
+                        const amountStr = ing.amount ? `${ing.amount} ${ing.unit ?? ''}`.trim() : undefined;
+                        allIngredients.set(normalized, {
+                            id: `g-${normalized}`,
+                            name: ing.name,
+                            amount: amountStr,
+                            status: 'to-buy',
+                            meals: [mealUsage],
+                            normalizedName: normalized,
+                        });
+                    }
+                });
+            };
+
+            const promises = weekDates.map(async ({ dateKey, label }) => {
+                const [breakfast, lunch, dinner] = await Promise.all([
+                    fetchMenuBundle(userId, dateKey, 'breakfast', onboardingHash),
+                    fetchMenuBundle(userId, dateKey, 'lunch', onboardingHash),
+                    fetchMenuBundle(userId, dateKey, 'dinner', onboardingHash),
+                ]);
+
+                if (breakfast?.recipes?.recipes) {
+                    breakfast.recipes.recipes.forEach(r =>
+                        processMeal(label, 'Kahvaltı', r.name, r.course, r.ingredients || [])
+                    );
+                }
+                if (lunch?.recipes?.recipes) {
+                    lunch.recipes.recipes.forEach(r =>
+                        processMeal(label, 'Öğle', r.name, r.course, r.ingredients || [])
+                    );
+                }
+                if (dinner?.recipes?.recipes) {
+                    dinner.recipes.recipes.forEach(r =>
+                        processMeal(label, 'Akşam', r.name, r.course, r.ingredients || [])
+                    );
+                }
+            });
+
+            await Promise.all(promises);
+
+            const items = Array.from(allIngredients.values());
+            const categorized = categorizeItems(items);
+            setGroceryCategories(categorized);
+
+        } catch (error) {
+            console.error('Failed to fetch grocery list:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [userState.user?.uid]);
+
+    useEffect(() => {
+        fetchWeeklyGroceries();
+    }, [fetchWeeklyGroceries]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchWeeklyGroceries();
+    }, [fetchWeeklyGroceries]);
 
     const pantryNames = useMemo(
         () =>
@@ -192,15 +407,15 @@ export default function GroceriesScreen() {
             return categorizePantryItems(pantryItems);
         }
 
-        return GROCERY_CATEGORIES.map((category) => {
+        return groceryCategories.map((category) => {
             const items = category.items.filter((item) => {
                 if (activeFilter === 'all') return true;
-                const inPantry = pantryNames.has(item.name.toLocaleLowerCase('tr-TR'));
+                const inPantry = pantryNames.has(item.normalizedName || normalizeName(item.name));
                 return !inPantry;
             });
             return { ...category, items };
         }).filter((category) => category.items.length > 0);
-    }, [activeFilter, pantryNames]);
+    }, [activeFilter, pantryNames, groceryCategories, pantryItems]);
 
     const totalItemCount = useMemo(
         () => filteredCategories.reduce((sum, category) => sum + category.items.length, 0),
@@ -219,12 +434,21 @@ export default function GroceriesScreen() {
                     name: item?.name ?? '',
                     normalizedName: item?.normalizedName ?? normalizeName(item?.name ?? ''),
                 }))
-                .filter((item) => item.name.length > 0);
+                .filter((item: PantryItem) => item.name.length > 0);
             setPantryItems(mapped);
         });
 
         return unsubscribe;
     }, [userState.user?.uid]);
+
+    // Cleanup polling on unmount
+    useEffect(() => {
+        return () => {
+            if (pollCleanupRef.current) {
+                pollCleanupRef.current();
+            }
+        };
+    }, []);
 
     const tokenizeInput = (value: string) =>
         value
@@ -321,8 +545,14 @@ export default function GroceriesScreen() {
         const showUsage = activeFilter !== 'pantry' && hasMeals;
         const isLastItem = index === totalItems - 1;
 
+        const RowComponent = showUsage ? TouchableOpacity : View;
+
         const content = (
-            <View style={[styles.itemRow, isLastItem && styles.itemRowLast]}>
+            <RowComponent
+                style={[styles.itemRow, isLastItem && styles.itemRowLast]}
+                onPress={showUsage ? () => handleToggleUsage(item.id) : undefined}
+                activeOpacity={0.7}
+            >
                 <View style={styles.itemInfo}>
                     <Text style={styles.itemName}>{item.name}</Text>
                     {item.amount ? (
@@ -336,31 +566,32 @@ export default function GroceriesScreen() {
                         </View>
                     ) : null}
                     {showUsage ? (
-                        <TouchableOpacity
-                            onPress={() => handleToggleUsage(item.id)}
-                            style={styles.usageButton}
-                        >
-                            <MaterialCommunityIcons
-                                name="chef-hat"
-                                size={18}
-                                color={colors.textSecondary}
-                            />
-                        </TouchableOpacity>
+                        <ExpandButton isExpanded={isExpanded} />
                     ) : null}
                 </View>
                 {isExpanded && showUsage ? (
-                    <View style={styles.usageRow}>
-                        <MaterialCommunityIcons
-                            name="silverware-fork-knife"
-                            size={14}
-                            color={colors.textMuted}
-                        />
-                        <Text style={styles.usageText}>
-                            {item.meals.join(' • ')}
-                        </Text>
+                    <View style={styles.usageContainer}>
+                        {item.meals.map((meal, idx) => {
+                            const courseIcon = getCourseIcon(meal.course);
+                            return (
+                                <View key={idx} style={styles.usageRow}>
+                                    <MaterialCommunityIcons
+                                        name={courseIcon}
+                                        size={14}
+                                        color={colors.textMuted}
+                                    />
+                                    <Text style={styles.usageText}>
+                                        {meal.recipeName}
+                                    </Text>
+                                    <Text style={styles.usageDay}>
+                                        {meal.day}
+                                    </Text>
+                                </View>
+                            );
+                        })}
                     </View>
                 ) : null}
-            </View>
+            </RowComponent>
         );
 
         if (activeFilter === 'pantry') {
@@ -381,6 +612,7 @@ export default function GroceriesScreen() {
     };
 
     const handleToggleUsage = (itemId: string) => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setExpandedItemId((prev) => (prev === itemId ? null : itemId));
     };
 
@@ -419,6 +651,9 @@ export default function GroceriesScreen() {
                 <ScrollView
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContent}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+                    }
                 >
                     {activeFilter === 'pantry' ? (
                         <View style={styles.quickAddCard}>
@@ -465,11 +700,43 @@ export default function GroceriesScreen() {
 
                     {filteredCategories.length === 0 ? (
                         <View style={styles.placeholder}>
-                            <MaterialCommunityIcons name="cart-outline" size={56} color={colors.iconMuted} />
-                            <Text style={styles.placeholderTitle}>Liste boş</Text>
-                            <Text style={styles.placeholderText}>
-                                Bu filtre için henüz malzeme yok.
-                            </Text>
+                            {loading ? (
+                                <View style={styles.loadingContainer}>
+                                    <ActivityIndicator size="large" color={colors.primary} />
+                                    <Text style={styles.loadingText}>Liste hazırlanıyor...</Text>
+                                </View>
+                            ) : isMenuGenerating ? (
+                                <View style={styles.loadingContainer}>
+                                    <MaterialCommunityIcons name="chef-hat" size={56} color={colors.accent} />
+                                    <Text style={styles.placeholderTitle}>Haftalık Menü Hazırlanıyor</Text>
+                                    <Text style={styles.placeholderText}>
+                                        Menünüz arka planda oluşturuluyor...
+                                    </Text>
+                                    {menuStatus && (
+                                        <View style={styles.progressContainer}>
+                                            <View style={styles.progressBar}>
+                                                <View
+                                                    style={[
+                                                        styles.progressFill,
+                                                        { width: `${(menuStatus.generatedDays / menuStatus.totalDays) * 100}%` }
+                                                    ]}
+                                                />
+                                            </View>
+                                            <Text style={styles.progressText}>
+                                                {menuStatus.generatedDays}/{menuStatus.totalDays} gün tamamlandı
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            ) : (
+                                <>
+                                    <MaterialCommunityIcons name="cart-outline" size={56} color={colors.iconMuted} />
+                                    <Text style={styles.placeholderTitle}>Liste boş</Text>
+                                    <Text style={styles.placeholderText}>
+                                        Bu filtre için henüz malzeme yok.
+                                    </Text>
+                                </>
+                            )}
                         </View>
                     ) : (
                         filteredCategories.map((category) => (
@@ -517,7 +784,8 @@ const styles = StyleSheet.create({
     filterRow: {
         flexDirection: 'row',
         gap: spacing.sm,
-        paddingVertical: spacing.md,
+        paddingTop: spacing.xs,
+        paddingBottom: spacing.md,
     },
     filterChip: {
         flex: 1,
@@ -652,14 +920,30 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     usageRow: {
-        marginTop: spacing.sm,
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
+        paddingVertical: spacing.xs / 2,
     },
     usageText: {
         ...typography.caption,
-        color: colors.textSecondary,
+        color: colors.textPrimary,
+        flex: 1,
+    },
+    usageContainer: {
+        marginTop: spacing.sm,
+        paddingTop: spacing.sm,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: colors.border,
+    },
+    usageSeparator: {
+        ...typography.caption,
+        color: colors.textMuted,
+        marginHorizontal: spacing.xs / 2,
+    },
+    usageDay: {
+        ...typography.caption,
+        color: colors.textMuted,
     },
     placeholder: {
         flex: 1,
@@ -677,5 +961,45 @@ const styles = StyleSheet.create({
         ...typography.bodySmall,
         color: colors.textSecondary,
         textAlign: 'center',
+    },
+    loadingContainer: {
+        alignItems: 'center',
+        gap: spacing.md,
+    },
+    progressContainer: {
+        marginTop: spacing.lg,
+        width: '80%',
+        alignItems: 'center',
+    },
+    progressBar: {
+        width: '100%',
+        height: 8,
+        backgroundColor: colors.border,
+        borderRadius: radius.full,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: colors.accent,
+        borderRadius: radius.full,
+    },
+    progressText: {
+        ...typography.caption,
+        color: colors.textSecondary,
+        marginTop: spacing.sm,
+    },
+    spinner: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        borderWidth: 3,
+        borderColor: colors.primary,
+        borderTopColor: 'transparent',
+        // Note: Simple CSS spinner, in RN use ActivityIndicator usually, 
+        // but since we want to keep it simple without importing ActivityIndicator for now or use it if available
+    },
+    loadingText: {
+        ...typography.body,
+        color: colors.textSecondary,
     },
 });

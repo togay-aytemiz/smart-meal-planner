@@ -9,6 +9,7 @@ interface TabScreenHeaderProps {
     style?: StyleProp<ViewStyle>;
     titleStyle?: StyleProp<TextStyle>;
     subtitleStyle?: StyleProp<TextStyle>;
+    gap?: number;
 }
 
 export default function TabScreenHeader({
@@ -18,6 +19,7 @@ export default function TabScreenHeader({
     style,
     titleStyle,
     subtitleStyle,
+    gap,
 }: TabScreenHeaderProps) {
     return (
         <ScreenHeader
@@ -25,6 +27,8 @@ export default function TabScreenHeader({
             subtitle={subtitle}
             rightSlot={rightSlot}
             size="default"
+            align="start"
+            gap={gap}
             style={style}
             titleStyle={titleStyle}
             subtitleStyle={subtitleStyle}

@@ -9,6 +9,8 @@ interface ScreenHeaderProps {
     subtitle?: string;
     rightSlot?: ReactNode;
     size?: 'default' | 'compact';
+    align?: 'center' | 'start';
+    gap?: number;
     style?: StyleProp<ViewStyle>;
     titleStyle?: StyleProp<TextStyle>;
     subtitleStyle?: StyleProp<TextStyle>;
@@ -19,19 +21,22 @@ export default function ScreenHeader({
     subtitle,
     rightSlot,
     size = 'default',
+    align = 'center',
+    gap,
     style,
     titleStyle,
     subtitleStyle,
 }: ScreenHeaderProps) {
     const paddingBottom = size === 'compact' ? spacing.sm : spacing.lg;
     const paddingTop = size === 'compact' ? spacing.md : spacing.lg;
+    const alignItems = align === 'start' ? 'flex-start' : 'center';
 
     return (
-        <View style={[styles.container, { paddingBottom, paddingTop }, style]}>
-            <View style={styles.titleRow}>
+        <View style={[styles.container, { paddingBottom, paddingTop }, gap !== undefined && { gap }, style]}>
+            <View style={[styles.titleRow, { alignItems }, rightSlot && styles.titleRowWithRight]}>
                 <Text style={[styles.title, titleStyle]}>{title}</Text>
-                {rightSlot ? <View style={styles.rightSlot}>{rightSlot}</View> : null}
             </View>
+            {rightSlot ? <View style={styles.rightSlot}>{rightSlot}</View> : null}
             {subtitle ? <Text style={[styles.subtitle, subtitleStyle]}>{subtitle}</Text> : null}
         </View>
     );
@@ -41,12 +46,16 @@ const styles = StyleSheet.create({
     container: {
         paddingHorizontal: spacing.lg,
         gap: spacing.xs,
+        position: 'relative',
     },
     titleRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start',
         gap: spacing.md,
+    },
+    titleRowWithRight: {
+        paddingRight: 72,
     },
     title: {
         ...typography.h2,
@@ -58,7 +67,10 @@ const styles = StyleSheet.create({
         color: colors.textSecondary,
     },
     rightSlot: {
-        alignItems: 'flex-end',
+        position: 'absolute',
+        top: spacing.lg,
+        right: spacing.lg,
+        alignItems: 'center',
         justifyContent: 'center',
     },
 });

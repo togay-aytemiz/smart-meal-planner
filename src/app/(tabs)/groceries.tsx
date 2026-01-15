@@ -1,11 +1,14 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { TabScreenHeader } from '../../components/ui';
+import { TabScreenHeader, Input, Button } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows } from '../../theme/spacing';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import firestore, { doc, onSnapshot, serverTimestamp, setDoc } from '@react-native-firebase/firestore';
+import { functions } from '../../config/firebase';
+import { useUser } from '../../contexts/user-context';
 
 type GroceryStatus = 'to-buy' | 'pantry';
 type GroceryItem = {
@@ -14,6 +17,7 @@ type GroceryItem = {
     amount?: string;
     status: GroceryStatus;
     meals: string[];
+    normalizedName?: string;
 };
 
 type GroceryCategory = {
@@ -70,54 +74,116 @@ const GROCERY_CATEGORIES: GroceryCategory[] = [
     },
 ];
 
-const PANTRY_CATEGORIES: GroceryCategory[] = [
+type PantryItem = {
+    name: string;
+    normalizedName: string;
+};
+
+const CATEGORY_CONFIG = [
     {
         id: 'produce',
         title: 'Meyve & Sebze',
-        items: [
-            { id: 'pantry-prod-1', name: 'Roka', status: 'pantry', meals: [] },
-        ],
+        keywords: ['domates', 'salatalık', 'biber', 'soğan', 'sarımsak', 'patates', 'havuç', 'roka', 'marul', 'limon', 'elma', 'muz'],
     },
     {
         id: 'dairy',
         title: 'Süt Ürünleri',
-        items: [
-            { id: 'pantry-dairy-1', name: 'Yoğurt', status: 'pantry', meals: [] },
-        ],
+        keywords: ['süt', 'yoğurt', 'peynir', 'tereyağı', 'kaymak', 'krema'],
     },
     {
         id: 'proteins',
         title: 'Et & Protein',
-        items: [
-            { id: 'pantry-prot-1', name: 'Yumurta', status: 'pantry', meals: [] },
-        ],
+        keywords: ['tavuk', 'et', 'kıyma', 'balık', 'yumurta', 'hindi'],
     },
     {
         id: 'pantry',
         title: 'Kuru Gıdalar',
-        items: [
-            { id: 'pantry-dry-1', name: 'Mercimek', status: 'pantry', meals: [] },
-        ],
+        keywords: ['mercimek', 'pirinç', 'bulgur', 'makarna', 'un', 'şeker', 'tuz', 'zeytinyağı', 'nohut', 'fasulye'],
+    },
+    {
+        id: 'bakery',
+        title: 'Fırın & Ekmek',
+        keywords: ['ekmek', 'baget', 'lavaş', 'simit'],
+    },
+    {
+        id: 'frozen',
+        title: 'Dondurulmuş',
+        keywords: ['dondurulmuş', 'buzluk'],
+    },
+    {
+        id: 'beverages',
+        title: 'İçecekler',
+        keywords: ['su', 'maden suyu', 'soda', 'çay', 'kahve', 'meşrubat'],
+    },
+    {
+        id: 'spices',
+        title: 'Baharat & Soslar',
+        keywords: ['baharat', 'karabiber', 'kimyon', 'pul biber', 'ketçap', 'mayonez'],
     },
 ];
 
+const buildWeekRange = () => {
+    const now = new Date();
+    const dayIndex = (now.getDay() + 6) % 7;
+    const start = new Date(now);
+    start.setDate(now.getDate() - dayIndex);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
+    const format = (date: Date) =>
+        date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+
+    return `${format(start)} - ${format(end)} Plan`;
+};
+
+const normalizeName = (value: string) =>
+    value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
+
+const categorizePantryItems = (items: PantryItem[]): GroceryCategory[] => {
+    const buckets = new Map<string, GroceryCategory>();
+    CATEGORY_CONFIG.forEach((config) => {
+        buckets.set(config.id, { id: config.id, title: config.title, items: [] });
+    });
+
+    items.forEach((item) => {
+        const normalized = item.normalizedName || normalizeName(item.name);
+        const match = CATEGORY_CONFIG.find((config) =>
+            config.keywords.some((keyword) => normalized.includes(keyword))
+        );
+        const category = buckets.get(match?.id ?? 'pantry');
+        if (!category) return;
+        category.items.push({
+            id: `${category.id}-${normalized}`,
+            name: item.name,
+            status: 'pantry',
+            meals: [],
+            normalizedName: normalized,
+        });
+    });
+
+    return Array.from(buckets.values()).filter((category) => category.items.length > 0);
+};
+
 export default function GroceriesScreen() {
+    const { state: userState } = useUser();
     const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
     const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+    const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+    const [newPantryItem, setNewPantryItem] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+    const [showQuickAdd, setShowQuickAdd] = useState(false);
 
     const pantryNames = useMemo(
         () =>
             new Set(
-                PANTRY_CATEGORIES.flatMap((category) =>
-                    category.items.map((item) => item.name.toLocaleLowerCase('tr-TR'))
-                )
+                pantryItems.map((item) => item.normalizedName || normalizeName(item.name))
             ),
-        []
+        [pantryItems]
     );
 
     const filteredCategories = useMemo(() => {
         if (activeFilter === 'pantry') {
-            return PANTRY_CATEGORIES.filter((category) => category.items.length > 0);
+            return categorizePantryItems(pantryItems);
         }
 
         return GROCERY_CATEGORIES.map((category) => {
@@ -130,13 +196,195 @@ export default function GroceriesScreen() {
         }).filter((category) => category.items.length > 0);
     }, [activeFilter, pantryNames]);
 
+    const totalItemCount = useMemo(
+        () => filteredCategories.reduce((sum, category) => sum + category.items.length, 0),
+        [filteredCategories]
+    );
+
+    useEffect(() => {
+        const userId = userState.user?.uid;
+        if (!userId) return;
+
+        const unsubscribe = onSnapshot(doc(firestore(), 'Users', userId), (snapshot) => {
+            const data = snapshot.data();
+            const rawItems = Array.isArray(data?.pantry?.items) ? data?.pantry?.items : [];
+            const mapped = rawItems
+                .map((item: { name?: string; normalizedName?: string }) => ({
+                    name: item?.name ?? '',
+                    normalizedName: item?.normalizedName ?? normalizeName(item?.name ?? ''),
+                }))
+                .filter((item) => item.name.length > 0);
+            setPantryItems(mapped);
+        });
+
+        return unsubscribe;
+    }, [userState.user?.uid]);
+
+    const tokenizeInput = (value: string) =>
+        value
+            .split(/[\n,;•]+/)
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0);
+
+    const handleAddPantryItem = async () => {
+        const tokens = tokenizeInput(newPantryItem);
+        if (!tokens.length || isSaving) return;
+
+        const userId = userState.user?.uid;
+        if (!userId) return;
+
+        setIsSaving(true);
+        try {
+            const normalizePantry = functions.httpsCallable<
+                { items: string[] },
+                { success: boolean; items: Array<{ input: string; canonical: string; normalized: string }> }
+            >('normalizePantryItems');
+            const response = await normalizePantry({ items: tokens });
+            const normalizedItems = response.data?.items ?? [];
+
+            const merged = new Map<string, PantryItem>();
+            pantryItems.forEach((item) => {
+                const normalized = item.normalizedName || normalizeName(item.name);
+                if (!normalized) return;
+                merged.set(normalized, { name: item.name, normalizedName: normalized });
+            });
+
+            normalizedItems.forEach((item) => {
+                const canonical = item.canonical?.trim();
+                if (!canonical) return;
+                const normalized = item.normalized || normalizeName(canonical);
+                if (!normalized || merged.has(normalized)) return;
+                merged.set(normalized, { name: canonical, normalizedName: normalized });
+            });
+
+            const updatedItems = Array.from(merged.values());
+            await setDoc(
+                doc(firestore(), 'Users', userId),
+                {
+                    pantry: {
+                        items: updatedItems,
+                        updatedAt: serverTimestamp(),
+                    },
+                    updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+            );
+            setNewPantryItem('');
+            setShowQuickAdd(false);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleRemovePantryItem = async (normalizedName?: string) => {
+        if (!normalizedName || isSaving) return;
+        const userId = userState.user?.uid;
+        if (!userId) return;
+
+        const updatedItems = pantryItems.filter(
+            (item) => (item.normalizedName || normalizeName(item.name)) !== normalizedName
+        );
+
+        setIsSaving(true);
+        try {
+            await setDoc(
+                doc(firestore(), 'Users', userId),
+                {
+                    pantry: {
+                        items: updatedItems,
+                        updatedAt: serverTimestamp(),
+                    },
+                    updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+            );
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const renderItemRow = (item: GroceryItem, index: number, totalItems: number) => {
+        const isExpanded = expandedItemId === item.id;
+        const inPantry = pantryNames.has(item.name.toLocaleLowerCase('tr-TR'));
+        const hasMeals = item.meals.length > 0;
+        const showUsage = activeFilter !== 'pantry' && hasMeals;
+        const isLastItem = index === totalItems - 1;
+
+        const content = (
+            <View style={[styles.itemRow, isLastItem && styles.itemRowLast]}>
+                <View style={styles.itemInfo}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    {item.amount ? (
+                        <Text style={styles.itemAmount}>{item.amount}</Text>
+                    ) : null}
+                </View>
+                <View style={styles.itemMeta}>
+                    {activeFilter === 'all' && inPantry ? (
+                        <View style={styles.pantryBadge}>
+                            <Text style={styles.pantryBadgeText}>Mevcut</Text>
+                        </View>
+                    ) : null}
+                    {showUsage ? (
+                        <TouchableOpacity
+                            onPress={() => handleToggleUsage(item.id)}
+                            style={styles.usageButton}
+                        >
+                            <MaterialCommunityIcons
+                                name="chef-hat"
+                                size={18}
+                                color={colors.textSecondary}
+                            />
+                        </TouchableOpacity>
+                    ) : null}
+                </View>
+                {isExpanded && showUsage ? (
+                    <View style={styles.usageRow}>
+                        <MaterialCommunityIcons
+                            name="silverware-fork-knife"
+                            size={14}
+                            color={colors.textMuted}
+                        />
+                        <Text style={styles.usageText}>
+                            {item.meals.join(' • ')}
+                        </Text>
+                    </View>
+                ) : null}
+            </View>
+        );
+
+        if (activeFilter === 'pantry') {
+            return (
+                <View style={styles.pantryRow}>
+                    {content}
+                    <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => handleRemovePantryItem(item.normalizedName)}
+                    >
+                        <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textMuted} />
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+
+        return content;
+    };
+
     const handleToggleUsage = (itemId: string) => {
         setExpandedItemId((prev) => (prev === itemId ? null : itemId));
     };
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <TabScreenHeader title="Alışveriş Listem" />
+            <TabScreenHeader
+                title="Alışveriş Listem"
+                subtitle={buildWeekRange()}
+                rightSlot={(
+                    <View style={styles.headerMeta}>
+                        <Text style={styles.headerCount}>{totalItemCount}</Text>
+                        <Text style={styles.headerCountLabel}>ÜRÜN</Text>
+                    </View>
+                )}
+            />
 
             <View style={styles.content}>
                 <View style={styles.filterRow}>
@@ -161,6 +409,49 @@ export default function GroceriesScreen() {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContent}
                 >
+                    {activeFilter === 'pantry' ? (
+                        <View style={styles.quickAddCard}>
+                            {showQuickAdd ? (
+                                <>
+                                    <Input
+                                        label="Yeni ürün ekle"
+                                        placeholder="Örn: Nane, sirke, bulgur"
+                                        value={newPantryItem}
+                                        onChangeText={setNewPantryItem}
+                                        autoCapitalize="sentences"
+                                    />
+                                    <View style={styles.quickAddActions}>
+                                        <Button
+                                            title="Vazgeç"
+                                            variant="ghost"
+                                            onPress={() => {
+                                                setShowQuickAdd(false);
+                                                setNewPantryItem('');
+                                            }}
+                                            size="small"
+                                        />
+                                        <Button
+                                            title="Ekle"
+                                            onPress={handleAddPantryItem}
+                                            size="small"
+                                            disabled={!newPantryItem.trim().length || isSaving}
+                                            loading={isSaving}
+                                        />
+                                    </View>
+                                </>
+                            ) : (
+                                <TouchableOpacity
+                                    style={styles.quickAddButton}
+                                    onPress={() => setShowQuickAdd(true)}
+                                    activeOpacity={0.9}
+                                >
+                                    <MaterialCommunityIcons name="plus" size={18} color={colors.primary} />
+                                    <Text style={styles.quickAddText}>Yeni ürün ekle</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    ) : null}
+
                     {filteredCategories.length === 0 ? (
                         <View style={styles.placeholder}>
                             <MaterialCommunityIcons name="cart-outline" size={56} color={colors.iconMuted} />
@@ -177,57 +468,11 @@ export default function GroceriesScreen() {
                                     <Text style={styles.categoryCount}>{category.items.length}</Text>
                                 </View>
                                 <View style={styles.categoryCard}>
-                                    {category.items.map((item, index) => {
-                                        const isExpanded = expandedItemId === item.id;
-                                        const inPantry = pantryNames.has(item.name.toLocaleLowerCase('tr-TR'));
-                                        const hasMeals = item.meals.length > 0;
-                                        const showUsage = activeFilter !== 'pantry' && hasMeals;
-                                        const isLastItem = index === category.items.length - 1;
-                                        return (
-                                            <View
-                                                key={item.id}
-                                                style={[styles.itemRow, isLastItem && styles.itemRowLast]}
-                                            >
-                                                <View style={styles.itemInfo}>
-                                                    <Text style={styles.itemName}>{item.name}</Text>
-                                                    {item.amount ? (
-                                                        <Text style={styles.itemAmount}>{item.amount}</Text>
-                                                    ) : null}
-                                                </View>
-                                                <View style={styles.itemMeta}>
-                                                    {activeFilter === 'all' && inPantry ? (
-                                                        <View style={styles.pantryBadge}>
-                                                            <Text style={styles.pantryBadgeText}>Mevcut</Text>
-                                                        </View>
-                                                    ) : null}
-                                                    {showUsage ? (
-                                                        <TouchableOpacity
-                                                            onPress={() => handleToggleUsage(item.id)}
-                                                            style={styles.usageButton}
-                                                        >
-                                                            <MaterialCommunityIcons
-                                                                name="chef-hat"
-                                                                size={18}
-                                                                color={colors.textSecondary}
-                                                            />
-                                                        </TouchableOpacity>
-                                                    ) : null}
-                                                </View>
-                                                {isExpanded && showUsage ? (
-                                                    <View style={styles.usageRow}>
-                                                        <MaterialCommunityIcons
-                                                            name="silverware-fork-knife"
-                                                            size={14}
-                                                            color={colors.textMuted}
-                                                        />
-                                                        <Text style={styles.usageText}>
-                                                            {item.meals.join(' • ')}
-                                                        </Text>
-                                                    </View>
-                                                ) : null}
-                                            </View>
-                                        );
-                                    })}
+                                    {category.items.map((item, index) => (
+                                        <View key={item.id}>
+                                            {renderItemRow(item, index, category.items.length)}
+                                        </View>
+                                    ))}
                                 </View>
                             </View>
                         ))
@@ -246,6 +491,17 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         paddingHorizontal: spacing.lg,
+    },
+    headerMeta: {
+        alignItems: 'flex-end',
+    },
+    headerCount: {
+        ...typography.h2,
+        color: colors.accent,
+    },
+    headerCountLabel: {
+        ...typography.caption,
+        color: colors.textMuted,
     },
     filterRow: {
         flexDirection: 'row',
@@ -276,6 +532,31 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingBottom: spacing.xxl,
         gap: spacing.lg,
+    },
+    quickAddCard: {
+        backgroundColor: colors.surface,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        padding: spacing.md,
+        ...shadows.sm,
+    },
+    quickAddButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.xs,
+        paddingVertical: spacing.sm,
+    },
+    quickAddText: {
+        ...typography.label,
+        color: colors.primary,
+    },
+    quickAddActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: spacing.sm,
+        marginTop: spacing.sm,
     },
     categoryBlock: {
         gap: spacing.sm,
@@ -328,6 +609,18 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
+    },
+    pantryRow: {
+        position: 'relative',
+    },
+    deleteButton: {
+        position: 'absolute',
+        right: spacing.md,
+        top: 0,
+        bottom: 0,
+        width: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     pantryBadge: {
         backgroundColor: colors.successLight,

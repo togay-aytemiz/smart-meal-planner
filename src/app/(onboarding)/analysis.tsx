@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Animated, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, Image, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
@@ -9,10 +9,9 @@ import { useSampleMenu } from '../../contexts/sample-menu-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows } from '../../theme/spacing';
-import type { MenuDecision, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
+import type { MenuDecision, MenuMealType, MenuRecipeCourse } from '../../types/menu-recipes';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
-type MenuMealType = MenuRecipesResponse['menuType'];
 type WeekdayKey = keyof WeeklyRoutine;
 
 type MealPlan = {
@@ -24,8 +23,6 @@ type MealPlan = {
 type MealItem = {
     id: string;
     title: string;
-    timeMinutes: number;
-    calories: number;
     category: string;
     categoryIcon: IconName;
     icon: IconName;
@@ -343,22 +340,22 @@ const getFunctionsErrorMessage = (error: unknown) => {
     return 'Bir hata oluştu.';
 };
 
-const buildMealItems = (recipes: MenuRecipe[]): MealItem[] => {
-    return recipes
-        .filter((recipe) => COURSE_META[recipe.course])
+const buildMealItems = (items: MenuDecision['items'] | undefined): MealItem[] => {
+    if (!items?.length) return [];
+
+    return items
+        .filter((item) => COURSE_META[item.course])
         .sort((first, second) => COURSE_ORDER.indexOf(first.course) - COURSE_ORDER.indexOf(second.course))
-        .map((recipe) => {
-            const courseMeta = COURSE_META[recipe.course];
+        .map((item) => {
+            const courseMeta = COURSE_META[item.course];
             return {
-                id: `${recipe.course}-${recipe.name}`,
-                title: recipe.name,
-                timeMinutes: Math.round(recipe.totalTimeMinutes ?? 0),
-                calories: Math.round(recipe.macrosPerServing?.calories ?? 0),
+                id: `${item.course}-${item.name}`,
+                title: item.name,
                 category: courseMeta.label,
                 categoryIcon: courseMeta.icon,
                 icon: courseMeta.icon,
                 mediaTone: courseMeta.mediaTone,
-                course: recipe.course,
+                course: item.course,
             };
         });
 };
@@ -377,7 +374,7 @@ export default function AnalysisScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
     const {
-        menuBundles,
+        menuDecisions,
         loadingStates,
         error,
         sampleDay: contextSampleDay,
@@ -418,7 +415,7 @@ export default function AnalysisScreen() {
             }
 
             const meta = MEAL_META[mealType];
-            const items = buildMealItems(menuBundles[mealType]?.recipes?.recipes ?? []);
+            const items = buildMealItems(menuDecisions[mealType]?.items);
             const isLoading = loadingStates[mealType];
             sections.push({
                 id: mealType,
@@ -433,7 +430,7 @@ export default function AnalysisScreen() {
         }
 
         return sections;
-    }, [error, loadingStates, menuBundles, sampleDay]);
+    }, [error, loadingStates, menuDecisions, sampleDay]);
 
     const [displayedText, setDisplayedText] = useState('');
     const [messageIndex, setMessageIndex] = useState(0);
@@ -481,28 +478,19 @@ export default function AnalysisScreen() {
 
         const order: MenuMealType[] = ['dinner'];
         for (const mealType of order) {
-            const text = menuBundles[mealType]?.menu?.reasoning?.trim();
+            const text = menuDecisions[mealType]?.reasoning?.trim();
             if (text) {
                 return text;
             }
         }
         return '';
-    }, [menuBundles, loadingStates, displayedText]);
+    }, [menuDecisions, loadingStates, displayedText]);
 
     const showReasoning = !error;
 
     const handleContinue = () => {
         dispatch({ type: 'SET_STEP', payload: 12 });
         router.push('/(onboarding)/paywall');
-    };
-
-    const handleOpenMeal = (mealType: MenuMealType, course: MenuRecipeCourse, recipeName: string) => {
-        const fallbackDate = new Date().toISOString().split('T')[0];
-        const date = sampleDay?.dateKey ?? fallbackDate;
-        router.push({
-            pathname: '/cookbook/[course]',
-            params: { course, mealType, date, recipeName },
-        });
     };
 
     const subtitleText = plannedMealCount > 0
@@ -553,12 +541,7 @@ export default function AnalysisScreen() {
                                 <View style={styles.sectionCards}>
                                     {section.items.length ? (
                                         section.items.map((item) => (
-                                            <TouchableOpacity
-                                                key={item.id}
-                                                activeOpacity={0.85}
-                                                style={styles.mealCard}
-                                                onPress={() => handleOpenMeal(section.id, item.course, item.title)}
-                                            >
+                                            <View key={item.id} style={styles.mealCard}>
                                                 <View style={[styles.mealHero, { backgroundColor: item.mediaTone }]} />
                                                 <MaterialCommunityIcons
                                                     name={item.icon}
@@ -580,29 +563,13 @@ export default function AnalysisScreen() {
                                                         />
                                                         <Text style={styles.mealChipText}>{item.category}</Text>
                                                     </View>
-                                                    <View style={styles.mealChip}>
-                                                        <MaterialCommunityIcons
-                                                            name="clock-outline"
-                                                            size={12}
-                                                            color={colors.textInverse}
-                                                        />
-                                                        <Text style={styles.mealChipText}>{item.timeMinutes} dk</Text>
-                                                    </View>
-                                                    <View style={styles.mealChip}>
-                                                        <MaterialCommunityIcons
-                                                            name="fire"
-                                                            size={12}
-                                                            color={colors.textInverse}
-                                                        />
-                                                        <Text style={styles.mealChipText}>{item.calories} kcal</Text>
-                                                    </View>
                                                 </View>
                                                 <View style={styles.mealTitleRow}>
                                                     <Text style={styles.mealTitle} numberOfLines={2}>
                                                         {item.title.charAt(0).toUpperCase() + item.title.slice(1)}
                                                     </Text>
                                                 </View>
-                                            </TouchableOpacity>
+                                            </View>
                                         ))
                                     ) : (
                                         <View style={styles.emptyMealCard}>

@@ -4,11 +4,10 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
-import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { functions } from '../config/firebase';
-import { fetchMenuBundle, type MenuBundle } from '../utils/menu-storage';
+import { fetchMenuDecision } from '../utils/menu-storage';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../utils/onboarding-hash';
-import type { MenuDecision, MenuRecipesResponse, MenuRecipeCourse } from '../types/menu-recipes';
+import type { MenuDecision } from '../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from './onboarding-context';
 
 type MenuMealType = 'breakfast' | 'lunch' | 'dinner';
@@ -55,8 +54,6 @@ type MenuRequestPayload = {
     onboardingHash?: string;
 };
 
-type MenuRecipeParams = MenuRequestPayload & { menu: MenuDecision };
-
 type MenuCallResponse = {
     success: boolean;
     menu: MenuDecision;
@@ -64,17 +61,10 @@ type MenuCallResponse = {
     timestamp: string;
 };
 
-type MenuRecipesCallResponse = {
-    success: boolean;
-    menuRecipes: MenuRecipesResponse;
-    model: string;
-    timestamp: string;
-};
-
 type LoadingState = Record<MenuMealType, boolean>;
 
 type SampleMenuState = {
-    menuBundles: Record<MenuMealType, MenuBundle | null>;
+    menuDecisions: Record<MenuMealType, MenuDecision | null>;
     loadingStates: LoadingState;
     error: string | null;
     sampleDay: SampleDay | null;
@@ -173,7 +163,7 @@ const pickSampleDayKey = (routines: WeeklyRoutine): WeekdayKey => {
 };
 
 const WOW_REASONING_HINT =
-    'Modern, restoran kalitesinde tabaklar seç; klasik ev yemeklerinden kaçın.';
+    'Modern, restoran kalitesinde tabaklar seç; klasik ev yemeklerinden kaçın. Roka salatası/çoban salata gibi düz salataları önermeme.';
 
 const buildMenuRequest = (
     snapshot: OnboardingSnapshot | null,
@@ -238,7 +228,7 @@ const getFunctionsErrorMessage = (error: unknown) => {
 };
 
 const initialState: SampleMenuState = {
-    menuBundles: { breakfast: null, lunch: null, dinner: null },
+    menuDecisions: { breakfast: null, lunch: null, dinner: null },
     loadingStates: { breakfast: false, lunch: false, dinner: false },
     error: null,
     sampleDay: null,
@@ -293,8 +283,6 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, loadingStates: newLoadingStates }));
 
         const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>('generateOpenAIMenu');
-        const callRecipes = functions.httpsCallable<{ params: MenuRecipeParams }, MenuRecipesCallResponse>('generateOpenAIRecipe');
-
         // Parallel meal generation
         const fetchMeal = async (mealType: MenuMealType) => {
             const request = buildMenuRequest(onboardingData, userId, dateKey, dayKey, mealType, onboardingHash);
@@ -305,14 +293,6 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
 
                 if (!menuData?.items?.length) throw new Error('Menü verisi alınamadı');
 
-                const recipeParams: MenuRecipeParams = { ...request, menu: menuData };
-                const recipesResult = await callRecipes({ params: recipeParams });
-                const recipesData = recipesResult.data?.menuRecipes;
-
-                if (!recipesData?.recipes?.length) throw new Error('Tarif verisi alınamadı');
-
-                const bundle: MenuBundle = { menu: menuData, recipes: recipesData };
-
                 setState((prev) => {
                     const isFirstMeal = !prev.firstMealReady;
                     if (isFirstMeal) {
@@ -320,7 +300,7 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
                     }
                     return {
                         ...prev,
-                        menuBundles: { ...prev.menuBundles, [mealType]: bundle },
+                        menuDecisions: { ...prev.menuDecisions, [mealType]: menuData },
                         loadingStates: { ...prev.loadingStates, [mealType]: false },
                         firstMealReady: true,
                     };
@@ -332,7 +312,7 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
 
             // Fallback: try Firestore
             try {
-                const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType, onboardingHash);
+                const firestoreMenu = await fetchMenuDecision(userId, dateKey, mealType, onboardingHash);
                 if (firestoreMenu) {
                     setState((prev) => {
                         const isFirstMeal = !prev.firstMealReady;
@@ -341,7 +321,7 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
                         }
                         return {
                             ...prev,
-                            menuBundles: { ...prev.menuBundles, [mealType]: firestoreMenu },
+                            menuDecisions: { ...prev.menuDecisions, [mealType]: firestoreMenu },
                             loadingStates: { ...prev.loadingStates, [mealType]: false },
                             firstMealReady: true,
                         };

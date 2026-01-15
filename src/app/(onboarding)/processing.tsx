@@ -17,7 +17,7 @@ const LOADING_MESSAGES = [
     "Rutinleriniz analiz ediliyor...",
     "Egzersiz günleriniz dengeleniyor...",
     "Mutfak tercihleri kontrol ediliyor...",
-    "Size özel tarifler seçiliyor...",
+    "Size özel menü oluşturuluyor...",
     "Haftalık planınız oluşturuluyor..."
 ];
 

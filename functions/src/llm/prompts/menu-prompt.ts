@@ -202,6 +202,9 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   }
   if (weeklyContext?.reasoningHint) {
     rules.push("- reasoningHint tonu menü seçiminde hissettir.");
+    rules.push(
+      "- Wow/modern hedefinde basit tek malzemeli salata (roka salatası, yeşil salata, çoban salata) önerme."
+    );
   }
   if (weeklyContext?.ingredientSynergyFrom) {
     rules.push(

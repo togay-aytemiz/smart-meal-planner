@@ -179,3 +179,46 @@ export const fetchMenuBundle = async (
         },
     };
 };
+
+export const fetchMenuDecision = async (
+    userId: string,
+    date: string,
+    menuType: MenuMealType,
+    expectedOnboardingHash?: string | null
+): Promise<MenuDecision | null> => {
+    const menuId = buildMenuDocId(userId, date, menuType);
+    const menuSnap = await getDoc(doc(firestore(), 'menus', menuId));
+
+    if (!menuSnap.exists()) {
+        return null;
+    }
+
+    const menuData = menuSnap.data() as FirestoreMenuDoc | undefined;
+    if (!menuData) {
+        return null;
+    }
+
+    if (typeof expectedOnboardingHash === 'string') {
+        const storedHash = typeof menuData.onboardingHash === 'string' ? menuData.onboardingHash : null;
+        if (!storedHash || storedHash !== expectedOnboardingHash) {
+            return null;
+        }
+    }
+
+    const resolvedItems = resolveMenuItems(menuData);
+    if (!resolvedItems?.length) {
+        return null;
+    }
+
+    const resolvedMenuType = menuData.menuType ?? menuType;
+    return {
+        menuType: resolvedMenuType,
+        cuisine: menuData.cuisine ?? '',
+        totalTimeMinutes: menuData.totalTimeMinutes ?? 0,
+        reasoning: menuData.reasoning ?? '',
+        items: resolvedItems.map((item) => ({
+            course: item.course,
+            name: item.name,
+        })),
+    };
+};

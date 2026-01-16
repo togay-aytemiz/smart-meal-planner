@@ -1,489 +1,369 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { ComponentProps } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+    ActivityIndicator,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { TabScreenHeader } from '../../components/ui';
-import { useUser } from '../../contexts/user-context';
+import { useCookbook } from '../../hooks/use-cookbook';
 import { colors } from '../../theme/colors';
 import { spacing, radius, shadows } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { functions } from '../../config/firebase';
-import { fetchMenuBundle } from '../../utils/menu-storage';
-import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
-import { MenuDecision, MenuMealType, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
-
-type MenuCallResponse = {
-    success: boolean;
-    menu: MenuDecision;
-    model: string;
-    timestamp: string;
-};
-
-type MenuRecipesCallResponse = {
-    success: boolean;
-    menuRecipes: MenuRecipesResponse;
-    model: string;
-    timestamp: string;
-};
-
-type RoutineDay = {
-    type: 'office' | 'remote' | 'gym' | 'school' | 'off';
-    gymTime?: 'morning' | 'afternoon' | 'evening' | 'none';
-    remoteMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
-    excludeFromPlan?: boolean;
-};
-
-type WeeklyRoutine = {
-    monday: RoutineDay;
-    tuesday: RoutineDay;
-    wednesday: RoutineDay;
-    thursday: RoutineDay;
-    friday: RoutineDay;
-    saturday: RoutineDay;
-    sunday: RoutineDay;
-};
-
-type MenuRequestPayload = {
-    userId: string;
-    date: string;
-    dayOfWeek: string;
-    dietaryRestrictions: string[];
-    allergies: string[];
-    cuisinePreferences: string[];
-    timePreference: 'quick' | 'balanced' | 'elaborate';
-    skillLevel: 'beginner' | 'intermediate' | 'expert';
-    equipment: string[];
-    householdSize: number;
-    routine?: {
-        type: 'office' | 'remote' | 'gym' | 'school' | 'off';
-        gymTime?: 'morning' | 'afternoon' | 'evening' | 'none';
-        officeMealToGo?: 'yes' | 'no';
-        officeBreakfastAtHome?: 'yes' | 'no';
-        schoolBreakfast?: 'yes' | 'no';
-        remoteMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
-        excludeFromPlan?: boolean;
-    };
-    mealType: MenuMealType;
-    onboardingHash?: string;
-};
-
-type MenuRecipeParams = MenuRequestPayload & {
-    menu: MenuDecision;
-};
-
-const STORAGE_KEY = '@smart_meal_planner:onboarding';
-const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
-const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
-
-type FunctionsErrorDetails = {
-    message?: string;
-};
-
-type FunctionsError = {
-    code?: string;
-    message?: string;
-    details?: FunctionsErrorDetails | string;
-};
-
-const DEFAULT_ROUTINES: WeeklyRoutine = {
-    monday: { type: 'office', gymTime: 'none' },
-    tuesday: { type: 'office', gymTime: 'none' },
-    wednesday: { type: 'office', gymTime: 'none' },
-    thursday: { type: 'office', gymTime: 'none' },
-    friday: { type: 'office', gymTime: 'none' },
-    saturday: { type: 'remote', gymTime: 'none' },
-    sunday: { type: 'remote', gymTime: 'none' },
-};
-
-const COURSE_ORDER: MenuRecipeCourse[] = ['soup', 'main', 'side', 'pastry', 'salad', 'meze', 'dessert'];
+import type { MenuRecipeCourse } from '../../types/menu-recipes';
+import type { SavedRecipe } from '../../types/cookbook';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
+const COURSE_ORDER: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze', 'dessert', 'pastry'];
+
 const COURSE_META: Record<
     MenuRecipeCourse,
-    { label: string; icon: IconName; background: string; accent: string; glow: string; textColor: string }
+    { label: string; icon: IconName; mediaTone: string }
 > = {
     main: {
         label: 'Ana Yemek',
         icon: 'silverware-fork-knife',
-        background: colors.primaryLight,
-        accent: colors.primaryDark,
-        glow: colors.accentSoft,
-        textColor: colors.textOnPrimary,
+        mediaTone: colors.surfaceAlt,
     },
     side: {
         label: 'Yan Yemek',
         icon: 'food-variant',
-        background: colors.warningLight,
-        accent: colors.warning,
-        glow: colors.accentLight,
-        textColor: colors.textOnPrimary,
+        mediaTone: colors.borderLight,
     },
     soup: {
         label: 'Çorba',
         icon: 'pot-steam-outline',
-        background: colors.accentSoft,
-        accent: colors.accent,
-        glow: colors.accentLight,
-        textColor: colors.textOnPrimary,
+        mediaTone: colors.accentSoft,
     },
     salad: {
         label: 'Salata',
         icon: 'leaf',
-        background: colors.successLight,
-        accent: colors.success,
-        glow: colors.surface,
-        textColor: colors.textOnPrimary,
+        mediaTone: colors.successLight,
     },
     meze: {
         label: 'Meze',
         icon: 'food',
-        background: colors.surfaceMuted,
-        accent: colors.tabIconInactive,
-        glow: colors.accentSoft,
-        textColor: colors.textPrimary,
+        mediaTone: colors.surfaceMuted,
     },
     dessert: {
         label: 'Tatlı',
         icon: 'cupcake',
-        background: colors.errorLight,
-        accent: colors.error,
-        glow: colors.surface,
-        textColor: colors.textOnPrimary,
+        mediaTone: colors.errorLight,
     },
     pastry: {
         label: 'Hamur İşi',
         icon: 'bread-slice-outline',
-        background: colors.surfaceAlt,
-        accent: colors.iconMuted,
-        glow: colors.surfaceMuted,
-        textColor: colors.textOnPrimary,
+        mediaTone: colors.surfaceAlt,
     },
 };
 
-const getDayKey = (date: Date) =>
-    date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof WeeklyRoutine;
+// Gradient overlay for cards (same as index.tsx)
+const CARD_GRADIENT_BASE64 =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAACVGAYAAADc5P5VAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABVSURBVHgB7c6xDYAwDABBE2ZkFqZgL/ZmL2ZgJ0pCQ8VH+cv3yWfMzBfZ7/f7/f7+9X1/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f3+/v38/p/d7f1Y5+xIAAAAASUVORK5CYII=';
 
-const formatToday = () => {
-    const today = new Date();
-    const dayLabel = today.toLocaleDateString('tr-TR', { weekday: 'long' });
-    const dateLabel = today.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
-    return { dayLabel, dateLabel };
-};
+type CategoryFilter = 'all' | MenuRecipeCourse;
 
-const buildMenuRequest = (
-    snapshot: OnboardingSnapshot | null,
-    userId: string,
-    mealType: MenuMealType,
-    onboardingHash?: string | null
-): MenuRequestPayload => {
-    const today = new Date();
-    const date = today.toISOString().split('T')[0];
-    const dayKey = getDayKey(today);
-    const routines = snapshot?.routines ?? DEFAULT_ROUTINES;
-    const routine = routines?.[dayKey];
+const CATEGORY_FILTERS: Array<{ key: CategoryFilter; label: string }> = [
+    { key: 'all', label: 'Tümü' },
+    ...COURSE_ORDER.map((course) => ({ key: course, label: COURSE_META[course].label })),
+];
 
-    return {
-        userId,
-        date,
-        dayOfWeek: dayKey,
-        dietaryRestrictions: snapshot?.dietary?.restrictions ?? [],
-        allergies: snapshot?.dietary?.allergies ?? [],
-        cuisinePreferences: snapshot?.cuisine?.selected ?? [],
-        timePreference: snapshot?.cooking?.timePreference ?? 'balanced',
-        skillLevel: snapshot?.cooking?.skillLevel ?? 'intermediate',
-        equipment: snapshot?.cooking?.equipment ?? [],
-        householdSize: snapshot?.householdSize ?? 1,
-        routine: routine
-            ? {
-                type: routine.type,
-                gymTime: routine.gymTime,
-                officeMealToGo: routine.officeMealToGo,
-                officeBreakfastAtHome: routine.officeBreakfastAtHome,
-                schoolBreakfast: routine.schoolBreakfast,
-                remoteMeals: routine.remoteMeals,
-                excludeFromPlan: routine.excludeFromPlan,
-            }
-            : undefined,
-        mealType,
-        ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
-    };
-};
-
-const getFunctionsErrorMessage = (error: unknown) => {
-    if (error && typeof error === 'object') {
-        const maybeError = error as FunctionsError;
-        if (typeof maybeError.details === 'string') {
-            return maybeError.details;
-        }
-        if (maybeError.details?.message) {
-            return maybeError.details.message;
-        }
-        if (maybeError.message) {
-            return maybeError.message;
-        }
-        if (maybeError.code) {
-            return maybeError.code;
-        }
-    }
-    return 'Bir hata oluştu';
-};
-
-type MenuCache = {
-    menu: MenuDecision;
-    recipes: MenuRecipesResponse;
-    cachedAt: string;
-    onboardingHash?: string;
-};
-
-type MenuRecipesCache = {
-    data: MenuRecipesResponse;
-    cachedAt: string;
-    onboardingHash?: string;
-};
-
-const buildMenuCacheKey = (userId: string, date: string, mealType: MenuMealType) =>
-    `${MENU_CACHE_STORAGE_KEY}:${userId}:${date}:${mealType}`;
-const buildMenuRecipesKey = (userId: string, mealType: MenuMealType) =>
-    `${MENU_RECIPES_STORAGE_KEY}:${userId}:${mealType}`;
-
-const loadMenuCache = async (
-    userId: string,
-    date: string,
-    mealType: MenuMealType,
-    expectedOnboardingHash?: string | null
-) => {
-    try {
-        const raw = await AsyncStorage.getItem(buildMenuCacheKey(userId, date, mealType));
-        if (!raw) {
-            return null;
-        }
-        const parsed = JSON.parse(raw) as MenuCache;
-        if (typeof expectedOnboardingHash === 'string') {
-            if (!parsed.onboardingHash || parsed.onboardingHash !== expectedOnboardingHash) {
-                return null;
-            }
-        }
-        return parsed;
-    } catch (error) {
-        console.warn('Menu cache read error:', error);
-        return null;
-    }
-};
-
-const persistMenuCache = async (userId: string, date: string, mealType: MenuMealType, data: MenuCache) => {
-    try {
-        await AsyncStorage.setItem(buildMenuCacheKey(userId, date, mealType), JSON.stringify(data));
-        const recipesCache: MenuRecipesCache = {
-            data: data.recipes,
-            cachedAt: data.cachedAt,
-            onboardingHash: data.onboardingHash,
-        };
-        await AsyncStorage.setItem(buildMenuRecipesKey(userId, mealType), JSON.stringify(recipesCache));
-    } catch (error) {
-        console.warn('Menu cache write error:', error);
-    }
-};
+const SEARCH_DEBOUNCE_MS = 300;
 
 export default function CookbookScreen() {
     const router = useRouter();
-    const { state: userState } = useUser();
-    const [menuRecipes, setMenuRecipes] = useState<MenuRecipesResponse | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { favorites, isLoading, error } = useCookbook();
+    const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedQuery, setDebouncedQuery] = useState('');
+    const [isSearching, setIsSearching] = useState(false);
+    const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const { dayLabel, dateLabel } = useMemo(() => formatToday(), []);
-
-    const orderedRecipes = useMemo(() => {
-        if (!menuRecipes?.recipes?.length) {
-            return [] as MenuRecipe[];
+    // Debounce search
+    useEffect(() => {
+        if (debounceTimer.current) {
+            clearTimeout(debounceTimer.current);
         }
-        return [...menuRecipes.recipes].sort(
+
+        if (searchQuery !== debouncedQuery) {
+            setIsSearching(true);
+            debounceTimer.current = setTimeout(() => {
+                setDebouncedQuery(searchQuery);
+                setIsSearching(false);
+            }, SEARCH_DEBOUNCE_MS);
+        }
+
+        return () => {
+            if (debounceTimer.current) {
+                clearTimeout(debounceTimer.current);
+            }
+        };
+    }, [searchQuery, debouncedQuery]);
+
+    const filteredRecipes = useMemo(() => {
+        let recipes = [...favorites];
+
+        // Filter by category
+        if (activeCategory !== 'all') {
+            recipes = recipes.filter((r) => r.course === activeCategory);
+        }
+
+        // Filter by search (using debounced query)
+        if (debouncedQuery.trim()) {
+            const query = debouncedQuery.toLowerCase().trim();
+            recipes = recipes.filter((r) => r.name.toLowerCase().includes(query));
+        }
+
+        // Sort by course order
+        return recipes.sort(
             (a, b) => COURSE_ORDER.indexOf(a.course) - COURSE_ORDER.indexOf(b.course)
         );
-    }, [menuRecipes]);
+    }, [favorites, debouncedQuery, activeCategory]);
 
-    const fetchRecipe = async () => {
-        setLoading(true);
-        setError(null);
-        const userId = userState.user?.uid ?? 'anonymous';
-        const mealType: MenuMealType = 'dinner';
-        let onboardingHash: string | null = null;
+    const recipeCount = filteredRecipes.length;
+    const recipeCountText = `${recipeCount} tarif`;
 
-        try {
-            const raw = await AsyncStorage.getItem(STORAGE_KEY);
-            const stored = raw ? (JSON.parse(raw) as { data?: OnboardingSnapshot }) : null;
-            onboardingHash = buildOnboardingHash(stored?.data ?? null);
-            const request = buildMenuRequest(stored?.data ?? null, userId, mealType, onboardingHash);
-            const cachedMenu = await loadMenuCache(userId, request.date, mealType, onboardingHash);
+    const handleOpenRecipe = useCallback((savedRecipe: SavedRecipe) => {
+        router.push({
+            pathname: '/cookbook/[course]',
+            params: {
+                course: savedRecipe.course,
+                recipeName: savedRecipe.name,
+            },
+        });
+    }, [router]);
 
-            try {
-                const firestoreMenu = await fetchMenuBundle(userId, request.date, request.mealType, onboardingHash);
-                if (firestoreMenu) {
-                    setMenuRecipes(firestoreMenu.recipes);
-                    await persistMenuCache(userId, request.date, mealType, {
-                        menu: firestoreMenu.menu,
-                        recipes: firestoreMenu.recipes,
-                        cachedAt: new Date().toISOString(),
-                        onboardingHash: onboardingHash ?? undefined,
-                    });
-                    return;
-                }
-            } catch (firestoreError) {
-                console.warn('Menu Firestore read error:', firestoreError);
-                if (cachedMenu) {
-                    setMenuRecipes(cachedMenu.recipes);
-                    return;
-                }
-            }
+    const handleSearchChange = useCallback((text: string) => {
+        setSearchQuery(text);
+    }, []);
 
-            const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>(
-                'generateOpenAIMenu'
+    const handleClearSearch = useCallback(() => {
+        setSearchQuery('');
+        setDebouncedQuery('');
+        setIsSearching(false);
+    }, []);
+
+    const renderEmptyState = () => {
+        if (isLoading) {
+            return (
+                <View style={styles.emptyState}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={styles.emptyStateText}>Yükleniyor...</Text>
+                </View>
             );
-            const menuResult = await callMenu({ request });
-            const menuData = menuResult.data?.menu;
-
-            if (!menuData?.items?.length) {
-                throw new Error('Menü verisi alınamadı');
-            }
-
-            const recipeParams: MenuRecipeParams = {
-                ...request,
-                menu: menuData,
-            };
-
-            const callRecipes = functions.httpsCallable<{ params: MenuRecipeParams }, MenuRecipesCallResponse>(
-                'generateOpenAIRecipe'
-            );
-            const recipesResult = await callRecipes({ params: recipeParams });
-            const recipesData = recipesResult.data?.menuRecipes;
-
-            if (!recipesData?.recipes?.length) {
-                throw new Error('Tarif verisi alınamadı');
-            }
-
-            setMenuRecipes(recipesData);
-            await persistMenuCache(userId, request.date, mealType, {
-                menu: menuData,
-                recipes: recipesData,
-                cachedAt: new Date().toISOString(),
-                onboardingHash: onboardingHash ?? undefined,
-            });
-        } catch (err: unknown) {
-            console.error('Menu fetch error:', err);
-            const cachedMenu = await loadMenuCache(
-                userId,
-                new Date().toISOString().split('T')[0],
-                mealType,
-                onboardingHash
-            );
-            if (cachedMenu) {
-                setMenuRecipes(cachedMenu.recipes);
-                return;
-            }
-            setError(getFunctionsErrorMessage(err));
-        } finally {
-            setLoading(false);
         }
+
+        if (error) {
+            return (
+                <View style={styles.emptyState}>
+                    <MaterialCommunityIcons
+                        name="alert-circle-outline"
+                        size={48}
+                        color={colors.textMuted}
+                    />
+                    <Text style={styles.emptyStateText}>{error}</Text>
+                </View>
+            );
+        }
+
+        if (favorites.length === 0) {
+            return (
+                <View style={styles.emptyState}>
+                    <Image
+                        source={require('../../../assets/emtpy-omnoo.webp')}
+                        style={styles.emptyStateImage}
+                        resizeMode="contain"
+                    />
+                    <Text style={styles.emptyStateTitle}>Henüz favori yok</Text>
+                    <Text style={styles.emptyStateText}>
+                        Beğendiğin tarifleri kalp ikonuna basarak buraya ekleyebilirsin
+                    </Text>
+                </View>
+            );
+        }
+
+        if (filteredRecipes.length === 0) {
+            return (
+                <View style={styles.emptyState}>
+                    <Image
+                        source={require('../../../assets/emtpy-omnoo.webp')}
+                        style={styles.emptyStateImage}
+                        resizeMode="contain"
+                    />
+                    <Text style={styles.emptyStateText}>Bu kategoride kayıtlı tarif yok</Text>
+                </View>
+            );
+        }
+
+        return null;
     };
 
-    useEffect(() => {
-        if (!userState.isLoading) {
-            fetchRecipe();
-        }
-    }, [userState.isLoading, userState.user?.uid]);
-
-    const handleOpenRecipe = (course: MenuRecipeCourse, recipeName: string) => {
-        router.push({ pathname: '/cookbook/[course]', params: { course, recipeName } });
-    };
+    // Show category chip on card only when on "Tümü" filter
+    const showCategoryChipOnCard = activeCategory === 'all';
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <TabScreenHeader title="Tarifler" subtitle="Bugün için seçilen akşam menüsü" />
+            <TabScreenHeader title="Tariflerim" />
 
-            <ScrollView contentContainerStyle={styles.contentContainer}>
-                {loading && (
-                    <View style={styles.stateCard}>
+            <ScrollView
+                contentContainerStyle={styles.contentContainer}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
+                {/* Search Bar */}
+                <View style={styles.searchContainer}>
+                    <MaterialCommunityIcons
+                        name="magnify"
+                        size={20}
+                        color={colors.textMuted}
+                    />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Tarif ara..."
+                        placeholderTextColor={colors.textMuted}
+                        value={searchQuery}
+                        onChangeText={handleSearchChange}
+                        returnKeyType="search"
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                    />
+                    {isSearching && (
                         <ActivityIndicator size="small" color={colors.primary} />
-                        <Text style={styles.stateText}>Menü hazırlanıyor...</Text>
-                    </View>
-                )}
-
-                {error && !loading && (
-                    <View style={styles.stateCard}>
-                        <Text style={styles.stateText}>{error}</Text>
-                        <TouchableOpacity style={styles.retryButton} onPress={fetchRecipe}>
-                            <Text style={styles.retryButtonText}>Tekrar Dene</Text>
+                    )}
+                    {!isSearching && searchQuery.length > 0 && (
+                        <TouchableOpacity
+                            onPress={handleClearSearch}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <MaterialCommunityIcons
+                                name="close-circle"
+                                size={18}
+                                color={colors.textMuted}
+                            />
                         </TouchableOpacity>
+                    )}
+                </View>
+
+                {/* Category Filters - only show when on "Tümü" */}
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.categoryContainer}
+                >
+                    {CATEGORY_FILTERS.map((filter) => {
+                        const isActive = activeCategory === filter.key;
+                        return (
+                            <TouchableOpacity
+                                key={filter.key}
+                                style={[
+                                    styles.categoryChip,
+                                    isActive && styles.categoryChipActive,
+                                ]}
+                                onPress={() => setActiveCategory(filter.key)}
+                                activeOpacity={0.7}
+                            >
+                                <Text
+                                    style={[
+                                        styles.categoryChipText,
+                                        isActive && styles.categoryChipTextActive,
+                                    ]}
+                                >
+                                    {filter.label}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
+
+                {/* Recipe Count */}
+                {!isLoading && favorites.length > 0 && (
+                    <View style={styles.countContainer}>
+                        <Text style={styles.countText}>{recipeCountText}</Text>
                     </View>
                 )}
 
-                {!loading && !error && menuRecipes && (
-                    <>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Bugün</Text>
-                            <Text style={styles.sectionSubtitle}>
-                                {dayLabel} • {dateLabel}
-                            </Text>
-                        </View>
+                {/* Empty State */}
+                {renderEmptyState()}
 
-                        {orderedRecipes.map((recipe) => {
-                            const meta = COURSE_META[recipe.course];
+                {/* Recipe List - Menu page card style */}
+                {filteredRecipes.length > 0 && (
+                    <View style={styles.recipeList}>
+                        {filteredRecipes.map((savedRecipe) => {
+                            const meta = COURSE_META[savedRecipe.course];
+                            const calories = savedRecipe.recipe?.macrosPerServing?.calories ?? 0;
 
                             return (
                                 <TouchableOpacity
-                                    key={`${recipe.course}-${recipe.name}`}
+                                    key={savedRecipe.recipeId}
+                                    style={styles.mealCard}
                                     activeOpacity={0.85}
-                                    onPress={() => handleOpenRecipe(recipe.course, recipe.name)}
+                                    onPress={() => handleOpenRecipe(savedRecipe)}
                                 >
-                                    <View style={styles.recipeCard}>
-                                        <View
-                                            style={[
-                                                styles.cardMedia,
-                                                {
-                                                    backgroundColor: meta.background,
-                                                },
-                                            ]}
-                                        >
-                                            <View style={styles.cardMetaRow}>
-                                                <View style={styles.timeBadge}>
-                                                    <MaterialCommunityIcons
-                                                        name="clock-outline"
-                                                        size={16}
-                                                        color={colors.textSecondary}
-                                                    />
-                                                    <Text style={styles.timeBadgeText}>
-                                                        {recipe.totalTimeMinutes} dk
-                                                    </Text>
-                                                </View>
-                                                <View style={[styles.courseBadge, { backgroundColor: meta.accent }]}>
-                                                    <MaterialCommunityIcons
-                                                        name={meta.icon}
-                                                        size={14}
-                                                        color={meta.textColor}
-                                                    />
-                                                    <Text style={[styles.courseBadgeText, { color: meta.textColor }]}>
-                                                        {meta.label}
-                                                    </Text>
-                                                </View>
+                                    <View style={[styles.mealHero, { backgroundColor: meta.mediaTone }]} />
+                                    <MaterialCommunityIcons
+                                        name={meta.icon}
+                                        size={72}
+                                        color={colors.textPrimary}
+                                        style={styles.mealHeroIcon}
+                                    />
+                                    <Image
+                                        source={{ uri: CARD_GRADIENT_BASE64 }}
+                                        style={styles.mealGradient}
+                                        resizeMode="stretch"
+                                    />
+                                    <View style={styles.mealChips}>
+                                        {/* Only show category chip when on "all" filter */}
+                                        {showCategoryChipOnCard && (
+                                            <View style={styles.mealChip}>
+                                                <MaterialCommunityIcons
+                                                    name={meta.icon}
+                                                    size={12}
+                                                    color={colors.textInverse}
+                                                />
+                                                <Text style={styles.mealChipText}>{meta.label}</Text>
                                             </View>
-                                            <View style={[styles.mediaGlow, { backgroundColor: meta.glow }]} />
-                                            <View style={[styles.mediaOrb, { backgroundColor: meta.accent }]} />
-                                        </View>
-                                        <View style={styles.cardContent}>
-                                            <Text style={styles.cardTitle}>{recipe.name}</Text>
-                                            <Text style={styles.cardBrief} numberOfLines={2}>
-                                                {recipe.brief}
+                                        )}
+                                        <View style={styles.mealChip}>
+                                            <MaterialCommunityIcons
+                                                name="clock-outline"
+                                                size={12}
+                                                color={colors.textInverse}
+                                            />
+                                            <Text style={styles.mealChipText}>
+                                                {savedRecipe.totalTimeMinutes} dk
                                             </Text>
                                         </View>
+                                        {calories > 0 && (
+                                            <View style={styles.mealChip}>
+                                                <MaterialCommunityIcons
+                                                    name="fire"
+                                                    size={12}
+                                                    color={colors.textInverse}
+                                                />
+                                                <Text style={styles.mealChipText}>
+                                                    {Math.round(calories)} kcal
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <View style={styles.mealTitleRow}>
+                                        <Text style={styles.mealTitle} numberOfLines={2}>
+                                            {savedRecipe.name}
+                                        </Text>
                                     </View>
                                 </TouchableOpacity>
                             );
                         })}
-                    </>
+                    </View>
                 )}
             </ScrollView>
         </SafeAreaView>
@@ -498,121 +378,142 @@ const styles = StyleSheet.create({
     contentContainer: {
         paddingHorizontal: spacing.lg,
         paddingBottom: spacing.xxl,
-        gap: spacing.lg,
+        gap: spacing.md,
     },
-    sectionHeader: {
-        gap: spacing.xs,
-    },
-    sectionTitle: {
-        ...typography.h3,
-        color: colors.textPrimary,
-    },
-    sectionSubtitle: {
-        ...typography.bodySmall,
-        color: colors.textMuted,
-    },
-    stateCard: {
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
         backgroundColor: colors.surface,
         borderRadius: radius.lg,
-        padding: spacing.lg,
-        borderWidth: 1,
+        paddingHorizontal: spacing.md,
+        height: 52,
+        borderWidth: 1.5,
         borderColor: colors.border,
-        alignItems: 'center',
         gap: spacing.sm,
-        ...shadows.sm,
     },
-    stateText: {
-        ...typography.body,
-        color: colors.textSecondary,
-        textAlign: 'center',
+    searchInput: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '400' as const,
+        color: colors.textPrimary,
+        paddingVertical: 0,
+        margin: 0,
     },
-    retryButton: {
-        paddingHorizontal: spacing.lg,
+    categoryContainer: {
+        gap: spacing.sm,
+        paddingVertical: spacing.xs,
+    },
+    categoryChip: {
+        paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
         borderRadius: radius.full,
-        borderWidth: 1,
-        borderColor: colors.primary,
-    },
-    retryButtonText: {
-        ...typography.buttonSmall,
-        color: colors.primary,
-    },
-    recipeCard: {
-        backgroundColor: colors.surface,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: colors.border,
-        overflow: 'hidden',
-        ...shadows.md,
-    },
-    cardMedia: {
-        height: 170,
-        padding: spacing.md,
-        justifyContent: 'space-between',
-        overflow: 'hidden',
-    },
-    cardMetaRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: spacing.sm,
-        zIndex: 1,
-    },
-    timeBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.xs,
-        backgroundColor: colors.surface,
-        borderRadius: radius.full,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
+        backgroundColor: colors.surfaceMuted,
         borderWidth: 1,
         borderColor: colors.borderLight,
     },
-    timeBadgeText: {
-        ...typography.caption,
+    categoryChipActive: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    categoryChipText: {
+        ...typography.buttonSmall,
         color: colors.textSecondary,
     },
-    courseBadge: {
+    categoryChipTextActive: {
+        color: colors.textOnPrimary,
+    },
+    countContainer: {
+        marginTop: spacing.xs,
+    },
+    countText: {
+        ...typography.caption,
+        color: colors.textMuted,
+    },
+    emptyState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: spacing.xxl,
+        gap: spacing.md,
+    },
+    emptyStateImage: {
+        width: 120,
+        height: 120,
+        marginBottom: spacing.sm,
+    },
+    emptyStateTitle: {
+        ...typography.h3,
+        color: colors.textPrimary,
+        textAlign: 'center',
+    },
+    emptyStateText: {
+        ...typography.body,
+        color: colors.textMuted,
+        textAlign: 'center',
+        maxWidth: 280,
+    },
+    recipeList: {
+        gap: spacing.md,
+    },
+    // Menu page card styles (from index.tsx)
+    mealCard: {
+        minHeight: 180,
+        borderRadius: radius.lg,
+        overflow: 'hidden',
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        ...shadows.sm,
+    },
+    mealHero: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    mealHeroIcon: {
+        position: 'absolute',
+        right: spacing.lg,
+        top: spacing.lg,
+        opacity: 0.18,
+    },
+    mealGradient: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 120,
+        opacity: 0.8,
+    },
+    mealChips: {
+        position: 'absolute',
+        top: spacing.sm,
+        left: spacing.sm,
+        right: spacing.sm,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: spacing.xs,
+    },
+    mealChip: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
+        backgroundColor: 'rgba(0, 0, 0, 0.35)',
         borderRadius: radius.full,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
+        paddingVertical: 4,
+        paddingHorizontal: spacing.sm,
     },
-    courseBadgeText: {
+    mealChipText: {
         ...typography.caption,
+        fontSize: 11,
+        lineHeight: 14,
+        color: colors.textInverse,
     },
-    mediaGlow: {
+    mealTitleRow: {
         position: 'absolute',
-        width: 220,
-        height: 220,
-        borderRadius: 110,
-        top: -110,
-        right: -80,
-        opacity: 0.4,
+        left: spacing.md,
+        right: spacing.md,
+        bottom: spacing.md,
     },
-    mediaOrb: {
-        position: 'absolute',
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        bottom: -40,
-        left: -30,
-        opacity: 0.25,
-    },
-    cardContent: {
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.md,
-        gap: spacing.xs,
-    },
-    cardTitle: {
+    mealTitle: {
         ...typography.h3,
-        color: colors.textPrimary,
-    },
-    cardBrief: {
-        ...typography.bodySmall,
-        color: colors.textSecondary,
+        color: colors.textInverse,
     },
 });

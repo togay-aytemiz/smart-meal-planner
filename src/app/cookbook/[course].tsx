@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useUser } from '../../contexts/user-context';
+import { useCookbook } from '../../hooks/use-cookbook';
 import { colors } from '../../theme/colors';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -107,9 +108,38 @@ export default function CookbookDetailScreen() {
         recipeName?: string;
     }>();
     const { state: userState } = useUser();
+    const { isFavorite, toggleFavorite } = useCookbook();
     const [recipe, setRecipe] = useState<MenuRecipe | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [showFeedback, setShowFeedback] = useState<'added' | 'removed' | null>(null);
+    const feedbackOpacity = useRef(new Animated.Value(0)).current;
+
+    const handleFavoriteToggle = useCallback(async () => {
+        if (!recipe) return;
+        try {
+            const wasAdded = await toggleFavorite(recipe);
+            setShowFeedback(wasAdded ? 'added' : 'removed');
+            // Animate feedback
+            Animated.sequence([
+                Animated.timing(feedbackOpacity, {
+                    toValue: 1,
+                    duration: 150,
+                    useNativeDriver: true,
+                }),
+                Animated.delay(800),
+                Animated.timing(feedbackOpacity, {
+                    toValue: 0,
+                    duration: 300,
+                    useNativeDriver: true,
+                }),
+            ]).start(() => setShowFeedback(null));
+        } catch (err) {
+            console.error('Failed to toggle favorite:', err);
+        }
+    }, [recipe, toggleFavorite, feedbackOpacity]);
+
+    const isRecipeFavorited = recipe ? isFavorite(recipe) : false;
 
     useEffect(() => {
         if (userState.isLoading) {
@@ -162,7 +192,7 @@ export default function CookbookDetailScreen() {
                     const match = firestoreMenu?.recipes?.recipes
                         ? findRecipeMatch(firestoreMenu.recipes.recipes)
                         : null;
-                    if (match && isMounted) {
+                    if (match && isMounted && firestoreMenu?.recipes) {
                         setRecipe(match);
                         const recipesCache: MenuRecipesCache = {
                             data: firestoreMenu.recipes,
@@ -257,7 +287,30 @@ export default function CookbookDetailScreen() {
             )}
 
             {!loading && !error && recipe && (
-                <MealDetail recipe={recipe} onBack={() => router.back()} onFavorite={() => { }} appName="Omnoo" />
+                <>
+                    <MealDetail
+                        recipe={recipe}
+                        onBack={() => router.back()}
+                        onFavorite={handleFavoriteToggle}
+                        isFavorited={isRecipeFavorited}
+                        appName="Omnoo"
+                    />
+                    {showFeedback && (
+                        <Animated.View
+                            style={[
+                                styles.feedbackToast,
+                                { opacity: feedbackOpacity },
+                            ]}
+                            pointerEvents="none"
+                        >
+                            <Text style={styles.feedbackText}>
+                                {showFeedback === 'added'
+                                    ? 'Tariflere eklendi'
+                                    : 'Tariflerden kaldırıldı'}
+                            </Text>
+                        </Animated.View>
+                    )}
+                </>
             )}
         </SafeAreaView>
     );
@@ -289,5 +342,20 @@ const styles = StyleSheet.create({
     retryButtonText: {
         ...typography.buttonSmall,
         color: colors.primary,
+    },
+    feedbackToast: {
+        position: 'absolute',
+        bottom: 100,
+        left: spacing.lg,
+        right: spacing.lg,
+        backgroundColor: colors.textPrimary,
+        borderRadius: radius.lg,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        alignItems: 'center',
+    },
+    feedbackText: {
+        ...typography.buttonSmall,
+        color: colors.surface,
     },
 });

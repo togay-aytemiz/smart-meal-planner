@@ -254,6 +254,19 @@ export default function GroceriesScreen() {
     const [menuStatus, setMenuStatus] = useState<MenuGenerationStatus | null>(null);
     const [isMenuGenerating, setIsMenuGenerating] = useState(false);
     const pollCleanupRef = useRef<(() => void) | null>(null);
+    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+    const [isCheckingOut, setIsCheckingOut] = useState(false);
+    const floatingButtonAnim = useRef(new Animated.Value(0)).current;
+
+    // Animate floating button when selection changes
+    useEffect(() => {
+        Animated.spring(floatingButtonAnim, {
+            toValue: selectedItems.size > 0 ? 1 : 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 10,
+        }).start();
+    }, [selectedItems.size]);
 
     useEffect(() => {
         if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -538,37 +551,114 @@ export default function GroceriesScreen() {
         }
     };
 
+    const handleToggleSelect = (itemId: string) => {
+        setSelectedItems((prev) => {
+            const next = new Set(prev);
+            if (next.has(itemId)) {
+                next.delete(itemId);
+            } else {
+                next.add(itemId);
+            }
+            return next;
+        });
+    };
+
+    const handleCheckout = async () => {
+        const userId = userState.user?.uid;
+        if (!userId || selectedItems.size === 0 || isCheckingOut) return;
+
+        setIsCheckingOut(true);
+        try {
+            // Get all selected items from categories
+            const itemsToAdd: { name: string; normalizedName: string }[] = [];
+            groceryCategories.forEach((category) => {
+                category.items.forEach((item) => {
+                    if (selectedItems.has(item.id)) {
+                        itemsToAdd.push({
+                            name: item.name,
+                            normalizedName: item.normalizedName || normalizeName(item.name),
+                        });
+                    }
+                });
+            });
+
+            // Merge with existing pantry items (no duplicates)
+            const merged = new Map<string, PantryItem>();
+            pantryItems.forEach((item) => {
+                merged.set(item.normalizedName, item);
+            });
+            itemsToAdd.forEach((item) => {
+                merged.set(item.normalizedName, item);
+            });
+
+            const updatedItems = Array.from(merged.values());
+            await setDoc(
+                doc(firestore(), 'Users', userId),
+                {
+                    pantry: {
+                        items: updatedItems,
+                        updatedAt: serverTimestamp(),
+                    },
+                    updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+            );
+
+            // Clear selection
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setSelectedItems(new Set());
+        } finally {
+            setIsCheckingOut(false);
+        }
+    };
+
     const renderItemRow = (item: GroceryItem, index: number, totalItems: number) => {
         const isExpanded = expandedItemId === item.id;
         const inPantry = pantryNames.has(item.name.toLocaleLowerCase('tr-TR'));
         const hasMeals = item.meals.length > 0;
         const showUsage = activeFilter !== 'pantry' && hasMeals;
         const isLastItem = index === totalItems - 1;
-
-        const RowComponent = showUsage ? TouchableOpacity : View;
+        const isSelected = selectedItems.has(item.id);
+        const showCheckbox = activeFilter !== 'pantry';
 
         const content = (
-            <RowComponent
-                style={[styles.itemRow, isLastItem && styles.itemRowLast]}
-                onPress={showUsage ? () => handleToggleUsage(item.id) : undefined}
-                activeOpacity={0.7}
-            >
-                <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.name}</Text>
-                    {item.amount ? (
-                        <Text style={styles.itemAmount}>{item.amount}</Text>
-                    ) : null}
-                </View>
-                <View style={styles.itemMeta}>
-                    {activeFilter === 'all' && inPantry ? (
-                        <View style={styles.pantryBadge}>
-                            <Text style={styles.pantryBadgeText}>Mevcut</Text>
+            <View style={[styles.itemRow, isLastItem && styles.itemRowLast]}>
+                {showCheckbox && (
+                    <TouchableOpacity
+                        style={styles.checkboxContainer}
+                        onPress={() => handleToggleSelect(item.id)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                            {isSelected && (
+                                <MaterialCommunityIcons name="check" size={14} color={colors.textInverse} />
+                            )}
                         </View>
-                    ) : null}
-                    {showUsage ? (
-                        <ExpandButton isExpanded={isExpanded} />
-                    ) : null}
-                </View>
+                    </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                    style={styles.itemContent}
+                    onPress={showUsage ? () => handleToggleUsage(item.id) : undefined}
+                    activeOpacity={showUsage ? 0.7 : 1}
+                    disabled={!showUsage}
+                >
+                    <View style={styles.itemInfo}>
+                        <Text style={styles.itemName}>{item.name}</Text>
+                        {item.amount ? (
+                            <Text style={styles.itemAmount}>{item.amount}</Text>
+                        ) : null}
+                    </View>
+                    <View style={styles.itemMeta}>
+                        {activeFilter === 'all' && inPantry ? (
+                            <View style={styles.pantryBadge}>
+                                <Text style={styles.pantryBadgeText}>Mevcut</Text>
+                            </View>
+                        ) : null}
+                        {showUsage ? (
+                            <ExpandButton isExpanded={isExpanded} />
+                        ) : null}
+                    </View>
+                </TouchableOpacity>
                 {isExpanded && showUsage ? (
                     <View style={styles.usageContainer}>
                         {item.meals.map((meal, idx) => {
@@ -591,7 +681,7 @@ export default function GroceriesScreen() {
                         })}
                     </View>
                 ) : null}
-            </RowComponent>
+            </View>
         );
 
         if (activeFilter === 'pantry') {
@@ -757,6 +847,41 @@ export default function GroceriesScreen() {
                     )}
                 </ScrollView>
             </View>
+
+            {/* Floating Checkout Button */}
+            <Animated.View
+                style={[
+                    styles.floatingButtonContainer,
+                    {
+                        opacity: floatingButtonAnim,
+                        transform: [{
+                            translateY: floatingButtonAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [100, 0],
+                            }),
+                        }],
+                    },
+                ]}
+                pointerEvents={selectedItems.size > 0 ? 'auto' : 'none'}
+            >
+                <TouchableOpacity
+                    style={styles.floatingButton}
+                    onPress={handleCheckout}
+                    activeOpacity={0.9}
+                    disabled={isCheckingOut}
+                >
+                    {isCheckingOut ? (
+                        <ActivityIndicator size="small" color={colors.textInverse} />
+                    ) : (
+                        <>
+                            <MaterialCommunityIcons name="check-circle" size={20} color={colors.textInverse} />
+                            <Text style={styles.floatingButtonText}>
+                                Satın alındı işaretle ({selectedItems.size})
+                            </Text>
+                        </>
+                    )}
+                </TouchableOpacity>
+            </Animated.View>
         </SafeAreaView>
     );
 }
@@ -809,7 +934,7 @@ const styles = StyleSheet.create({
         color: colors.textInverse,
     },
     scrollContent: {
-        paddingBottom: spacing.xxl,
+        paddingBottom: 120,
         gap: spacing.lg,
     },
     quickAddCard: {
@@ -862,6 +987,8 @@ const styles = StyleSheet.create({
         ...shadows.sm,
     },
     itemRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
         borderBottomWidth: 1,
@@ -1001,5 +1128,51 @@ const styles = StyleSheet.create({
     loadingText: {
         ...typography.body,
         color: colors.textSecondary,
+    },
+    checkboxContainer: {
+        paddingRight: spacing.sm,
+        justifyContent: 'center',
+    },
+    checkbox: {
+        width: 22,
+        height: 22,
+        borderRadius: radius.sm,
+        borderWidth: 2,
+        borderColor: colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.surface,
+    },
+    checkboxSelected: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    itemContent: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+    },
+    floatingButtonContainer: {
+        position: 'absolute',
+        bottom: spacing.md,
+        left: spacing.lg,
+        right: spacing.lg,
+    },
+    floatingButton: {
+        backgroundColor: colors.primary,
+        borderRadius: radius.full,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.sm,
+        ...shadows.md,
+    },
+    floatingButtonText: {
+        ...typography.label,
+        color: colors.textInverse,
+        fontWeight: '600',
     },
 });

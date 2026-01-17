@@ -915,6 +915,21 @@ export const generateWeeklyMenu = onCall(async (request) => {
       assignments = assignments.filter((a) => a.date === singleDay);
     }
 
+    const startDate = payload.startDate;
+    if (!singleDay && startDate) {
+      const startDateValue = parseISODate(startDate).getTime();
+      assignments = assignments.filter(
+        (assignment) => parseISODate(assignment.date).getTime() >= startDateValue
+      );
+    }
+
+    const excludeDates = payload.excludeDates?.length
+      ? new Set(payload.excludeDates)
+      : null;
+    if (!singleDay && excludeDates?.size) {
+      assignments = assignments.filter((assignment) => !excludeDates.has(assignment.date));
+    }
+
     if (!assignments.length) {
       return {
         success: true,

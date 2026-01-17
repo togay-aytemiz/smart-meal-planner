@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useState, useCallback, type ComponentProps } from 'react';
 import {
     Image,
     ScrollView,
@@ -6,12 +6,13 @@ import {
     Text,
     TouchableOpacity,
     View,
+    RefreshControl,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter, useNavigation } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { TabScreenHeader, ReasoningBubble } from '../../components/ui';
 import { functions } from '../../config/firebase';
 import { useUser } from '../../contexts/user-context';
@@ -70,8 +71,11 @@ type MealPlan = {
 type WeeklyMenuRequest = {
     userId: string;
     weekStart?: string;
+    singleDay?: string;
     onboarding?: OnboardingSnapshot;
     onboardingHash?: string;
+    startDate?: string;
+    excludeDates?: string[];
     repeatMode?: 'consecutive' | 'spaced';
     existingPantry?: string[];
     avoidIngredients?: string[];
@@ -192,6 +196,13 @@ const buildDateKey = (date: Date) => {
     const month = `${date.getMonth() + 1}`.padStart(2, '0');
     const day = `${date.getDate()}`.padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+const addDaysToDateKey = (dateKey: string, days: number) => {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    date.setDate(date.getDate() + days);
+    return buildDateKey(date);
 };
 
 const resolveWeekStartKey = (date: Date) => {
@@ -438,6 +449,9 @@ const generateRemainingDaysInBackground = (
     onboardingHash: string | null,
     excludeDay: string
 ) => {
+    const todayKey = buildDateKey(new Date());
+    const startDate = todayKey === excludeDay ? addDaysToDateKey(excludeDay, 1) : todayKey;
+    const excludeDates = [excludeDay];
     // Fire and forget - don't await
     (async () => {
         try {
@@ -449,6 +463,8 @@ const generateRemainingDaysInBackground = (
                 request: {
                     userId,
                     weekStart,
+                    startDate,
+                    excludeDates,
                     ...(onboarding ? { onboarding } : {}),
                     ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
                 },
@@ -491,15 +507,8 @@ export default function TodayScreen() {
     const [loading, setLoading] = useState(true);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const navigation = useNavigation();
-
-    useEffect(() => {
-        navigation.setOptions({
-            tabBarStyle: {
-                display: (loading && isInitialLoading) ? 'none' : undefined
-            }
-        });
-    }, [loading, isInitialLoading, navigation]);
+    const [refreshing, setRefreshing] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     const selectedRoutine = weeklyRoutine[getDayKey(selectedDay.date)];
     const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
@@ -587,6 +596,8 @@ export default function TodayScreen() {
                 const fallbackSnapshot = stored?.data ?? null;
                 const userId = userState.user?.uid ?? 'anonymous';
 
+                console.log('🍽️ Fetching menu for userId:', userId, 'date:', selectedDay.key);
+
                 let resolvedSnapshot = fallbackSnapshot;
 
                 if (userId !== 'anonymous') {
@@ -666,7 +677,10 @@ export default function TodayScreen() {
 
                     for (const mealType of mealTypes) {
                         try {
-                            const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType, onboardingHash);
+                            // Skip hash checking when fetching from Firestore - we want to load existing menus
+                            // even if the local onboarding data has changed. Hash is only used for generation decisions.
+                            const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType, null);
+                            console.log('🍽️ Firestore result for', mealType, ':', firestoreMenu ? 'FOUND' : 'NOT FOUND');
                             if (firestoreMenu) {
                                 updateBundle(mealType, firestoreMenu);
                                 await persistMenuCache(userId, dateKey, mealType, {
@@ -678,7 +692,7 @@ export default function TodayScreen() {
                                 loadedCount += 1;
                             }
                         } catch (firestoreError) {
-                            console.warn('Menu Firestore read error:', firestoreError);
+                            console.warn('❌ Menu Firestore read error:', firestoreError);
                             if (!lastError) {
                                 lastError = 'Menü yüklenemedi.';
                             }
@@ -742,7 +756,20 @@ export default function TodayScreen() {
         return () => {
             isMounted = false;
         };
-    }, [selectedDayKey, userState.isLoading, userState.user?.uid]);
+    }, [selectedDayKey, userState.isLoading, userState.user?.uid, refreshKey]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        setRefreshKey((prev) => prev + 1);
+        // refreshing will be set to false when loading completes in the useEffect
+    }, []);
+
+    // Reset refreshing when loading completes
+    useEffect(() => {
+        if (!loading) {
+            setRefreshing(false);
+        }
+    }, [loading]);
 
     const displayName = userName.trim() ? `${greeting} ${userName}` : greeting;
 
@@ -772,7 +799,17 @@ export default function TodayScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <TabScreenHeader title={displayName} />
-            <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+            <ScrollView
+                contentContainerStyle={styles.contentContainer}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={colors.primary}
+                    />
+                }
+            >
 
                 <View style={styles.calendarRow}>
                     {weekDays.map((day) => {

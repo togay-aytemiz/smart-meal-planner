@@ -169,6 +169,8 @@ export type WeeklyMenuGenerationRequest = {
   userId?: string;
   weekStart?: string; // YYYY-MM-DD
   singleDay?: string; // YYYY-MM-DD - if provided, only generate this day
+  startDate?: string; // YYYY-MM-DD - if provided, generate from this day onwards
+  excludeDates?: string[]; // YYYY-MM-DD - dates to skip
   onboarding?: Partial<OnboardingData>;
   onboardingHash?: string;
   repeatMode?: "consecutive" | "spaced";

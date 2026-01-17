@@ -282,9 +282,10 @@ export default function GroceriesScreen() {
         }
 
         setLoading(true);
+        const today = new Date();
 
         // First, check if menu generation is complete
-        const status = await checkWeeklyMenuCompleteness(userId);
+        const status = await checkWeeklyMenuCompleteness(userId, today);
         setMenuStatus(status);
 
         if (!status.complete) {
@@ -308,7 +309,8 @@ export default function GroceriesScreen() {
                         fetchWeeklyGroceries();
                     }
                 },
-                5000 // Poll every 5 seconds
+                5000,
+                today // Poll every 5 seconds
             );
             return;
         }
@@ -317,7 +319,7 @@ export default function GroceriesScreen() {
         setIsMenuGenerating(false);
 
         try {
-            const weekDates = buildWeekDateKeys();
+            const weekDates = buildWeekDateKeys(today);
             const allIngredients = new Map<string, GroceryItem>();
             const onboardingHash = buildOnboardingHash(null); // Or pass actual onboarding if needed
 
@@ -623,42 +625,44 @@ export default function GroceriesScreen() {
 
         const content = (
             <View style={[styles.itemRow, isLastItem && styles.itemRowLast]}>
-                {showCheckbox && (
+                <View style={styles.itemMainRow}>
+                    {showCheckbox && (
+                        <TouchableOpacity
+                            style={styles.checkboxContainer}
+                            onPress={() => handleToggleSelect(item.id)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                                {isSelected && (
+                                    <MaterialCommunityIcons name="check" size={14} color={colors.textInverse} />
+                                )}
+                            </View>
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity
-                        style={styles.checkboxContainer}
-                        onPress={() => handleToggleSelect(item.id)}
-                        activeOpacity={0.7}
+                        style={styles.itemContent}
+                        onPress={showUsage ? () => handleToggleUsage(item.id) : undefined}
+                        activeOpacity={showUsage ? 0.7 : 1}
+                        disabled={!showUsage}
                     >
-                        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                            {isSelected && (
-                                <MaterialCommunityIcons name="check" size={14} color={colors.textInverse} />
-                            )}
+                        <View style={styles.itemInfo}>
+                            <Text style={styles.itemName}>{item.name}</Text>
+                            {item.amount ? (
+                                <Text style={styles.itemAmount}>{item.amount}</Text>
+                            ) : null}
+                        </View>
+                        <View style={styles.itemMeta}>
+                            {activeFilter === 'all' && inPantry ? (
+                                <View style={styles.pantryBadge}>
+                                    <Text style={styles.pantryBadgeText}>Mevcut</Text>
+                                </View>
+                            ) : null}
+                            {showUsage ? (
+                                <ExpandButton isExpanded={isExpanded} />
+                            ) : null}
                         </View>
                     </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                    style={styles.itemContent}
-                    onPress={showUsage ? () => handleToggleUsage(item.id) : undefined}
-                    activeOpacity={showUsage ? 0.7 : 1}
-                    disabled={!showUsage}
-                >
-                    <View style={styles.itemInfo}>
-                        <Text style={styles.itemName}>{item.name}</Text>
-                        {item.amount ? (
-                            <Text style={styles.itemAmount}>{item.amount}</Text>
-                        ) : null}
-                    </View>
-                    <View style={styles.itemMeta}>
-                        {activeFilter === 'all' && inPantry ? (
-                            <View style={styles.pantryBadge}>
-                                <Text style={styles.pantryBadgeText}>Mevcut</Text>
-                            </View>
-                        ) : null}
-                        {showUsage ? (
-                            <ExpandButton isExpanded={isExpanded} />
-                        ) : null}
-                    </View>
-                </TouchableOpacity>
+                </View>
                 {isExpanded && showUsage ? (
                     <View style={styles.usageContainer}>
                         {item.meals.map((meal, idx) => {
@@ -987,12 +991,14 @@ const styles = StyleSheet.create({
         ...shadows.sm,
     },
     itemRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
         borderBottomWidth: 1,
         borderBottomColor: colors.borderLight,
+    },
+    itemMainRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     itemRowLast: {
         borderBottomWidth: 0,
@@ -1010,7 +1016,7 @@ const styles = StyleSheet.create({
     },
     itemMeta: {
         position: 'absolute',
-        right: spacing.md,
+        right: 0,
         top: 0,
         bottom: 0,
         flexDirection: 'row',
@@ -1060,6 +1066,7 @@ const styles = StyleSheet.create({
     usageContainer: {
         marginTop: spacing.sm,
         paddingTop: spacing.sm,
+        paddingLeft: 22 + spacing.sm,
         borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: colors.border,
     },

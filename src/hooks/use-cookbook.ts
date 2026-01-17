@@ -35,30 +35,57 @@ export function useCookbook() {
             return;
         }
 
-        const unsubscribe = firestore()
+        let isMounted = true;
+        const favoritesRef = firestore()
             .collection('Users')
             .doc(userId)
             .collection('favorites')
-            .orderBy('savedAt', 'desc')
-            .onSnapshot(
-                (snapshot) => {
-                    const favorites: SavedRecipe[] = snapshot.docs.map((doc) => ({
-                        ...(doc.data() as Omit<SavedRecipe, 'recipeId'>),
-                        recipeId: doc.id,
-                    }));
-                    setState({ favorites, isLoading: false, error: null });
-                },
-                (error) => {
-                    console.error('Favorites subscription error:', error);
-                    setState((prev) => ({
-                        ...prev,
-                        isLoading: false,
-                        error: 'Favoriler yüklenemedi',
-                    }));
-                }
-            );
+            .orderBy('savedAt', 'desc');
 
-        return () => unsubscribe();
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+
+        const loadFavorites = async () => {
+            try {
+                const snapshot = await favoritesRef.get();
+                if (!isMounted) return;
+                const favorites: SavedRecipe[] = snapshot.docs.map((doc) => ({
+                    ...(doc.data() as Omit<SavedRecipe, 'recipeId'>),
+                    recipeId: doc.id,
+                }));
+                setState({ favorites, isLoading: false, error: null });
+            } catch (error) {
+                console.error('Favorites fetch error:', error);
+                if (!isMounted) return;
+                setState({ favorites: [], isLoading: false, error: 'Favoriler yüklenemedi' });
+            }
+        };
+
+        void loadFavorites();
+
+        const unsubscribe = favoritesRef.onSnapshot(
+            (snapshot) => {
+                const favorites: SavedRecipe[] = snapshot.docs.map((doc) => ({
+                    ...(doc.data() as Omit<SavedRecipe, 'recipeId'>),
+                    recipeId: doc.id,
+                }));
+                if (!isMounted) return;
+                setState({ favorites, isLoading: false, error: null });
+            },
+            (error) => {
+                console.error('Favorites subscription error:', error);
+                if (!isMounted) return;
+                setState((prev) => ({
+                    ...prev,
+                    isLoading: false,
+                    error: 'Favoriler yüklenemedi',
+                }));
+            }
+        );
+
+        return () => {
+            isMounted = false;
+            unsubscribe();
+        };
     }, [userId]);
 
     /**

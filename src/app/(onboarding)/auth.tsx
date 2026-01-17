@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Input } from '../../components/ui';
 import { colors } from '../../theme/colors';
@@ -7,10 +7,17 @@ import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 import { useOnboarding } from '../../contexts/onboarding-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback } from 'react';
 
 export default function AuthScreen() {
     const router = useRouter();
     const { dispatch } = useOnboarding();
+
+    useFocusEffect(
+        useCallback(() => {
+            dispatch({ type: 'SET_STEP', payload: 13 });
+        }, [dispatch])
+    );
 
     const handleContinue = () => {
         dispatch({ type: 'SET_STEP', payload: 14 });

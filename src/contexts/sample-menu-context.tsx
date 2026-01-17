@@ -307,7 +307,23 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
                 });
                 return;
             } catch (err) {
-                console.warn(`Meal ${mealType} generation error:`, err);
+                console.error(`[SampleMenuContext] Meal ${mealType} generation error:`, err);
+                if (err && typeof err === 'object') {
+                    const code = (err as any).code;
+                    const message = (err as any).message;
+
+                    if (code) console.error(`[SampleMenuContext] Firebase Error Code: ${code}`);
+                    if (message) console.error(`[SampleMenuContext] Firebase Error Message: ${message}`);
+                    if ((err as any).details) console.error(`[SampleMenuContext] Firebase Error Details:`, (err as any).details);
+
+                    // Handle unauthenticated error by signing out to force new anonymous session
+                    if (code === 'functions/unauthenticated' || message?.includes('unauthenticated')) {
+                        console.warn('User unauthenticated, forcing sign out...');
+                        import('@react-native-firebase/auth').then(auth => {
+                            auth.default().signOut().catch(console.error);
+                        });
+                    }
+                }
             }
 
             // Fallback: try Firestore
@@ -338,6 +354,15 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
                 if (isFirstMeal) {
                     firstMealPromiseRef.current?.resolve(true);
                 }
+
+                // Detailed error logging
+                console.error(`[SampleMenuContext] Meal ${mealType} generation failed completely.`);
+                if (!prev.error) {
+                    // Only log the first error to avoid spam
+                    const errMessage = getFunctionsErrorMessage(new Error('Öğün yüklenemedi'));
+                    console.error(`[SampleMenuContext] Error detail:`, errMessage);
+                }
+
                 return {
                     ...prev,
                     loadingStates: { ...prev.loadingStates, [mealType]: false },
@@ -357,12 +382,13 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
         return new Promise((resolve) => {
             firstMealPromiseRef.current = { resolve };
 
-            // Timeout after 20 seconds
+            // Timeout after 60 seconds
             setTimeout(() => {
                 if (!state.firstMealReady) {
+                    console.warn('[SampleMenuContext] Timeout waiting for first meal');
                     firstMealPromiseRef.current?.resolve(false);
                 }
-            }, 20000);
+            }, 60000);
         });
     }, [state.firstMealReady]);
 

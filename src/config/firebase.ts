@@ -69,7 +69,6 @@ const createRnFunctionsClient = (): FunctionsClient => {
     default: (app: ReturnType<typeof getApp>) => FirebaseFunctionsTypes.Module;
   };
   const functionsInstance = functionsModule.default(getApp());
-  void (functionsInstance as { native: unknown }).native;
   return functionsInstance;
 };
 

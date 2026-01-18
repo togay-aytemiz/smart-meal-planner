@@ -33,6 +33,9 @@ type MealUsage = {
     course: 'main' | 'side' | 'appetizer' | 'soup' | 'salad' | 'dessert' | 'drink' | 'other';
     day: string;
     mealType: 'Kahvaltı' | 'Öğle' | 'Akşam';
+    amountLabel?: string;
+    amountValue?: number;
+    unit?: string;
 };
 
 type GroceryStatus = 'to-buy' | 'pantry';
@@ -151,6 +154,29 @@ const CATEGORY_CONFIG = [
     },
 ];
 
+const DAY_ORDER: Record<string, number> = {
+    Pazartesi: 0,
+    Pzt: 0,
+    Salı: 1,
+    Sal: 1,
+    Çarşamba: 2,
+    Çar: 2,
+    Perşembe: 3,
+    Per: 3,
+    Cuma: 4,
+    Cum: 4,
+    Cumartesi: 5,
+    Cmt: 5,
+    Pazar: 6,
+    Paz: 6,
+};
+
+const MEAL_TYPE_ORDER: Record<MealUsage['mealType'], number> = {
+    Kahvaltı: 0,
+    Öğle: 1,
+    Akşam: 2,
+};
+
 const buildWeekRange = () => {
     const now = new Date();
     const dayIndex = (now.getDay() + 6) % 7;
@@ -165,11 +191,12 @@ const buildWeekRange = () => {
     return `${format(start)} - ${format(end)} Plan`;
 };
 
-const buildWeekDateKeys = () => {
-    const now = new Date();
-    const dayIndex = (now.getDay() + 6) % 7; // Monday = 0
-    const start = new Date(now);
-    start.setDate(now.getDate() - dayIndex);
+const buildWeekDateKeys = (startDate?: Date) => {
+    const base = startDate ?? new Date();
+    const reference = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const dayIndex = (reference.getDay() + 6) % 7; // Monday = 0
+    const start = new Date(reference);
+    start.setDate(reference.getDate() - dayIndex);
 
     const keys: { dateKey: string; label: string }[] = [];
     const labels = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
@@ -177,12 +204,16 @@ const buildWeekDateKeys = () => {
     for (let i = 0; i < 7; i++) {
         const d = new Date(start);
         d.setDate(start.getDate() + i);
+        if (startDate && d.getTime() < reference.getTime()) {
+            continue;
+        }
         const year = d.getFullYear();
         const month = `${d.getMonth() + 1}`.padStart(2, '0');
         const day = `${d.getDate()}`.padStart(2, '0');
+        const labelIndex = (d.getDay() + 6) % 7;
         keys.push({
             dateKey: `${year}-${month}-${day}`,
-            label: labels[i]
+            label: labels[labelIndex]
         });
     }
     return keys;
@@ -214,6 +245,80 @@ const categorizeItems = (items: GroceryItem[]): GroceryCategory[] => {
 
 const normalizeName = (value: string) =>
     value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
+
+const normalizeUnit = (value?: string) =>
+    value?.trim().toLocaleLowerCase('tr-TR') ?? '';
+
+const parseAmountValue = (value?: string | number) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        const fractionMatch = trimmed.match(/^(\d+)\s*\/\s*(\d+)$/);
+        if (fractionMatch) {
+            const numerator = Number(fractionMatch[1]);
+            const denominator = Number(fractionMatch[2]);
+            if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+                return numerator / denominator;
+            }
+        }
+        const numericMatch = trimmed.match(/^(\d+(?:[.,]\d+)?)$/);
+        if (numericMatch) {
+            return Number(numericMatch[1].replace(',', '.'));
+        }
+    }
+    return null;
+};
+
+const formatAmountValue = (value: number) => {
+    const rounded = Math.round(value * 100) / 100;
+    return Number.isInteger(rounded) ? `${rounded}` : `${rounded}`;
+};
+
+const buildTotalAmountLabel = (totals: Map<string, { total: number; label: string }>) => {
+    const parts = Array.from(totals.values())
+        .filter((entry) => Number.isFinite(entry.total) && entry.total > 0)
+        .map((entry) => {
+            const amountText = formatAmountValue(entry.total);
+            return entry.label ? `${amountText} ${entry.label}` : amountText;
+        });
+    return parts.length ? parts.join(' + ') : undefined;
+};
+
+const USAGE_UNIT_HIDE = new Set(['adet', 'ad', 'tane']);
+
+const USAGE_UNIT_ABBREVIATIONS: Record<string, string> = {
+    'yemek kaşığı': 'yk',
+    'yemek kasigi': 'yk',
+    'çay kaşığı': 'çk',
+    'cay kasigi': 'çk',
+    'tatlı kaşığı': 'tk',
+    'tatli kasigi': 'tk',
+    'su bardağı': 'sb',
+    'su bardagi': 'sb',
+    'çay bardağı': 'çb',
+    'cay bardagi': 'çb',
+    'gram': 'g',
+    'g': 'g',
+    'kilogram': 'kg',
+    'kg': 'kg',
+    'mililitre': 'ml',
+    'ml': 'ml',
+    'litre': 'l',
+    'l': 'l',
+};
+
+const buildUsageAmountLabel = (amountValue: number | null, unitLabel?: string) => {
+    if (amountValue === null) return undefined;
+    const amountText = formatAmountValue(amountValue);
+    if (!unitLabel) return amountText;
+    const unitKey = normalizeUnit(unitLabel);
+    if (USAGE_UNIT_HIDE.has(unitKey)) return amountText;
+    const abbreviatedUnit = USAGE_UNIT_ABBREVIATIONS[unitKey] ?? unitLabel;
+    return `${amountText} ${abbreviatedUnit}`;
+};
 
 const categorizePantryItems = (items: PantryItem[]): GroceryCategory[] => {
     const buckets = new Map<string, GroceryCategory>();
@@ -321,6 +426,7 @@ export default function GroceriesScreen() {
         try {
             const weekDates = buildWeekDateKeys(today);
             const allIngredients = new Map<string, GroceryItem>();
+            const amountTotals = new Map<string, Map<string, { total: number; label: string }>>();
             const onboardingHash = buildOnboardingHash(null); // Or pass actual onboarding if needed
 
             const processMeal = (
@@ -333,27 +439,59 @@ export default function GroceriesScreen() {
                 items.forEach((ing) => {
                     const normalized = normalizeName(ing.name);
                     const existing = allIngredients.get(normalized);
+                    const amountValue = parseAmountValue(ing.amount);
+                    const unitLabel = ing.unit?.trim();
+                    const totals = amountTotals.get(normalized) ?? new Map<string, { total: number; label: string }>();
+                    if (!amountTotals.has(normalized)) {
+                        amountTotals.set(normalized, totals);
+                    }
+
+                    if (amountValue !== null) {
+                        const unitKey = normalizeUnit(unitLabel);
+                        const existingTotal = totals.get(unitKey);
+                        if (existingTotal) {
+                            existingTotal.total += amountValue;
+                        } else {
+                            totals.set(unitKey, { total: amountValue, label: unitLabel ?? '' });
+                        }
+                    }
+
+                    const totalAmountLabel = buildTotalAmountLabel(totals);
+                    const usageAmountLabel = buildUsageAmountLabel(amountValue, unitLabel);
                     const mealUsage: MealUsage = {
                         recipeName,
                         course: (course as MealUsage['course']) || 'other',
                         day: dateLabel,
                         mealType,
+                        amountLabel: usageAmountLabel,
+                        amountValue: amountValue ?? undefined,
+                        unit: unitLabel,
                     };
 
                     if (existing) {
-                        // Check if this exact meal usage already exists
-                        const exists = existing.meals.some(
-                            m => m.recipeName === recipeName && m.day === dateLabel
+                        const existingUsage = existing.meals.find(
+                            (m) => m.recipeName === recipeName && m.day === dateLabel && m.mealType === mealType
                         );
-                        if (!exists) {
+                        if (existingUsage) {
+                            if (amountValue !== null) {
+                                const existingUnit = normalizeUnit(existingUsage.unit);
+                                const incomingUnit = normalizeUnit(unitLabel);
+                                if (!existingUsage.unit || existingUnit === incomingUnit) {
+                                    const mergedValue = (existingUsage.amountValue ?? 0) + amountValue;
+                                    existingUsage.amountValue = mergedValue;
+                                    existingUsage.unit = unitLabel || existingUsage.unit;
+                                    existingUsage.amountLabel = buildUsageAmountLabel(mergedValue, existingUsage.unit);
+                                }
+                            }
+                        } else {
                             existing.meals.push(mealUsage);
                         }
+                        existing.amount = totalAmountLabel;
                     } else {
-                        const amountStr = ing.amount ? `${ing.amount} ${ing.unit ?? ''}`.trim() : undefined;
                         allIngredients.set(normalized, {
                             id: `g-${normalized}`,
                             name: ing.name,
-                            amount: amountStr,
+                            amount: totalAmountLabel,
                             status: 'to-buy',
                             meals: [mealUsage],
                             normalizedName: normalized,
@@ -665,7 +803,18 @@ export default function GroceriesScreen() {
                 </View>
                 {isExpanded && showUsage ? (
                     <View style={styles.usageContainer}>
-                        {item.meals.map((meal, idx) => {
+                        {[...item.meals]
+                            .sort((first, second) => {
+                                const dayOrder =
+                                    (DAY_ORDER[first.day] ?? 99) - (DAY_ORDER[second.day] ?? 99);
+                                if (dayOrder !== 0) return dayOrder;
+                                const mealOrder =
+                                    (MEAL_TYPE_ORDER[first.mealType] ?? 99) -
+                                    (MEAL_TYPE_ORDER[second.mealType] ?? 99);
+                                if (mealOrder !== 0) return mealOrder;
+                                return first.recipeName.localeCompare(second.recipeName, 'tr-TR');
+                            })
+                            .map((meal, idx) => {
                             const courseIcon = getCourseIcon(meal.course);
                             return (
                                 <View key={idx} style={styles.usageRow}>
@@ -675,7 +824,7 @@ export default function GroceriesScreen() {
                                         color={colors.textMuted}
                                     />
                                     <Text style={styles.usageText}>
-                                        {meal.recipeName}
+                                        {meal.amountLabel ? `${meal.amountLabel} x ${meal.recipeName}` : meal.recipeName}
                                     </Text>
                                     <Text style={styles.usageDay}>
                                         {meal.day}
@@ -1066,7 +1215,7 @@ const styles = StyleSheet.create({
     usageContainer: {
         marginTop: spacing.sm,
         paddingTop: spacing.sm,
-        paddingLeft: 22 + spacing.sm,
+        paddingLeft: 0,
         borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: colors.border,
     },

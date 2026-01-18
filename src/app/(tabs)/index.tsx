@@ -630,6 +630,9 @@ export default function TodayScreen() {
                     (mealType) => planForDay[mealType]
                 );
                 const weekStart = resolveWeekStartKey(activeDate);
+                const weeklyCache = await loadWeeklyMenuCache(userId, onboardingHash);
+                const hasWeeklyCache = weeklyCache?.weekStart === weekStart;
+                let didTriggerRemainingDays = false;
 
                 if (!mealTypes.length) {
                     if (isMounted) {
@@ -728,7 +731,24 @@ export default function TodayScreen() {
                             onboardingHash,
                             dateKey
                         );
+                        didTriggerRemainingDays = true;
                     }
+                }
+
+                if (
+                    !didTriggerRemainingDays &&
+                    selectedDay.isToday &&
+                    !hasWeeklyCache &&
+                    (hasCachedMenu || loadedCount > 0)
+                ) {
+                    generateRemainingDaysInBackground(
+                        userId,
+                        weekStart,
+                        resolvedSnapshot,
+                        onboardingHash,
+                        dateKey
+                    );
+                    didTriggerRemainingDays = true;
                 }
 
                 if (isMounted) {

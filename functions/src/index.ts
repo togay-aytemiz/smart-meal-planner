@@ -285,6 +285,46 @@ const DAY_KEYS: WeekdayKey[] = [
   "friday",
   "saturday",
 ];
+
+// Menu Generation Status Tracking
+type MenuGenerationState = "pending" | "in_progress" | "completed" | "failed";
+
+const buildStatusDocId = (userId: string, weekStart: string) =>
+  `${userId}_${weekStart}`;
+
+const updateMenuGenerationStatus = async (
+  userId: string,
+  weekStart: string,
+  status: MenuGenerationState,
+  completedDays: number,
+  totalDays: number,
+  error?: string
+) => {
+  const db = getDb();
+  const statusDocId = buildStatusDocId(userId, weekStart);
+  const statusRef = db.collection("menuGenerationStatus").doc(statusDocId);
+
+  const now = new Date().toISOString();
+  const updateData: Record<string, unknown> = {
+    status,
+    completedDays,
+    totalDays,
+    updatedAt: now,
+  };
+
+  if (status === "in_progress") {
+    updateData.startedAt = now;
+    updateData.completedAt = null;
+    updateData.error = null;
+  } else if (status === "completed") {
+    updateData.completedAt = now;
+    updateData.error = null;
+  } else if (status === "failed") {
+    updateData.error = error ?? "Unknown error";
+  }
+
+  await statusRef.set(updateData, { merge: true });
+};
 const WEEKEND_KEYS = new Set<WeekdayKey>(["saturday", "sunday"]);
 
 const DEFAULT_ROUTINES: WeeklyRoutine = {
@@ -1128,6 +1168,11 @@ export const generateWeeklyMenu = onCall(async (request) => {
       .filter(([, assignment]) => assignment.mealType === "dinner")
       .sort(([, first], [, second]) => first.dayIndex - second.dayIndex);
 
+    // Update status to in_progress before generating
+    const totalDinnerDays = dinnerSlots.length;
+    let completedDinnerDays = 0;
+    await updateMenuGenerationStatus(userId, weekStart, "in_progress", 0, totalDinnerDays);
+
     for (const [slotKey, assignment] of dinnerSlots) {
       let leftoverMainDish: string | undefined;
 
@@ -1142,6 +1187,10 @@ export const generateWeeklyMenu = onCall(async (request) => {
         }
       }
       await generateSlot(slotKey, assignment, undefined, leftoverMainDish);
+
+      // Update progress after each dinner slot
+      completedDinnerDays += 1;
+      await updateMenuGenerationStatus(userId, weekStart, "in_progress", completedDinnerDays, totalDinnerDays);
     }
 
     for (const assignment of assignments) {
@@ -1192,6 +1241,9 @@ export const generateWeeklyMenu = onCall(async (request) => {
 
     await batch.commit();
 
+    // Update status to completed
+    await updateMenuGenerationStatus(userId, weekStart, "completed", totalDinnerDays, totalDinnerDays);
+
     return {
       success: true,
       weekStart,
@@ -1206,6 +1258,20 @@ export const generateWeeklyMenu = onCall(async (request) => {
     console.error("generateWeeklyMenu error:", error);
     const message =
       error instanceof Error ? error.message : "Failed to generate weekly menu";
+
+    // Try to update status to failed (best effort)
+    try {
+      const payload = request.data?.request as WeeklyMenuGenerationRequest | undefined;
+      const userId = request.auth?.uid ?? payload?.userId;
+      const weekStartDate = resolveWeekStart(payload?.weekStart);
+      const weekStart = formatISODate(weekStartDate);
+      if (userId) {
+        await updateMenuGenerationStatus(userId, weekStart, "failed", 0, 0, message);
+      }
+    } catch (statusError) {
+      console.error("Failed to update status on error:", statusError);
+    }
+
     throw new functions.HttpsError("internal", message, { message });
   }
 });

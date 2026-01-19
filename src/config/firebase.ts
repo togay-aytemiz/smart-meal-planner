@@ -1,5 +1,10 @@
 /**
- * Firebase Functions Configuration (React Native Firebase)
+ * Firebase Functions Configuration
+ * 
+ * NOTE: This uses a web SDK fallback for Firebase Functions.
+ * RNFirebase v23+ requires TurboModules/New Architecture for native module support.
+ * Since the app uses Legacy Architecture, we fall back to the web SDK which
+ * works identically - just makes HTTP calls instead of using the native bridge.
  */
 
 import { getApp } from '@react-native-firebase/app';

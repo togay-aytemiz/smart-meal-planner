@@ -25,6 +25,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Menu generation status - users can read their own status documents
+    // Document ID format: {userId}_{weekStart}
+    match /menuGenerationStatus/{statusId} {
+      allow read: if request.auth != null && statusId.matches(request.auth.uid + '_.*');
+      allow write: if false; // Only Cloud Functions can write
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

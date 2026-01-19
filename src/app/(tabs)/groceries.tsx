@@ -12,7 +12,7 @@ import { functions } from '../../config/firebase';
 import { useUser } from '../../contexts/user-context';
 import { fetchMenuBundle } from '../../utils/menu-storage';
 import { buildOnboardingHash } from '../../utils/onboarding-hash';
-import { checkWeeklyMenuCompleteness, subscribeToMenuCompletion, MenuGenerationStatus } from '../../utils/menu-generation-status';
+import { checkWeeklyMenuCompleteness, subscribeToMenuGenerationStatus, getWeekStartDate, MenuGenerationStatus } from '../../utils/menu-generation-status';
 
 // Category configuration (must match Cloud Function)
 const CATEGORY_TITLES: Record<string, string> = {
@@ -388,154 +388,156 @@ export default function GroceriesScreen() {
 
         setLoading(true);
         const today = new Date();
+        const weekStart = getWeekStartDate(today);
 
-        // First, check if menu generation is complete
-        const status = await checkWeeklyMenuCompleteness(userId, today);
-        setMenuStatus(status);
-
-        if (!status.complete) {
-            // Menu is still generating - start polling
-            setIsMenuGenerating(true);
-            setLoading(false);
-
-            // Clean up any existing poll
-            if (pollCleanupRef.current) {
-                pollCleanupRef.current();
-            }
-
-            // Start polling for completion
-            pollCleanupRef.current = subscribeToMenuCompletion(
-                userId,
-                (newStatus) => {
-                    setMenuStatus(newStatus);
-                    if (newStatus.complete) {
-                        setIsMenuGenerating(false);
-                        // Trigger a refresh to load the grocery list
-                        fetchWeeklyGroceries();
-                    }
-                },
-                5000,
-                today // Poll every 5 seconds
-            );
-            return;
+        // Clean up any existing subscription
+        if (pollCleanupRef.current) {
+            pollCleanupRef.current();
+            pollCleanupRef.current = null;
         }
 
-        // Menu is complete - proceed to fetch groceries
-        setIsMenuGenerating(false);
+        // Helper to load groceries from existing menus
+        const loadGroceriesFromMenus = async () => {
+            try {
+                const weekDates = buildWeekDateKeys(today);
+                const allIngredients = new Map<string, GroceryItem>();
+                const amountTotals = new Map<string, Map<string, { total: number; label: string }>>();
+                const onboardingHash = buildOnboardingHash(null);
 
-        try {
-            const weekDates = buildWeekDateKeys(today);
-            const allIngredients = new Map<string, GroceryItem>();
-            const amountTotals = new Map<string, Map<string, { total: number; label: string }>>();
-            const onboardingHash = buildOnboardingHash(null); // Or pass actual onboarding if needed
-
-            const processMeal = (
-                dateLabel: string,
-                mealType: 'Kahvaltı' | 'Öğle' | 'Akşam',
-                recipeName: string,
-                course: string,
-                items: { name: string; amount?: string | number; unit?: string }[]
-            ) => {
-                items.forEach((ing) => {
-                    const normalized = normalizeName(ing.name);
-                    const existing = allIngredients.get(normalized);
-                    const amountValue = parseAmountValue(ing.amount);
-                    const unitLabel = ing.unit?.trim();
-                    const totals = amountTotals.get(normalized) ?? new Map<string, { total: number; label: string }>();
-                    if (!amountTotals.has(normalized)) {
-                        amountTotals.set(normalized, totals);
-                    }
-
-                    if (amountValue !== null) {
-                        const unitKey = normalizeUnit(unitLabel);
-                        const existingTotal = totals.get(unitKey);
-                        if (existingTotal) {
-                            existingTotal.total += amountValue;
-                        } else {
-                            totals.set(unitKey, { total: amountValue, label: unitLabel ?? '' });
+                const processMeal = (
+                    dateLabel: string,
+                    mealType: 'Kahvaltı' | 'Öğle' | 'Akşam',
+                    recipeName: string,
+                    course: string,
+                    items: { name: string; amount?: string | number; unit?: string }[]
+                ) => {
+                    items.forEach((ing) => {
+                        const normalized = normalizeName(ing.name);
+                        const existing = allIngredients.get(normalized);
+                        const amountValue = parseAmountValue(ing.amount);
+                        const unitLabel = ing.unit?.trim();
+                        const totals = amountTotals.get(normalized) ?? new Map<string, { total: number; label: string }>();
+                        if (!amountTotals.has(normalized)) {
+                            amountTotals.set(normalized, totals);
                         }
-                    }
 
-                    const totalAmountLabel = buildTotalAmountLabel(totals);
-                    const usageAmountLabel = buildUsageAmountLabel(amountValue, unitLabel);
-                    const mealUsage: MealUsage = {
-                        recipeName,
-                        course: (course as MealUsage['course']) || 'other',
-                        day: dateLabel,
-                        mealType,
-                        amountLabel: usageAmountLabel,
-                        amountValue: amountValue ?? undefined,
-                        unit: unitLabel,
-                    };
-
-                    if (existing) {
-                        const existingUsage = existing.meals.find(
-                            (m) => m.recipeName === recipeName && m.day === dateLabel && m.mealType === mealType
-                        );
-                        if (existingUsage) {
-                            if (amountValue !== null) {
-                                const existingUnit = normalizeUnit(existingUsage.unit);
-                                const incomingUnit = normalizeUnit(unitLabel);
-                                if (!existingUsage.unit || existingUnit === incomingUnit) {
-                                    const mergedValue = (existingUsage.amountValue ?? 0) + amountValue;
-                                    existingUsage.amountValue = mergedValue;
-                                    existingUsage.unit = unitLabel || existingUsage.unit;
-                                    existingUsage.amountLabel = buildUsageAmountLabel(mergedValue, existingUsage.unit);
-                                }
+                        if (amountValue !== null) {
+                            const unitKey = normalizeUnit(unitLabel);
+                            const existingTotal = totals.get(unitKey);
+                            if (existingTotal) {
+                                existingTotal.total += amountValue;
+                            } else {
+                                totals.set(unitKey, { total: amountValue, label: unitLabel ?? '' });
                             }
-                        } else {
-                            existing.meals.push(mealUsage);
                         }
-                        existing.amount = totalAmountLabel;
-                    } else {
-                        allIngredients.set(normalized, {
-                            id: `g-${normalized}`,
-                            name: ing.name,
-                            amount: totalAmountLabel,
-                            status: 'to-buy',
-                            meals: [mealUsage],
-                            normalizedName: normalized,
-                        });
+
+                        const totalAmountLabel = buildTotalAmountLabel(totals);
+                        const usageAmountLabel = buildUsageAmountLabel(amountValue, unitLabel);
+                        const mealUsage: MealUsage = {
+                            recipeName,
+                            course: (course as MealUsage['course']) || 'other',
+                            day: dateLabel,
+                            mealType,
+                            amountLabel: usageAmountLabel,
+                            amountValue: amountValue ?? undefined,
+                            unit: unitLabel,
+                        };
+
+                        if (existing) {
+                            const existingUsage = existing.meals.find(
+                                (m) => m.recipeName === recipeName && m.day === dateLabel && m.mealType === mealType
+                            );
+                            if (existingUsage) {
+                                if (amountValue !== null) {
+                                    const existingUnit = normalizeUnit(existingUsage.unit);
+                                    const incomingUnit = normalizeUnit(unitLabel);
+                                    if (!existingUsage.unit || existingUnit === incomingUnit) {
+                                        const mergedValue = (existingUsage.amountValue ?? 0) + amountValue;
+                                        existingUsage.amountValue = mergedValue;
+                                        existingUsage.unit = unitLabel || existingUsage.unit;
+                                        existingUsage.amountLabel = buildUsageAmountLabel(mergedValue, existingUsage.unit);
+                                    }
+                                }
+                            } else {
+                                existing.meals.push(mealUsage);
+                            }
+                            existing.amount = totalAmountLabel;
+                        } else {
+                            allIngredients.set(normalized, {
+                                id: `g-${normalized}`,
+                                name: ing.name,
+                                amount: totalAmountLabel,
+                                status: 'to-buy',
+                                meals: [mealUsage],
+                                normalizedName: normalized,
+                            });
+                        }
+                    });
+                };
+
+                const promises = weekDates.map(async ({ dateKey, label }) => {
+                    const [breakfast, lunch, dinner] = await Promise.all([
+                        fetchMenuBundle(userId, dateKey, 'breakfast', onboardingHash),
+                        fetchMenuBundle(userId, dateKey, 'lunch', onboardingHash),
+                        fetchMenuBundle(userId, dateKey, 'dinner', onboardingHash),
+                    ]);
+
+                    if (breakfast?.recipes?.recipes) {
+                        breakfast.recipes.recipes.forEach(r =>
+                            processMeal(label, 'Kahvaltı', r.name, r.course, r.ingredients || [])
+                        );
+                    }
+                    if (lunch?.recipes?.recipes) {
+                        lunch.recipes.recipes.forEach(r =>
+                            processMeal(label, 'Öğle', r.name, r.course, r.ingredients || [])
+                        );
+                    }
+                    if (dinner?.recipes?.recipes) {
+                        dinner.recipes.recipes.forEach(r =>
+                            processMeal(label, 'Akşam', r.name, r.course, r.ingredients || [])
+                        );
                     }
                 });
-            };
 
-            const promises = weekDates.map(async ({ dateKey, label }) => {
-                const [breakfast, lunch, dinner] = await Promise.all([
-                    fetchMenuBundle(userId, dateKey, 'breakfast', onboardingHash),
-                    fetchMenuBundle(userId, dateKey, 'lunch', onboardingHash),
-                    fetchMenuBundle(userId, dateKey, 'dinner', onboardingHash),
-                ]);
+                await Promise.all(promises);
 
-                if (breakfast?.recipes?.recipes) {
-                    breakfast.recipes.recipes.forEach(r =>
-                        processMeal(label, 'Kahvaltı', r.name, r.course, r.ingredients || [])
-                    );
+                const items = Array.from(allIngredients.values());
+                const categorized = categorizeItems(items);
+                setGroceryCategories(categorized);
+            } catch (error) {
+                console.error('Failed to fetch grocery list:', error);
+            } finally {
+                setLoading(false);
+                setRefreshing(false);
+            }
+        };
+
+        // Subscribe to menu generation status
+        pollCleanupRef.current = subscribeToMenuGenerationStatus(
+            userId,
+            weekStart,
+            (status) => {
+                setMenuStatus(status);
+
+                if (status.state === 'in_progress') {
+                    // Still generating - show progress UI
+                    setIsMenuGenerating(true);
+                    setLoading(false);
+                } else if (status.state === 'completed') {
+                    // Generation complete - fetch groceries
+                    setIsMenuGenerating(false);
+                    loadGroceriesFromMenus();
+                } else if (status.state === 'failed') {
+                    // Generation failed
+                    setIsMenuGenerating(false);
+                    setLoading(false);
+                } else {
+                    // Pending (no generation started yet) - try to load existing menus
+                    setIsMenuGenerating(false);
+                    loadGroceriesFromMenus();
                 }
-                if (lunch?.recipes?.recipes) {
-                    lunch.recipes.recipes.forEach(r =>
-                        processMeal(label, 'Öğle', r.name, r.course, r.ingredients || [])
-                    );
-                }
-                if (dinner?.recipes?.recipes) {
-                    dinner.recipes.recipes.forEach(r =>
-                        processMeal(label, 'Akşam', r.name, r.course, r.ingredients || [])
-                    );
-                }
-            });
-
-            await Promise.all(promises);
-
-            const items = Array.from(allIngredients.values());
-            const categorized = categorizeItems(items);
-            setGroceryCategories(categorized);
-
-        } catch (error) {
-            console.error('Failed to fetch grocery list:', error);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
+            }
+        );
     }, [userState.user?.uid]);
 
     useEffect(() => {
@@ -594,7 +596,7 @@ export default function GroceriesScreen() {
         return unsubscribe;
     }, [userState.user?.uid]);
 
-    // Cleanup polling on unmount
+    // Cleanup subscription on unmount
     useEffect(() => {
         return () => {
             if (pollCleanupRef.current) {
@@ -815,23 +817,23 @@ export default function GroceriesScreen() {
                                 return first.recipeName.localeCompare(second.recipeName, 'tr-TR');
                             })
                             .map((meal, idx) => {
-                            const courseIcon = getCourseIcon(meal.course);
-                            return (
-                                <View key={idx} style={styles.usageRow}>
-                                    <MaterialCommunityIcons
-                                        name={courseIcon}
-                                        size={14}
-                                        color={colors.textMuted}
-                                    />
-                                    <Text style={styles.usageText}>
-                                        {meal.amountLabel ? `${meal.amountLabel} x ${meal.recipeName}` : meal.recipeName}
-                                    </Text>
-                                    <Text style={styles.usageDay}>
-                                        {meal.day}
-                                    </Text>
-                                </View>
-                            );
-                        })}
+                                const courseIcon = getCourseIcon(meal.course);
+                                return (
+                                    <View key={idx} style={styles.usageRow}>
+                                        <MaterialCommunityIcons
+                                            name={courseIcon}
+                                            size={14}
+                                            color={colors.textMuted}
+                                        />
+                                        <Text style={styles.usageText}>
+                                            {meal.amountLabel ? `${meal.amountLabel} x ${meal.recipeName}` : meal.recipeName}
+                                        </Text>
+                                        <Text style={styles.usageDay}>
+                                            {meal.day}
+                                        </Text>
+                                    </View>
+                                );
+                            })}
                     </View>
                 ) : null}
             </View>
@@ -961,12 +963,12 @@ export default function GroceriesScreen() {
                                                 <View
                                                     style={[
                                                         styles.progressFill,
-                                                        { width: `${(menuStatus.generatedDays / menuStatus.totalDays) * 100}%` }
+                                                        { width: `${(menuStatus.completedDays / menuStatus.totalDays) * 100}%` }
                                                     ]}
                                                 />
                                             </View>
                                             <Text style={styles.progressText}>
-                                                {menuStatus.generatedDays}/{menuStatus.totalDays} gün tamamlandı
+                                                {menuStatus.completedDays}/{menuStatus.totalDays} gün tamamlandı
                                             </Text>
                                         </View>
                                     )}

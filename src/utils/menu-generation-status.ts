@@ -1,111 +1,142 @@
 /**
  * Menu Generation Status Utility
- * Checks if all days of the week have generated menus
+ * Subscribes to the menuGenerationStatus Firestore document for real-time updates
  */
 
 import firestore from '@react-native-firebase/firestore';
 
+export type MenuGenerationState = 'pending' | 'in_progress' | 'completed' | 'failed';
+
 export type MenuGenerationStatus = {
-    complete: boolean;
-    generatedDays: number;
+    state: MenuGenerationState;
+    startedAt?: string;
+    completedAt?: string;
+    updatedAt?: string;
+    completedDays: number;
     totalDays: number;
-    missingDays: string[];
+    error?: string;
 };
 
 /**
- * Build date keys for the current week (Monday to Sunday).
- * If startDate is provided, only include that day and later.
+ * Get the week start date in YYYY-MM-DD format for the current or given date.
+ * Week starts on Monday.
  */
-export const buildWeekDateKeys = (startDate?: Date): string[] => {
-    const base = startDate ?? new Date();
+export const getWeekStartDate = (date?: Date): string => {
+    const base = date ?? new Date();
     const reference = new Date(base.getFullYear(), base.getMonth(), base.getDate());
     const dayIndex = (reference.getDay() + 6) % 7; // Monday = 0
     const start = new Date(reference);
     start.setDate(reference.getDate() - dayIndex);
 
-    const keys: string[] = [];
-    for (let i = 0; i < 7; i++) {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i);
-        if (startDate && d.getTime() < reference.getTime()) {
-            continue;
-        }
-        const year = d.getFullYear();
-        const month = `${d.getMonth() + 1}`.padStart(2, '0');
-        const day = `${d.getDate()}`.padStart(2, '0');
-        keys.push(`${year}-${month}-${day}`);
-    }
-    return keys;
+    const year = start.getFullYear();
+    const month = `${start.getMonth() + 1}`.padStart(2, '0');
+    const day = `${start.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
 };
 
 /**
- * Check if all 7 days of the current week have dinner menus in Firestore
- * Uses dinner as the proxy for "day is generated" since it's the most common meal
+ * Build the status document ID for a user and week.
  */
+const buildStatusDocId = (userId: string, weekStart: string): string =>
+    `${userId}_${weekStart}`;
+
+/**
+ * Parse the Firestore document data into MenuGenerationStatus.
+ */
+const parseStatusDoc = (data: Record<string, unknown> | undefined): MenuGenerationStatus => {
+    if (!data) {
+        return {
+            state: 'pending',
+            completedDays: 0,
+            totalDays: 0,
+        };
+    }
+
+    return {
+        state: (data.status as MenuGenerationState) ?? 'pending',
+        startedAt: data.startedAt as string | undefined,
+        completedAt: data.completedAt as string | undefined,
+        updatedAt: data.updatedAt as string | undefined,
+        completedDays: (data.completedDays as number) ?? 0,
+        totalDays: (data.totalDays as number) ?? 0,
+        error: data.error as string | undefined,
+    };
+};
+
+/**
+ * Subscribe to menu generation status changes.
+ * Returns an unsubscribe function.
+ */
+export const subscribeToMenuGenerationStatus = (
+    userId: string,
+    weekStart: string,
+    onStatusChange: (status: MenuGenerationStatus) => void
+): (() => void) => {
+    const statusDocId = buildStatusDocId(userId, weekStart);
+
+    const unsubscribe = firestore()
+        .collection('menuGenerationStatus')
+        .doc(statusDocId)
+        .onSnapshot(
+            (snapshot) => {
+                const data = snapshot.data() as Record<string, unknown> | undefined;
+                const status = parseStatusDoc(data);
+                onStatusChange(status);
+            },
+            (error) => {
+                console.error('[MenuGenerationStatus] Subscription error:', error);
+                // On error, assume pending state
+                onStatusChange({
+                    state: 'pending',
+                    completedDays: 0,
+                    totalDays: 0,
+                });
+            }
+        );
+
+    return unsubscribe;
+};
+
+/**
+ * Get the current menu generation status (one-time fetch).
+ */
+export const getMenuGenerationStatus = async (
+    userId: string,
+    weekStart: string
+): Promise<MenuGenerationStatus> => {
+    const statusDocId = buildStatusDocId(userId, weekStart);
+
+    try {
+        const snapshot = await firestore()
+            .collection('menuGenerationStatus')
+            .doc(statusDocId)
+            .get();
+
+        const data = snapshot.data() as Record<string, unknown> | undefined;
+        return parseStatusDoc(data);
+    } catch (error) {
+        console.error('[MenuGenerationStatus] Fetch error:', error);
+        return {
+            state: 'pending',
+            completedDays: 0,
+            totalDays: 0,
+        };
+    }
+};
+
+// Legacy export for backwards compatibility
 export const checkWeeklyMenuCompleteness = async (
     userId: string,
     startDate?: Date
-): Promise<MenuGenerationStatus> => {
-    const weekDates = buildWeekDateKeys(startDate);
-    const totalDays = weekDates.length;
-    const missingDays: string[] = [];
-
-    // Check each day's dinner menu
-    const checks = await Promise.all(
-        weekDates.map(async (dateKey) => {
-            const menuDocId = `${userId}_${dateKey}_dinner`;
-            const doc = await firestore()
-                .collection('menus')
-                .doc(menuDocId)
-                .get();
-            return { dateKey, exists: doc.exists };
-        })
-    );
-
-    checks.forEach(({ dateKey, exists }) => {
-        if (!exists) {
-            missingDays.push(dateKey);
-        }
-    });
-
-    const generatedDays = totalDays - missingDays.length;
+): Promise<{ complete: boolean; generatedDays: number; totalDays: number; missingDays: string[] }> => {
+    const weekStart = getWeekStartDate(startDate);
+    const status = await getMenuGenerationStatus(userId, weekStart);
 
     return {
-        complete: missingDays.length === 0,
-        generatedDays,
-        totalDays,
-        missingDays,
+        complete: status.state === 'completed',
+        generatedDays: status.completedDays,
+        totalDays: status.totalDays,
+        missingDays: [], // No longer tracked per-day
     };
 };
 
-/**
- * Subscribe to menu generation completion
- * Calls onComplete when all days are generated
- */
-export const subscribeToMenuCompletion = (
-    userId: string,
-    onStatusChange: (status: MenuGenerationStatus) => void,
-    intervalMs: number = 5000,
-    startDate?: Date
-): (() => void) => {
-    let cancelled = false;
-
-    const poll = async () => {
-        if (cancelled) return;
-
-        const status = await checkWeeklyMenuCompleteness(userId, startDate);
-        onStatusChange(status);
-
-        if (!status.complete && !cancelled) {
-            setTimeout(poll, intervalMs);
-        }
-    };
-
-    // Start polling
-    poll();
-
-    // Return cleanup function
-    return () => {
-        cancelled = true;
-    };
-};

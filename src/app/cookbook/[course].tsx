@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
@@ -582,8 +582,15 @@ export default function CookbookDetailScreen() {
         <SafeAreaView style={styles.container} edges={['left', 'right']}>
             {loading && !recipe && (
                 <View style={styles.stateContainer}>
-                    <ActivityIndicator size="small" color={colors.primary} />
-                    <Text style={styles.stateText}>Tarif hazırlanıyor...</Text>
+                    <Image
+                        source={require('../../../assets/food-loader.gif')}
+                        style={styles.stateLoaderImage}
+                        resizeMode="contain"
+                    />
+                    <Text style={styles.stateTitle}>Tarif hazırlanıyor...</Text>
+                    <Text style={styles.stateSubtext}>
+                        Omnoo senin için lezzeti ve dengeyi ayarlıyor.
+                    </Text>
                 </View>
             )}
 
@@ -632,10 +639,26 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background,
     },
     stateContainer: {
+        flex: 1,
         paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.xl,
         alignItems: 'center',
-        gap: spacing.sm,
+        justifyContent: 'center',
+        gap: spacing.xs,
+    },
+    stateLoaderImage: {
+        width: 200,
+        height: 200,
+    },
+    stateTitle: {
+        ...typography.h3,
+        color: colors.textPrimary,
+        textAlign: 'center',
+        marginTop: spacing.sm,
+    },
+    stateSubtext: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        textAlign: 'center',
     },
     stateText: {
         ...typography.body,

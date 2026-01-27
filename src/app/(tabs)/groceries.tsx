@@ -878,21 +878,41 @@ export default function GroceriesScreen() {
                     }
                 };
 
-                for (const { dateKey, label } of weekDates) {
-                    const breakfastRecipes = await loadRecipesForMeal(dateKey, 'breakfast');
-                    const lunchRecipes = await loadRecipesForMeal(dateKey, 'lunch');
-                    const dinnerRecipes = await loadRecipesForMeal(dateKey, 'dinner');
+                const mealTypes: MenuMealType[] = ['breakfast', 'lunch', 'dinner'];
+                const mealLabels: Record<MenuMealType, 'Kahvaltı' | 'Öğle' | 'Akşam'> = {
+                    breakfast: 'Kahvaltı',
+                    lunch: 'Öğle',
+                    dinner: 'Akşam',
+                };
+                const runWithConcurrencyLimit = async (tasks: Array<() => Promise<void>>, limit: number) => {
+                    const queue = [...tasks];
+                    const workerCount = Math.min(limit, queue.length);
+                    const workers = Array.from({ length: workerCount }, async () => {
+                        while (queue.length) {
+                            const task = queue.shift();
+                            if (!task) {
+                                return;
+                            }
+                            await task();
+                        }
+                    });
+                    await Promise.all(workers);
+                };
+                const recipeTasks: Array<() => Promise<void>> = [];
 
-                    breakfastRecipes.forEach((recipe) =>
-                        processMeal(label, 'Kahvaltı', recipe.name, recipe.course, recipe.ingredients || [])
-                    );
-                    lunchRecipes.forEach((recipe) =>
-                        processMeal(label, 'Öğle', recipe.name, recipe.course, recipe.ingredients || [])
-                    );
-                    dinnerRecipes.forEach((recipe) =>
-                        processMeal(label, 'Akşam', recipe.name, recipe.course, recipe.ingredients || [])
-                    );
+                for (const { dateKey, label } of weekDates) {
+                    for (const mealType of mealTypes) {
+                        recipeTasks.push(async () => {
+                            const recipes = await loadRecipesForMeal(dateKey, mealType);
+                            const mealLabel = mealLabels[mealType];
+                            recipes.forEach((recipe) =>
+                                processMeal(label, mealLabel, recipe.name, recipe.course, recipe.ingredients || [])
+                            );
+                        });
+                    }
                 }
+
+                await runWithConcurrencyLimit(recipeTasks, 4);
 
                 if (!hasAnyMenu && attempt === 0 && allowWeeklyGeneration) {
                     try {

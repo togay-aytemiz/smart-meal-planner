@@ -118,3 +118,20 @@
 [debug] [2026-01-27T14:48:22.702Z] Checked if tokens are valid: true, expires at: 1769528601379
 [debug] [2026-01-27T14:48:22.702Z] Checked if tokens are valid: true, expires at: 1769528601379
 [debug] [2026-01-27T14:48:22.702Z] >>> [apiv2][query] GET https://secretmanager.googleapis.com/v1/projects/smart-meal-planner-8d799/secrets/GEMINI_API_KEY [none]
+[debug] [2026-01-27T14:48:22.911Z] <<< [apiv2][status] GET https://secretmanager.googleapis.com/v1/projects/smart-meal-planner-8d799/secrets/GEMINI_API_KEY 200
+[debug] [2026-01-27T14:48:22.911Z] <<< [apiv2][body] GET https://secretmanager.googleapis.com/v1/projects/smart-meal-planner-8d799/secrets/GEMINI_API_KEY {"name":"projects/39559179692/secrets/GEMINI_API_KEY","replication":{"automatic":{}},"createTime":"2026-01-10T22:17:40.674987Z","labels":{"firebase-managed":"functions"},"etag":"\"16481002ad2762\""}
+[debug] [2026-01-27T14:48:22.911Z] Checked if tokens are valid: true, expires at: 1769528601379
+[debug] [2026-01-27T14:48:22.911Z] Checked if tokens are valid: true, expires at: 1769528601379
+[debug] [2026-01-27T14:48:22.911Z] >>> [apiv2][query] GET https://secretmanager.googleapis.com/v1/projects/smart-meal-planner-8d799/secrets/GEMINI_API_KEY/versions/latest [none]
+[debug] [2026-01-27T14:48:23.113Z] <<< [apiv2][status] GET https://secretmanager.googleapis.com/v1/projects/smart-meal-planner-8d799/secrets/GEMINI_API_KEY/versions/latest 200
+[debug] [2026-01-27T14:48:23.114Z] <<< [apiv2][body] GET https://secretmanager.googleapis.com/v1/projects/smart-meal-planner-8d799/secrets/GEMINI_API_KEY/versions/latest {"name":"projects/39559179692/secrets/GEMINI_API_KEY/versions/1","createTime":"2026-01-10T22:18:02.692427Z","state":"ENABLED","replicationStatus":{"automatic":{}},"etag":"\"16481003eb4b4b\""}
+[info] i  functions: preparing functions directory for uploading... 
+[info] i  functions: packaged /Users/togay/Desktop/smart-meal-planner/functions (138.38 KB) for uploading 
+[debug] [2026-01-27T14:48:23.178Z] Checked if tokens are valid: true, expires at: 1769528601379
+[debug] [2026-01-27T14:48:23.178Z] Checked if tokens are valid: true, expires at: 1769528601379
+[debug] [2026-01-27T14:48:23.179Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/smart-meal-planner-8d799/locations/-/functions [none]
+[debug] [2026-01-27T14:48:23.865Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/smart-meal-planner-8d799/locations/-/functions 200
+[debug] [2026-01-27T14:48:23.865Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/smart-meal-planner-8d799/locations/-/functions {}
+[debug] [2026-01-27T14:48:23.866Z] Checked if tokens are valid: true, expires at: 1769528601379
+[debug] [2026-01-27T14:48:23.867Z] Checked if tokens are valid: true, expires at: 1769528601379
+[debug] [2026-01-27T14:48:23.867Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/smart-meal-planner-8d799/locations/-/functions filter=environment%3D%22GEN_2%22

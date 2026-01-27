@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { TabScreenHeader, ReasoningBubble } from '../../components/ui';
 import { functions } from '../../config/firebase';
 import { useUser } from '../../contexts/user-context';
@@ -22,6 +22,7 @@ import { spacing, radius, shadows, hitSlop } from '../../theme/spacing';
 import { formatLongDateTr, getGreeting } from '../../utils/dates';
 import { fetchMenuDecision, type MenuDecisionWithLinks } from '../../utils/menu-storage';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
+import { clearWeeklyRegenerationRequest, loadWeeklyRegenerationRequest } from '../../utils/week-regeneration';
 import type { MenuDecision, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
@@ -460,6 +461,7 @@ export default function TodayScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const weeklyGenerationKeyRef = useRef<string | null>(null);
+    const regenerationHandledRef = useRef<string | null>(null);
 
     const selectedRoutine = weeklyRoutine[getDayKey(selectedDay.date)];
     const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
@@ -531,6 +533,45 @@ export default function TodayScreen() {
     }, [menuBundles]);
     const showReasoning = !error && reasoningText.length > 0;
 
+    useFocusEffect(
+        useCallback(() => {
+            if (userState.isLoading) {
+                return () => undefined;
+            }
+
+            const userId = userState.user?.uid ?? 'anonymous';
+            let isCancelled = false;
+
+            const checkRegenerationRequest = async () => {
+                const request = await loadWeeklyRegenerationRequest(userId);
+                if (!request) {
+                    regenerationHandledRef.current = null;
+                    return;
+                }
+                if (selectedDayKey !== todayKey) {
+                    setSelectedDayKey(todayKey);
+                }
+                if (isCancelled) {
+                    return;
+                }
+                const requestKey = `${request.weekStart}:${request.requestedAt}`;
+                if (regenerationHandledRef.current === requestKey) {
+                    return;
+                }
+                regenerationHandledRef.current = requestKey;
+                setRefreshKey((prev) => prev + 1);
+            };
+
+            checkRegenerationRequest().catch((error) => {
+                console.warn('Weekly regeneration focus check failed:', error);
+            });
+
+            return () => {
+                isCancelled = true;
+            };
+        }, [selectedDayKey, todayKey, userState.isLoading, userState.user?.uid])
+    );
+
     useEffect(() => {
         if (userState.isLoading) {
             return;
@@ -582,11 +623,49 @@ export default function TodayScreen() {
                 );
                 const weekStart = resolveWeekStartKey(activeDate);
                 const weeklyCache = await loadWeeklyMenuCache(userId, onboardingHash);
-                const hasWeeklyCache = weeklyCache?.weekStart === weekStart;
+                let hasWeeklyCache = weeklyCache?.weekStart === weekStart;
                 const referenceDate = new Date(activeDate.getFullYear(), activeDate.getMonth(), activeDate.getDate());
                 const remainingWeekKeys = weekDays
                     .filter((day) => day.date.getTime() >= referenceDate.getTime())
                     .map((day) => day.key);
+                const regenerationRequest = await loadWeeklyRegenerationRequest(userId);
+                const matchesWeek = regenerationRequest?.weekStart === weekStart;
+                const matchesHash =
+                    typeof regenerationRequest?.onboardingHash === 'string'
+                        ? regenerationRequest.onboardingHash === onboardingHash
+                        : true;
+                const shouldForceRegeneration = Boolean(selectedDay.isToday && matchesWeek && matchesHash);
+                let regenerationError: string | null = null;
+
+                if (shouldForceRegeneration) {
+                    const mealTypesToClear: MenuMealType[] = ['breakfast', 'lunch', 'dinner'];
+                    const keysToRemove: string[] = [buildWeeklyCacheKey(userId)];
+                    for (const dateKey of remainingWeekKeys) {
+                        for (const mealType of mealTypesToClear) {
+                            keysToRemove.push(buildMenuCacheKey(userId, dateKey, mealType));
+                        }
+                    }
+                    for (const mealType of mealTypesToClear) {
+                        keysToRemove.push(buildMenuRecipesKey(userId, mealType));
+                    }
+                    try {
+                        await AsyncStorage.multiRemove(keysToRemove);
+                    } catch (cacheError) {
+                        console.warn('Weekly regeneration cache clear error:', cacheError);
+                    }
+
+                    const regenerationResult = await ensureWeeklyMenu({
+                        userId,
+                        weekStart,
+                        onboarding: resolvedSnapshot,
+                        onboardingHash,
+                        force: true,
+                    });
+                    regenerationError = regenerationResult.error;
+                    hasWeeklyCache = Boolean(regenerationResult.cache?.weekStart === weekStart && !regenerationError);
+                    await clearWeeklyRegenerationRequest(userId);
+                }
+                const firestoreExpectedHash = shouldForceRegeneration ? onboardingHash ?? null : null;
 
                 if (!mealTypes.length) {
                     if (isMounted) {
@@ -625,15 +704,13 @@ export default function TodayScreen() {
                     }));
                 };
 
-                const loadMenusFromFirestore = async () => {
+                const loadMenusFromFirestore = async (expectedHash: string | null) => {
                     let loadedCount = 0;
                     let lastError: string | null = null;
 
                     for (const mealType of mealTypes) {
                         try {
-                            // Skip hash checking when fetching from Firestore - we want to load existing menus
-                            // even if the local onboarding data has changed. Hash is only used for generation decisions.
-                            const firestoreMenu = await fetchMenuDecision(userId, dateKey, mealType, null);
+                            const firestoreMenu = await fetchMenuDecision(userId, dateKey, mealType, expectedHash);
                             console.log('🍽️ Firestore result for', mealType, ':', firestoreMenu ? 'FOUND' : 'NOT FOUND');
                             if (firestoreMenu) {
                                 updateBundle(mealType, firestoreMenu);
@@ -655,7 +732,10 @@ export default function TodayScreen() {
                     return { loadedCount, lastError };
                 };
 
-                let { loadedCount, lastError } = await loadMenusFromFirestore();
+                let { loadedCount, lastError } = await loadMenusFromFirestore(firestoreExpectedHash);
+                if (regenerationError && loadedCount === 0 && !lastError) {
+                    lastError = regenerationError;
+                }
                 const weeklyKey = `${weekStart}:${onboardingHash ?? ''}`;
 
                 if (!hasCachedMenu && loadedCount === 0) {
@@ -672,7 +752,7 @@ export default function TodayScreen() {
                     if (weeklyResult.error && isMounted) {
                         setError(weeklyResult.error);
                     } else {
-                        const retry = await loadMenusFromFirestore();
+                        const retry = await loadMenusFromFirestore(firestoreExpectedHash);
                         loadedCount = retry.loadedCount;
                         lastError = retry.lastError;
                     }
@@ -685,7 +765,7 @@ export default function TodayScreen() {
                         }
                         for (const dateKey of remainingWeekKeys) {
                             try {
-                                const menu = await fetchMenuDecision(userId, dateKey, 'dinner', null);
+                                const menu = await fetchMenuDecision(userId, dateKey, 'dinner', firestoreExpectedHash);
                                 if (!menu?.items?.length) {
                                     return false;
                                 }

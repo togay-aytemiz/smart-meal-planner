@@ -474,7 +474,6 @@ export default function ProfileScreen() {
                                 <View style={styles.routineList}>
                                     {members.map((member) => (
                                         <View key={`${member.id}-routine`} style={styles.routineMemberBlock}>
-                                            <Text style={styles.routineMemberName}>{member.name}</Text>
                                             <View style={styles.routineDays}>
                                                 {DAY_ORDER.map((day) => {
                                                     const routineForDay = member.routines[day.key];
@@ -852,14 +851,6 @@ const styles = StyleSheet.create({
     },
     routineMemberBlock: {
         gap: spacing.sm,
-        paddingBottom: spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.borderLight,
-    },
-    routineMemberName: {
-        ...typography.label,
-        color: colors.textPrimary,
-        fontWeight: '600',
     },
     routineDays: {
         gap: spacing.xs,

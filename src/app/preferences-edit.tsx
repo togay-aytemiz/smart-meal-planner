@@ -3,7 +3,9 @@ import {
     ActivityIndicator,
     Alert,
     BackHandler,
+    Image,
     LayoutAnimation,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
@@ -19,20 +21,34 @@ import firestore, { doc, getDoc, serverTimestamp, setDoc } from '@react-native-f
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, SelectableTag } from '../components/ui';
 import { useUser } from '../contexts/user-context';
-import type { RoutineDay, WeeklyRoutine } from '../contexts/onboarding-context';
+import type { HouseholdMember, RoutineDay, WeeklyRoutine } from '../contexts/onboarding-context';
 import { colors } from '../theme/colors';
 import { radius, spacing, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../utils/onboarding-hash';
+import {
+    clearWeeklyRegenerationRequest,
+    persistWeeklyRegenerationRequest,
+    type PreferenceChange,
+    type RoutineChange,
+} from '../utils/week-regeneration';
 
 const STORAGE_KEY = '@smart_meal_planner:onboarding';
 const HEADER_HEIGHT = 56;
 const FOOTER_HEIGHT = 96;
 
+type OnboardingSnapshotWithMembers = OnboardingSnapshot & {
+    members?: HouseholdMember[];
+};
+
 type OnboardingStoredState = {
     currentStep?: number;
     isCompleted?: boolean;
-    data?: OnboardingSnapshot;
+    data?: OnboardingSnapshotWithMembers;
+};
+
+type PreferenceChangeSummary = PreferenceChange & {
+    detail?: string;
 };
 
 type DayKey = keyof WeeklyRoutine;
@@ -143,6 +159,9 @@ export default function PreferencesEditScreen() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [initialSnapshot, setInitialSnapshot] = useState<OnboardingSnapshot | null>(null);
+    const [isRoutineModalVisible, setRoutineModalVisible] = useState(false);
+    const [pendingSaveSnapshot, setPendingSaveSnapshot] = useState<OnboardingSnapshot | null>(null);
+    const [saveIntent, setSaveIntent] = useState<'save' | 'regenerate' | null>(null);
 
     const [routines, setRoutines] = useState<WeeklyRoutine>(DEFAULT_ROUTINES);
     const [activeRoutineDay, setActiveRoutineDay] = useState<DayKey | null>(null);
@@ -261,6 +280,95 @@ export default function PreferencesEditScreen() {
 
     const currentHash = useMemo(() => buildOnboardingHash(currentSnapshot), [currentSnapshot]);
     const isDirty = Boolean(initialHash && currentHash && initialHash !== currentHash);
+    const routineChanges = useMemo<RoutineChange[]>(() => {
+        if (!initialSnapshot) {
+            return [];
+        }
+        return buildRoutineChanges(initialSnapshot.routines, routines);
+    }, [initialSnapshot, routines]);
+    const preferenceChangeSummaries = useMemo<PreferenceChangeSummary[]>(() => {
+        if (!initialSnapshot) {
+            return [];
+        }
+
+        const summaries: PreferenceChangeSummary[] = [];
+        const initialRestrictions = initialSnapshot.dietary?.restrictions ?? [];
+        const initialAllergies = initialSnapshot.dietary?.allergies ?? [];
+        const initialCuisines = initialSnapshot.cuisine?.selected ?? [];
+        const initialTimePreference = initialSnapshot.cooking?.timePreference ?? 'balanced';
+        const initialSkillLevel = initialSnapshot.cooking?.skillLevel ?? 'intermediate';
+        const initialEquipment = initialSnapshot.cooking?.equipment ?? [];
+
+        if (!areStringListsEqual(initialRestrictions, restrictions)) {
+            summaries.push({
+                key: 'dietary-restrictions',
+                label: 'Beslenme tercihleri',
+                detail: buildSelectionDetail(restrictions.length),
+            });
+        }
+
+        if (!areStringListsEqual(initialAllergies, allergies)) {
+            summaries.push({
+                key: 'dietary-allergies',
+                label: 'Alerjiler',
+                detail: buildSelectionDetail(allergies.length),
+            });
+        }
+
+        if (!areStringListsEqual(initialCuisines, selectedCuisines)) {
+            summaries.push({
+                key: 'cuisine',
+                label: 'Mutfak tercihleri',
+                detail: buildSelectionDetail(selectedCuisines.length),
+            });
+        }
+
+        if (initialTimePreference !== timePreference) {
+            const timeLabel = TIME_OPTIONS.find((option) => option.key === timePreference)?.label ?? 'Dengeli';
+            summaries.push({
+                key: 'cooking-time',
+                label: 'Yemek süresi',
+                detail: timeLabel,
+            });
+        }
+
+        if (initialSkillLevel !== skillLevel) {
+            const skillLabel = SKILL_LEVELS.find((option) => option.key === skillLevel)?.label ?? 'Orta';
+            summaries.push({
+                key: 'cooking-skill',
+                label: 'Beceri seviyesi',
+                detail: skillLabel,
+            });
+        }
+
+        if (!areStringListsEqual(initialEquipment, equipment)) {
+            summaries.push({
+                key: 'cooking-equipment',
+                label: 'Ekipmanlar',
+                detail: buildSelectionDetail(equipment.length),
+            });
+        }
+
+        if (routineChanges.length > 0) {
+            summaries.push({
+                key: 'routines',
+                label: 'Haftalık rutinler',
+                detail: `${routineChanges.length} gün`,
+            });
+        }
+
+        return summaries;
+    }, [
+        allergies,
+        equipment,
+        initialSnapshot,
+        restrictions,
+        routineChanges.length,
+        selectedCuisines,
+        skillLevel,
+        timePreference,
+    ]);
+    const userId = userState.user?.uid ?? 'anonymous';
 
     const navigateBack = useCallback(() => {
         if (router.canGoBack()) {
@@ -286,6 +394,11 @@ export default function PreferencesEditScreen() {
     }, [navigateBack]);
 
     const handleBack = () => {
+        if (isRoutineModalVisible) {
+            setRoutineModalVisible(false);
+            setPendingSaveSnapshot(null);
+            return;
+        }
         if (!isDirty || isSaving) {
             navigateBack();
             return;
@@ -296,6 +409,11 @@ export default function PreferencesEditScreen() {
     useFocusEffect(
         useCallback(() => {
             const onHardwareBack = () => {
+                if (isRoutineModalVisible) {
+                    setRoutineModalVisible(false);
+                    setPendingSaveSnapshot(null);
+                    return true;
+                }
                 if (!isDirty || isSaving) {
                     return false;
                 }
@@ -307,7 +425,7 @@ export default function PreferencesEditScreen() {
             return () => {
                 subscription.remove();
             };
-        }, [confirmDiscardChanges, isDirty, isSaving])
+        }, [confirmDiscardChanges, isDirty, isRoutineModalVisible, isSaving])
     );
 
     const handleToggleRoutineDay = (dayKey: DayKey) => {
@@ -391,25 +509,49 @@ export default function PreferencesEditScreen() {
         );
     };
 
-    const persistLocalSnapshot = async (nextSnapshot: OnboardingSnapshot) => {
+    const loadStoredState = async (): Promise<OnboardingStoredState | null> => {
         try {
             const storedRaw = await AsyncStorage.getItem(STORAGE_KEY);
-            const stored = storedRaw ? (JSON.parse(storedRaw) as OnboardingStoredState) : null;
-            const nextData = {
+            return storedRaw ? (JSON.parse(storedRaw) as OnboardingStoredState) : null;
+        } catch (error) {
+            console.warn('Failed to read stored onboarding snapshot:', error);
+            return null;
+        }
+    };
+
+    const applyRoutinesToMembers = (
+        members: HouseholdMember[] | undefined,
+        routines: WeeklyRoutine | undefined
+    ): HouseholdMember[] | undefined => {
+        if (!members || routines === undefined) {
+            return members;
+        }
+        const normalizedRoutine = normalizeWeeklyRoutine(routines);
+        return members.map((member) => ({
+            ...member,
+            routines: normalizeWeeklyRoutine(normalizedRoutine),
+        }));
+    };
+
+    const persistLocalSnapshot = async (snapshotToPersist: OnboardingSnapshotWithMembers, stored: OnboardingStoredState | null) => {
+        try {
+            const nextData: OnboardingSnapshotWithMembers = {
                 ...(stored?.data ?? {}),
-                ...nextSnapshot,
-                dietary: nextSnapshot.dietary,
-                cuisine: nextSnapshot.cuisine,
-                cooking: nextSnapshot.cooking,
-                routines: nextSnapshot.routines,
+                ...snapshotToPersist,
+                dietary: snapshotToPersist.dietary,
+                cuisine: snapshotToPersist.cuisine,
+                cooking: snapshotToPersist.cooking,
+                routines: snapshotToPersist.routines,
+                ...(snapshotToPersist.members ? { members: snapshotToPersist.members } : {}),
             };
+            const sanitizedData = sanitizeForFirestore(nextData) as OnboardingSnapshotWithMembers;
             const nextStored: OnboardingStoredState = stored
                 ? {
                       ...stored,
-                      data: nextData,
+                      data: sanitizedData,
                   }
                 : {
-                      data: nextData,
+                      data: sanitizedData,
                   };
             await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextStored));
         } catch (error) {
@@ -417,16 +559,62 @@ export default function PreferencesEditScreen() {
         }
     };
 
-    const persistRemoteSnapshot = async (userId: string, nextSnapshot: OnboardingSnapshot) => {
+    const persistRemoteSnapshot = async (userId: string, snapshotToPersist: OnboardingSnapshotWithMembers) => {
         const userDocRef = doc(firestore(), 'Users', userId);
+        const sanitizedOnboarding = sanitizeForFirestore(snapshotToPersist) as OnboardingSnapshotWithMembers;
         await setDoc(
             userDocRef,
             {
-                onboarding: nextSnapshot,
+                onboarding: sanitizedOnboarding,
                 updatedAt: serverTimestamp(),
             },
             { merge: true }
         );
+    };
+
+    const persistSnapshot = async (nextSnapshot: OnboardingSnapshot): Promise<boolean> => {
+        try {
+            const stored = await loadStoredState();
+            const initialMembers = (initialSnapshot as OnboardingSnapshotWithMembers | null)?.members;
+            const baseMembers = stored?.data?.members ?? initialMembers;
+            const nextMembers = applyRoutinesToMembers(baseMembers, nextSnapshot.routines);
+            const snapshotToPersist = buildSnapshotForPersistence(nextSnapshot, nextMembers);
+            if (userId !== 'anonymous') {
+                await persistRemoteSnapshot(userId, snapshotToPersist);
+            }
+            await persistLocalSnapshot(snapshotToPersist, stored);
+            setInitialSnapshot(snapshotToPersist);
+            setActiveRoutineDay(null);
+            return true;
+        } catch (error) {
+            const errorMessage =
+                error instanceof Error ? error.message : typeof error === 'string' ? error : 'Bilinmeyen hata';
+            console.warn('Failed to save onboarding preferences:', errorMessage, error);
+            const alertMessage = __DEV__
+                ? `Tercihler kaydedilirken bir hata oluştu.\n\n${errorMessage}`
+                : 'Tercihler kaydedilirken bir hata oluştu.';
+            Alert.alert('Kaydetme başarısız', alertMessage);
+            return false;
+        }
+    };
+
+    const requestWeeklyRegeneration = async (
+        nextSnapshot: OnboardingSnapshot,
+        routineChangesToPersist: RoutineChange[],
+        preferenceChangesToPersist: PreferenceChangeSummary[]
+    ) => {
+        const today = new Date();
+        const startDate = buildDateKey(today);
+        const weekStart = resolveWeekStartKey(today);
+        const onboardingHash = buildOnboardingHash(nextSnapshot);
+        await persistWeeklyRegenerationRequest(userId, {
+            weekStart,
+            startDate,
+            requestedAt: new Date().toISOString(),
+            onboardingHash,
+            preferenceChanges: preferenceChangesToPersist,
+            ...(routineChangesToPersist.length ? { routineChanges: routineChangesToPersist } : {}),
+        });
     };
 
     const handleSaveChanges = async () => {
@@ -434,19 +622,55 @@ export default function PreferencesEditScreen() {
             return;
         }
 
+        setPendingSaveSnapshot(currentSnapshot);
+        setRoutineModalVisible(true);
+    };
+
+    const handleSaveWithoutRegeneration = async () => {
+        const snapshotToSave = pendingSaveSnapshot ?? currentSnapshot;
+        if (!snapshotToSave || isSaving) {
+            return;
+        }
+
+        setRoutineModalVisible(false);
+        setSaveIntent('save');
         setIsSaving(true);
         try {
-            const userId = userState.user?.uid;
-            if (userId && userId !== 'anonymous') {
-                await persistRemoteSnapshot(userId, currentSnapshot);
+            const didPersist = await persistSnapshot(snapshotToSave);
+            if (!didPersist) {
+                return;
             }
-            await persistLocalSnapshot(currentSnapshot);
-            setInitialSnapshot(currentSnapshot);
-            setActiveRoutineDay(null);
-        } catch (error) {
-            console.warn('Failed to save onboarding preferences:', error);
+            await clearWeeklyRegenerationRequest(userId);
+            setPendingSaveSnapshot(null);
         } finally {
             setIsSaving(false);
+            setSaveIntent(null);
+        }
+    };
+
+    const handleSaveWithRegeneration = async () => {
+        const snapshotToSave = pendingSaveSnapshot ?? currentSnapshot;
+        if (!snapshotToSave || isSaving) {
+            return;
+        }
+
+        const routineChangesToPersist = routineChanges;
+        const preferenceChangesToPersist = preferenceChangeSummaries;
+
+        setRoutineModalVisible(false);
+        setSaveIntent('regenerate');
+        setIsSaving(true);
+        try {
+            const didPersist = await persistSnapshot(snapshotToSave);
+            if (!didPersist) {
+                return;
+            }
+            await requestWeeklyRegeneration(snapshotToSave, routineChangesToPersist, preferenceChangesToPersist);
+            setPendingSaveSnapshot(null);
+            router.replace('/(tabs)');
+        } finally {
+            setIsSaving(false);
+            setSaveIntent(null);
         }
     };
 
@@ -642,6 +866,106 @@ export default function PreferencesEditScreen() {
                 </View>
             </ScrollView>
 
+            <Modal
+                visible={isRoutineModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => {
+                    setRoutineModalVisible(false);
+                    setPendingSaveSnapshot(null);
+                }}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.modalIconBadge}>
+                                <Image source={require('../../assets/onboarding-ready.png')} style={styles.modalIconImage} />
+                            </View>
+                            <Text style={styles.modalTitle}>Tercihler Güncellendi</Text>
+                        </View>
+
+                        <View style={styles.modalChangeList}>
+                            <Text style={styles.modalChangeTitle}>Neler değişti?</Text>
+                            {preferenceChangeSummaries.length ? (
+                                <View style={styles.modalSummaryList}>
+                                    {preferenceChangeSummaries.map((change) => (
+                                        <View key={`summary-${change.key}`} style={styles.modalSummaryRow}>
+                                            <Text style={styles.modalSummaryLabel}>{change.label}</Text>
+                                            {change.detail ? (
+                                                <Text style={styles.modalSummaryDetail}>{change.detail}</Text>
+                                            ) : null}
+                                        </View>
+                                    ))}
+                                </View>
+                            ) : (
+                                <Text style={styles.modalSummaryFallback}>Tercihleriniz güncellendi.</Text>
+                            )}
+
+                            {routineChanges.length > 0 ? (
+                                <View style={styles.modalRoutineDetailList}>
+                                    {routineChanges.map((change) => {
+                                        const previousMeta = getRoutineOption(change.previousType);
+                                        const nextMeta = getRoutineOption(change.nextType);
+                                        return (
+                                            <View key={`change-${change.dayKey}`} style={styles.modalChangeRow}>
+                                                <Text style={styles.modalChangeDay}>{change.dayLabel}</Text>
+                                                <View style={styles.modalChangeMetaRow}>
+                                                    <RoutineChangePill
+                                                        label={previousMeta.label}
+                                                        emoji={previousMeta.emoji}
+                                                        tone="muted"
+                                                    />
+                                                    <MaterialCommunityIcons
+                                                        name="arrow-right"
+                                                        size={18}
+                                                        color={colors.textMuted}
+                                                        style={styles.modalChangeArrow}
+                                                    />
+                                                    <RoutineChangePill
+                                                        label={nextMeta.label}
+                                                        emoji={nextMeta.emoji}
+                                                        tone="highlight"
+                                                    />
+                                                </View>
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            ) : null}
+                        </View>
+
+                        <View style={styles.modalQuestionBlock}>
+                            <Text style={styles.modalQuestionText}>
+                                Bu haftanın geri kalan günleri için menüyü yeniden oluşturmak ister misiniz?
+                            </Text>
+                        </View>
+
+                        <View style={styles.modalActions}>
+                            <View style={styles.modalActionButtonSlot}>
+                                <Button
+                                    title="Şimdilik Değiştirme"
+                                    variant="secondary"
+                                    onPress={handleSaveWithoutRegeneration}
+                                    disabled={isSaving}
+                                    loading={isSaving && saveIntent === 'save'}
+                                    fullWidth
+                                />
+                            </View>
+                            <View style={styles.modalActionButtonSlot}>
+                                <Button
+                                    title="Kalan Haftayı Yenile"
+                                    variant="primary"
+                                    onPress={handleSaveWithRegeneration}
+                                    disabled={isSaving}
+                                    loading={isSaving && saveIntent === 'regenerate'}
+                                    fullWidth
+                                />
+                            </View>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
             <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}> 
                 <View style={styles.footerContent}>
                     <View style={styles.footerButtonSlot}>
@@ -768,6 +1092,153 @@ function OptionCard({
     );
 }
 
+function RoutineChangePill({
+    label,
+    emoji,
+    tone,
+}: {
+    label: string;
+    emoji: string;
+    tone: 'muted' | 'highlight';
+}) {
+    return (
+        <View style={[styles.changePill, tone === 'highlight' ? styles.changePillHighlight : styles.changePillMuted]}>
+            <Text style={styles.changePillEmoji}>{emoji}</Text>
+            <Text style={[styles.changePillLabel, tone === 'highlight' && styles.changePillLabelHighlight]}>
+                {label}
+            </Text>
+        </View>
+    );
+}
+
+function getRoutineOption(type: RoutineDay['type']): RoutineOption {
+    return ROUTINE_OPTIONS.find((option) => option.key === type) ?? ROUTINE_OPTIONS[1];
+}
+
+function buildRoutineChanges(initialRoutine: WeeklyRoutine | undefined, nextRoutine: WeeklyRoutine): RoutineChange[] {
+    const baseRoutine = normalizeWeeklyRoutine(initialRoutine);
+    const changes: RoutineChange[] = [];
+
+    for (const day of DAY_ORDER) {
+        const previousType = baseRoutine[day.key].type;
+        const nextType = nextRoutine[day.key].type;
+        if (previousType === nextType) {
+            continue;
+        }
+        changes.push({
+            dayKey: day.key,
+            dayLabel: day.label,
+            previousType,
+            nextType,
+        });
+    }
+
+    return changes;
+}
+
+const buildDateKey = (date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const resolveWeekStartKey = (date: Date) => {
+    const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dayIndex = (weekStart.getDay() + 6) % 7;
+    weekStart.setDate(weekStart.getDate() - dayIndex);
+    return buildDateKey(weekStart);
+};
+
+const normalizeStringList = (values: string[]) => {
+    const cleaned = values
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+    const unique = Array.from(new Set(cleaned));
+    return unique.sort((first, second) => first.localeCompare(second, 'tr-TR'));
+};
+
+function areStringListsEqual(left: string[], right: string[]): boolean {
+    const normalizedLeft = normalizeStringList(left);
+    const normalizedRight = normalizeStringList(right);
+    if (normalizedLeft.length !== normalizedRight.length) {
+        return false;
+    }
+    return normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}
+
+function buildSelectionDetail(count: number): string {
+    return count > 0 ? `${count} seçim` : 'Seçilmedi';
+}
+
+function buildSnapshotForPersistence(
+    snapshot: OnboardingSnapshot,
+    members?: HouseholdMember[]
+): OnboardingSnapshotWithMembers {
+    const normalizedRoutines = snapshot.routines
+        ? normalizeWeeklyRoutine(snapshot.routines)
+        : normalizeWeeklyRoutine(DEFAULT_ROUTINES);
+    const dietary = {
+        restrictions: snapshot.dietary?.restrictions ?? [],
+        allergies: snapshot.dietary?.allergies ?? [],
+    };
+    const cuisine = {
+        selected: snapshot.cuisine?.selected ?? [],
+    };
+    const cooking = {
+        timePreference: snapshot.cooking?.timePreference ?? 'balanced',
+        skillLevel: snapshot.cooking?.skillLevel ?? 'intermediate',
+        equipment: snapshot.cooking?.equipment ?? [],
+    };
+    const profile = snapshot.profile
+        ? {
+              name: snapshot.profile.name ?? '',
+              ...(snapshot.profile.avatarUrl ? { avatarUrl: snapshot.profile.avatarUrl } : {}),
+          }
+        : undefined;
+    const updatedMembers = members
+        ? members.map((member) => ({
+              ...member,
+              routines: normalizeWeeklyRoutine(normalizedRoutines),
+          }))
+        : undefined;
+
+    const base: OnboardingSnapshotWithMembers = {
+        ...(profile ? { profile } : {}),
+        ...(typeof snapshot.householdSize === 'number' ? { householdSize: snapshot.householdSize } : {}),
+        dietary,
+        cuisine,
+        cooking,
+        routines: normalizedRoutines,
+        ...(updatedMembers ? { members: updatedMembers } : {}),
+    };
+
+    return sanitizeForFirestore(base) as OnboardingSnapshotWithMembers;
+}
+
+function sanitizeForFirestore(value: unknown): unknown {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (Array.isArray(value)) {
+        const sanitizedItems = value
+            .map((item) => sanitizeForFirestore(item))
+            .filter((item) => item !== undefined);
+        return sanitizedItems;
+    }
+    if (value && typeof value === 'object') {
+        const sanitizedObject: Record<string, unknown> = {};
+        for (const [key, entry] of Object.entries(value)) {
+            const sanitizedEntry = sanitizeForFirestore(entry);
+            if (sanitizedEntry !== undefined) {
+                sanitizedObject[key] = sanitizedEntry;
+            }
+        }
+        return sanitizedObject;
+    }
+    return value;
+}
+
 function buildDefaultSnapshot(): OnboardingSnapshot {
     return {
         householdSize: 1,
@@ -886,6 +1357,139 @@ const styles = StyleSheet.create({
         gap: spacing.md,
         ...shadows.sm,
     },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.65)',
+        paddingHorizontal: spacing.lg,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalCard: {
+        width: '100%',
+        maxWidth: 420,
+        backgroundColor: colors.surface,
+        borderRadius: radius.xl,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        padding: spacing.lg,
+        gap: spacing.lg,
+        ...shadows.md,
+    },
+    modalHeader: {
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    modalIconBadge: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalIconImage: {
+        width: 56,
+        height: 56,
+        resizeMode: 'contain',
+    },
+    modalTitle: {
+        ...typography.h3,
+        color: colors.textPrimary,
+        textAlign: 'center',
+    },
+    modalChangeList: {
+        gap: spacing.sm,
+    },
+    modalChangeTitle: {
+        ...typography.label,
+        color: colors.textPrimary,
+    },
+    modalQuestionBlock: {
+        paddingTop: spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: colors.borderLight,
+    },
+    modalQuestionText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        textAlign: 'center',
+    },
+    modalSummaryList: {
+        gap: spacing.xs,
+    },
+    modalSummaryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: spacing.xs,
+        gap: spacing.sm,
+    },
+    modalSummaryLabel: {
+        ...typography.bodySmall,
+        color: colors.textPrimary,
+    },
+    modalSummaryDetail: {
+        ...typography.caption,
+        color: colors.textSecondary,
+        fontWeight: '600',
+    },
+    modalSummaryFallback: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+    },
+    modalRoutineDetailList: {
+        gap: spacing.xs,
+        paddingTop: spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: colors.borderLight,
+    },
+    modalChangeRow: {
+        gap: spacing.xs,
+        paddingVertical: spacing.xs,
+    },
+    modalChangeDay: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        fontWeight: '600',
+    },
+    modalChangeMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    modalChangeArrow: {
+        marginHorizontal: spacing.xs,
+    },
+    modalActions: {
+        gap: spacing.sm,
+    },
+    modalActionButtonSlot: {
+        width: '100%',
+    },
+    changePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+        borderRadius: radius.full,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+    changePillMuted: {
+        backgroundColor: colors.surfaceMuted,
+    },
+    changePillHighlight: {
+        backgroundColor: colors.primaryLight + '18',
+        borderColor: colors.primaryLight + '32',
+    },
+    changePillEmoji: {
+        fontSize: 14,
+    },
+    changePillLabel: {
+        ...typography.caption,
+        color: colors.textSecondary,
+        fontWeight: '600',
+    },
+    changePillLabelHighlight: {
+        color: colors.primaryDark,
+    },
     routineDayBlock: {
         gap: spacing.sm,
         paddingBottom: spacing.sm,
@@ -894,6 +1498,7 @@ const styles = StyleSheet.create({
     },
     routineDayBlockLast: {
         borderBottomWidth: 0,
+        paddingBottom: 0,
     },
     routineRow: {
         flexDirection: 'row',

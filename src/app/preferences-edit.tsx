@@ -161,6 +161,10 @@ export default function PreferencesEditScreen() {
     const [initialSnapshot, setInitialSnapshot] = useState<OnboardingSnapshot | null>(null);
     const [isRoutineModalVisible, setRoutineModalVisible] = useState(false);
     const [pendingSaveSnapshot, setPendingSaveSnapshot] = useState<OnboardingSnapshot | null>(null);
+    const [pendingRegenerationChanges, setPendingRegenerationChanges] = useState<{
+        preferenceChanges: PreferenceChangeSummary[];
+        routineChanges: RoutineChange[];
+    } | null>(null);
     const [saveIntent, setSaveIntent] = useState<'save' | 'regenerate' | null>(null);
 
     const [routines, setRoutines] = useState<WeeklyRoutine>(DEFAULT_ROUTINES);
@@ -368,6 +372,8 @@ export default function PreferencesEditScreen() {
         skillLevel,
         timePreference,
     ]);
+    const modalPreferenceChanges = pendingRegenerationChanges?.preferenceChanges ?? preferenceChangeSummaries;
+    const modalRoutineChanges = pendingRegenerationChanges?.routineChanges ?? routineChanges;
     const userId = userState.user?.uid ?? 'anonymous';
 
     const navigateBack = useCallback(() => {
@@ -397,6 +403,7 @@ export default function PreferencesEditScreen() {
         if (isRoutineModalVisible) {
             setRoutineModalVisible(false);
             setPendingSaveSnapshot(null);
+            setPendingRegenerationChanges(null);
             return;
         }
         if (!isDirty || isSaving) {
@@ -412,6 +419,7 @@ export default function PreferencesEditScreen() {
                 if (isRoutineModalVisible) {
                     setRoutineModalVisible(false);
                     setPendingSaveSnapshot(null);
+                    setPendingRegenerationChanges(null);
                     return true;
                 }
                 if (!isDirty || isSaving) {
@@ -622,51 +630,62 @@ export default function PreferencesEditScreen() {
             return;
         }
 
-        setPendingSaveSnapshot(currentSnapshot);
-        setRoutineModalVisible(true);
-    };
+        const changesForModal = preferenceChangeSummaries;
+        const routineChangesForModal = routineChanges;
 
-    const handleSaveWithoutRegeneration = async () => {
-        const snapshotToSave = pendingSaveSnapshot ?? currentSnapshot;
-        if (!snapshotToSave || isSaving) {
-            return;
-        }
-
-        setRoutineModalVisible(false);
         setSaveIntent('save');
         setIsSaving(true);
         try {
-            const didPersist = await persistSnapshot(snapshotToSave);
+            const didPersist = await persistSnapshot(currentSnapshot);
             if (!didPersist) {
                 return;
             }
             await clearWeeklyRegenerationRequest(userId);
-            setPendingSaveSnapshot(null);
+            setPendingSaveSnapshot(currentSnapshot);
+            setPendingRegenerationChanges({
+                preferenceChanges: changesForModal,
+                routineChanges: routineChangesForModal,
+            });
+            setRoutineModalVisible(true);
         } finally {
             setIsSaving(false);
             setSaveIntent(null);
         }
     };
 
+    const handleSaveWithoutRegeneration = async () => {
+        if (isSaving) {
+            return;
+        }
+
+        try {
+            await clearWeeklyRegenerationRequest(userId);
+        } catch (error) {
+            console.warn('Failed to clear weekly regeneration request:', error);
+        } finally {
+            setRoutineModalVisible(false);
+            setPendingSaveSnapshot(null);
+            setPendingRegenerationChanges(null);
+            router.replace('/(tabs)/profile');
+        }
+    };
+
     const handleSaveWithRegeneration = async () => {
-        const snapshotToSave = pendingSaveSnapshot ?? currentSnapshot;
+        const snapshotToSave = pendingSaveSnapshot ?? currentSnapshot ?? initialSnapshot;
         if (!snapshotToSave || isSaving) {
             return;
         }
 
-        const routineChangesToPersist = routineChanges;
-        const preferenceChangesToPersist = preferenceChangeSummaries;
+        const routineChangesToPersist = modalRoutineChanges;
+        const preferenceChangesToPersist = modalPreferenceChanges;
 
-        setRoutineModalVisible(false);
         setSaveIntent('regenerate');
         setIsSaving(true);
         try {
-            const didPersist = await persistSnapshot(snapshotToSave);
-            if (!didPersist) {
-                return;
-            }
             await requestWeeklyRegeneration(snapshotToSave, routineChangesToPersist, preferenceChangesToPersist);
             setPendingSaveSnapshot(null);
+            setPendingRegenerationChanges(null);
+            setRoutineModalVisible(false);
             router.replace('/(tabs)');
         } finally {
             setIsSaving(false);
@@ -873,6 +892,10 @@ export default function PreferencesEditScreen() {
                 onRequestClose={() => {
                     setRoutineModalVisible(false);
                     setPendingSaveSnapshot(null);
+                    setPendingRegenerationChanges(null);
+                    clearWeeklyRegenerationRequest(userId).catch((error) => {
+                        console.warn('Failed to clear weekly regeneration request:', error);
+                    });
                 }}
             >
                 <View style={styles.modalOverlay}>
@@ -886,9 +909,9 @@ export default function PreferencesEditScreen() {
 
                         <View style={styles.modalChangeList}>
                             <Text style={styles.modalChangeTitle}>Neler değişti?</Text>
-                            {preferenceChangeSummaries.length ? (
+                            {modalPreferenceChanges.length ? (
                                 <View style={styles.modalSummaryList}>
-                                    {preferenceChangeSummaries.map((change) => (
+                                    {modalPreferenceChanges.map((change) => (
                                         <View key={`summary-${change.key}`} style={styles.modalSummaryRow}>
                                             <Text style={styles.modalSummaryLabel}>{change.label}</Text>
                                             {change.detail ? (
@@ -901,9 +924,9 @@ export default function PreferencesEditScreen() {
                                 <Text style={styles.modalSummaryFallback}>Tercihleriniz güncellendi.</Text>
                             )}
 
-                            {routineChanges.length > 0 ? (
+                            {modalRoutineChanges.length > 0 ? (
                                 <View style={styles.modalRoutineDetailList}>
-                                    {routineChanges.map((change) => {
+                                    {modalRoutineChanges.map((change) => {
                                         const previousMeta = getRoutineOption(change.previousType);
                                         const nextMeta = getRoutineOption(change.nextType);
                                         return (

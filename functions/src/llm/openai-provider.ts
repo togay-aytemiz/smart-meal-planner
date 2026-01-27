@@ -87,11 +87,12 @@ export class OpenAIProvider {
         try {
             const systemPrompt = buildMenuSystemPrompt();
             const userPrompt = buildMenuPrompt(request);
+            const resolvedMealType = request.mealType ?? "dinner";
 
             return await this.generateStructuredResponse(
                 systemPrompt,
                 userPrompt,
-                getOpenAIMenuSchema()
+                getOpenAIMenuSchema(resolvedMealType)
             );
         } catch (error) {
             console.error("OpenAI menu generation error:", error);
@@ -149,4 +150,3 @@ export class OpenAIProvider {
         return "openai";
     }
 }
-

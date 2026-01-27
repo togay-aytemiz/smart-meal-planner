@@ -172,10 +172,13 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   }
   if (resolvedMealType === "dinner") {
     rules.push(
-      "- Akşam menüsü: tam 3 öğe üret (1 main + 1 side + 1 extra)."
+      "- Akşam menüsü: 2-4 öğe üret; en az 1 main olmalı."
     );
     rules.push(
       "- Extra yalnızca soup, salad, meze, dessert veya pastry olabilir."
+    );
+    rules.push(
+      "- Side ve extra eklemek serbest; zorunlu kombinasyon yok."
     );
   }
 

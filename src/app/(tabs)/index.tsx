@@ -324,7 +324,7 @@ const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
         return { breakfast: false, lunch: false, dinner: true };
     }
 
-    if (routine.excludeFromPlan) {
+    if (routine.excludeFromPlan || routine.type === 'off') {
         return { breakfast: false, lunch: false, dinner: false };
     }
 

@@ -40,6 +40,7 @@ export type MenuDecision = {
     items: Array<{
         course: MenuRecipeCourse;
         name: string;
+        recipeId?: string | null;
     }>;
 };
 

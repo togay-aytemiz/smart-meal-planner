@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { ComponentProps } from 'react';
 import {
     ActivityIndicator,
-    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -65,10 +64,6 @@ const COURSE_META: Record<
         mediaTone: colors.surfaceAlt,
     },
 };
-
-// Gradient overlay for cards (same as index.tsx)
-const CARD_GRADIENT_BASE64 =
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAACVGAYAAADc5P5VAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABVSURBVHgB7c6xDYAwDABBE2ZkFqZgL/ZmL2ZgJ0pCQ8VH+cv3yWfMzBfZ7/f7/f7+9X1/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f3+/v38/p/d7f1Y5+xIAAAAASUVORK5CYII=';
 
 type CategoryFilter = 'all' | MenuRecipeCourse;
 
@@ -178,11 +173,13 @@ export default function CookbookScreen() {
         if (favorites.length === 0) {
             return (
                 <View style={styles.emptyState}>
-                    <Image
-                        source={require('../../../assets/emtpy-omnoo.webp')}
-                        style={styles.emptyStateImage}
-                        resizeMode="contain"
-                    />
+                    <View style={styles.emptyStateIconWrap}>
+                        <MaterialCommunityIcons
+                            name="heart-outline"
+                            size={40}
+                            color={colors.textMuted}
+                        />
+                    </View>
                     <Text style={styles.emptyStateTitle}>Henüz favori yok</Text>
                     <Text style={styles.emptyStateText}>
                         Beğendiğin tarifleri kalp ikonuna basarak buraya ekleyebilirsin
@@ -194,11 +191,13 @@ export default function CookbookScreen() {
         if (filteredRecipes.length === 0) {
             return (
                 <View style={styles.emptyState}>
-                    <Image
-                        source={require('../../../assets/emtpy-omnoo.webp')}
-                        style={styles.emptyStateImage}
-                        resizeMode="contain"
-                    />
+                    <View style={styles.emptyStateIconWrap}>
+                        <MaterialCommunityIcons
+                            name="book-open-page-variant-outline"
+                            size={40}
+                            color={colors.textMuted}
+                        />
+                    </View>
                     <Text style={styles.emptyStateText}>Bu kategoride kayıtlı tarif yok</Text>
                 </View>
             );
@@ -206,9 +205,6 @@ export default function CookbookScreen() {
 
         return null;
     };
-
-    // Show category chip on card only when on "Tümü" filter
-    const showCategoryChipOnCard = activeCategory === 'all';
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -308,57 +304,63 @@ export default function CookbookScreen() {
                                     activeOpacity={0.85}
                                     onPress={() => handleOpenRecipe(savedRecipe)}
                                 >
-                                    <View style={[styles.mealHero, { backgroundColor: meta.mediaTone }]} />
-                                    <MaterialCommunityIcons
-                                        name={meta.icon}
-                                        size={72}
-                                        color={colors.textPrimary}
-                                        style={styles.mealHeroIcon}
+                                    <View
+                                        pointerEvents="none"
+                                        style={[
+                                            styles.mealAccent,
+                                            { backgroundColor: meta.mediaTone },
+                                        ]}
                                     />
-                                    <Image
-                                        source={{ uri: CARD_GRADIENT_BASE64 }}
-                                        style={styles.mealGradient}
-                                        resizeMode="stretch"
-                                    />
-                                    <View style={styles.mealChips}>
-                                        {/* Only show category chip when on "all" filter */}
-                                        {showCategoryChipOnCard && (
-                                            <View style={styles.mealChip}>
-                                                <MaterialCommunityIcons
-                                                    name={meta.icon}
-                                                    size={12}
-                                                    color={colors.textInverse}
-                                                />
-                                                <Text style={styles.mealChipText}>{meta.label}</Text>
-                                            </View>
-                                        )}
-                                        <View style={styles.mealChip}>
+                                    <View style={styles.mealCardHeader}>
+                                        <View
+                                            style={[
+                                                styles.mealBadge,
+                                                { backgroundColor: meta.mediaTone },
+                                            ]}
+                                        >
                                             <MaterialCommunityIcons
-                                                name="clock-outline"
-                                                size={12}
-                                                color={colors.textInverse}
+                                                name={meta.icon}
+                                                size={22}
+                                                color={colors.textPrimary}
                                             />
-                                            <Text style={styles.mealChipText}>
-                                                {savedRecipe.totalTimeMinutes} dk
-                                            </Text>
                                         </View>
-                                        {calories > 0 && (
-                                            <View style={styles.mealChip}>
+                                        <View style={styles.mealMetaRow}>
+                                            <View style={styles.mealMetaChip}>
                                                 <MaterialCommunityIcons
-                                                    name="fire"
+                                                    name="clock-outline"
                                                     size={12}
-                                                    color={colors.textInverse}
+                                                    color={colors.textSecondary}
                                                 />
-                                                <Text style={styles.mealChipText}>
-                                                    {Math.round(calories)} kcal
+                                                <Text style={styles.mealMetaText}>
+                                                    {savedRecipe.totalTimeMinutes} dk
                                                 </Text>
                                             </View>
-                                        )}
+                                            {calories > 0 && (
+                                                <View style={styles.mealMetaChip}>
+                                                    <MaterialCommunityIcons
+                                                        name="fire"
+                                                        size={12}
+                                                        color={colors.textSecondary}
+                                                    />
+                                                    <Text style={styles.mealMetaText}>
+                                                        {Math.round(calories)} kcal
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
                                     </View>
-                                    <View style={styles.mealTitleRow}>
+                                    <View style={styles.mealCardBody}>
                                         <Text style={styles.mealTitle} numberOfLines={2}>
                                             {savedRecipe.name}
                                         </Text>
+                                        <View style={styles.mealCategoryRow}>
+                                            <MaterialCommunityIcons
+                                                name={meta.icon}
+                                                size={14}
+                                                color={colors.textSecondary}
+                                            />
+                                            <Text style={styles.mealCategoryText}>{meta.label}</Text>
+                                        </View>
                                     </View>
                                 </TouchableOpacity>
                             );
@@ -435,10 +437,15 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.xxl,
         gap: spacing.md,
     },
-    emptyStateImage: {
-        width: 120,
-        height: 120,
-        marginBottom: spacing.sm,
+    emptyStateIconWrap: {
+        width: 88,
+        height: 88,
+        borderRadius: radius.full,
+        backgroundColor: colors.surfaceMuted,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     emptyStateTitle: {
         ...typography.h3,
@@ -456,64 +463,80 @@ const styles = StyleSheet.create({
     },
     // Menu page card styles (from index.tsx)
     mealCard: {
-        minHeight: 180,
+        minHeight: 160,
         borderRadius: radius.lg,
         overflow: 'hidden',
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.borderLight,
+        padding: spacing.md,
+        gap: spacing.md,
+        position: 'relative',
         ...shadows.sm,
     },
-    mealHero: {
-        ...StyleSheet.absoluteFillObject,
-    },
-    mealHeroIcon: {
+    mealAccent: {
         position: 'absolute',
-        right: spacing.lg,
-        top: spacing.lg,
-        opacity: 0.18,
+        width: 160,
+        height: 160,
+        borderRadius: 80,
+        right: -60,
+        top: -60,
+        opacity: 0.35,
     },
-    mealGradient: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: 120,
-        opacity: 0.8,
+    mealCardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        zIndex: 1,
     },
-    mealChips: {
-        position: 'absolute',
-        top: spacing.sm,
-        left: spacing.sm,
-        right: spacing.sm,
+    mealBadge: {
+        width: 44,
+        height: 44,
+        borderRadius: radius.full,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+    mealMetaRow: {
         flexDirection: 'row',
         alignItems: 'center',
         flexWrap: 'wrap',
         gap: spacing.xs,
+        marginLeft: 'auto',
     },
-    mealChip: {
+    mealMetaChip: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
-        backgroundColor: 'rgba(0, 0, 0, 0.35)',
+        backgroundColor: colors.surfaceAlt,
         borderRadius: radius.full,
         paddingVertical: 4,
         paddingHorizontal: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
     },
-    mealChipText: {
+    mealMetaText: {
         ...typography.caption,
         fontSize: 11,
         lineHeight: 14,
-        color: colors.textInverse,
+        color: colors.textSecondary,
     },
-    mealTitleRow: {
-        position: 'absolute',
-        left: spacing.md,
-        right: spacing.md,
-        bottom: spacing.md,
+    mealCardBody: {
+        gap: spacing.xs,
+        zIndex: 1,
     },
     mealTitle: {
         ...typography.h3,
-        color: colors.textInverse,
+        color: colors.textPrimary,
+    },
+    mealCategoryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    mealCategoryText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
     },
 });

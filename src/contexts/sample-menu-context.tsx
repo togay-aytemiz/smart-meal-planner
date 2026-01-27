@@ -52,6 +52,7 @@ type MenuRequestPayload = {
         seasonalityHint?: string;
     };
     onboardingHash?: string;
+    generateImage?: boolean;
 };
 
 type MenuCallResponse = {
@@ -213,6 +214,7 @@ const buildMenuRequest = (
         } : undefined,
         mealType,
         weeklyContext: { reasoningHint: reasoningContext },
+        generateImage: false,
         ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
     };
 };

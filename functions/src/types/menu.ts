@@ -34,6 +34,7 @@ export interface MenuDecision {
   items: Array<{
     course: "main" | "side" | ExtraDishType;
     name: string;
+    recipeId?: string;
   }>;
 }
 

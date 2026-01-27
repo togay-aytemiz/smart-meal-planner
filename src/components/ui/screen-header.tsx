@@ -32,8 +32,8 @@ export default function ScreenHeader({
     const alignItems = align === 'start' ? 'flex-start' : 'center';
 
     return (
-        <View style={[styles.container, { paddingBottom, paddingTop }, gap !== undefined && { gap }, style]}>
-            <View style={[styles.titleRow, { alignItems }, rightSlot && styles.titleRowWithRight]}>
+        <View style={[styles.container, { paddingBottom, paddingTop }, gap !== undefined ? { gap } : null, style]}>
+            <View style={[styles.titleRow, { alignItems }, Boolean(rightSlot) && styles.titleRowWithRight]}>
                 <Text style={[styles.title, titleStyle]}>{title}</Text>
             </View>
             {rightSlot ? <View style={styles.rightSlot}>{rightSlot}</View> : null}

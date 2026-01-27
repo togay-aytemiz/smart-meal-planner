@@ -7,12 +7,14 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows } from '../../theme/spacing';
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import firestore, { doc, onSnapshot, serverTimestamp, setDoc } from '@react-native-firebase/firestore';
+import firestore, { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from '@react-native-firebase/firestore';
 import { functions } from '../../config/firebase';
 import { useUser } from '../../contexts/user-context';
-import { fetchMenuBundle } from '../../utils/menu-storage';
-import { buildOnboardingHash } from '../../utils/onboarding-hash';
+import { fetchMenuBundle, fetchMenuDecision, type MenuDecisionWithLinks } from '../../utils/menu-storage';
+import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
 import { checkWeeklyMenuCompleteness, subscribeToMenuGenerationStatus, getWeekStartDate, MenuGenerationStatus } from '../../utils/menu-generation-status';
+import type { MenuMealType, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
+import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
 // Category configuration (must match Cloud Function)
 const CATEGORY_TITLES: Record<string, string> = {
@@ -219,6 +221,212 @@ const buildWeekDateKeys = (startDate?: Date) => {
     return keys;
 };
 
+const buildDateKey = (date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const STORAGE_KEY = '@smart_meal_planner:onboarding';
+const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
+const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
+
+const DEFAULT_ROUTINES: WeeklyRoutine = {
+    monday: { type: 'office', gymTime: 'none' },
+    tuesday: { type: 'office', gymTime: 'none' },
+    wednesday: { type: 'office', gymTime: 'none' },
+    thursday: { type: 'office', gymTime: 'none' },
+    friday: { type: 'office', gymTime: 'none' },
+    saturday: { type: 'remote', gymTime: 'none' },
+    sunday: { type: 'remote', gymTime: 'none' },
+};
+
+type MenuCache = {
+    menu: MenuDecisionWithLinks;
+    recipes?: MenuRecipesResponse;
+    cachedAt: string;
+    onboardingHash?: string;
+};
+
+type MenuRecipesCache = {
+    data: MenuRecipesResponse;
+    cachedAt: string;
+    onboardingHash?: string;
+};
+
+const buildMenuCacheKey = (userId: string, date: string, mealType: MenuMealType) =>
+    `${MENU_CACHE_STORAGE_KEY}:${userId}:${date}:${mealType}`;
+
+const buildMenuRecipesKey = (userId: string, mealType: MenuMealType) =>
+    `${MENU_RECIPES_STORAGE_KEY}:${userId}:${mealType}`;
+
+const parseMenuRecipesCache = (
+    raw: string | null,
+    expectedOnboardingHash?: string | null
+): MenuRecipesResponse | null => {
+    if (!raw) {
+        return null;
+    }
+
+    const parsed = JSON.parse(raw) as MenuRecipesCache | MenuRecipesResponse;
+
+    if ('recipes' in parsed) {
+        if (typeof expectedOnboardingHash === 'string') {
+            return null;
+        }
+        return parsed;
+    }
+
+    const data = parsed.data;
+    if (!data?.recipes?.length) {
+        return null;
+    }
+
+    if (typeof expectedOnboardingHash === 'string') {
+        if (!parsed.onboardingHash || parsed.onboardingHash !== expectedOnboardingHash) {
+            return null;
+        }
+    }
+
+    return data;
+};
+
+const getDayKey = (dateKey: string): keyof WeeklyRoutine => {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof WeeklyRoutine;
+};
+
+const loadOnboardingSnapshot = async (userId: string): Promise<OnboardingSnapshot | null> => {
+    const localRaw = await AsyncStorage.getItem(STORAGE_KEY);
+    const localStored = localRaw ? (JSON.parse(localRaw) as { data?: OnboardingSnapshot }) : null;
+    const localSnapshot = localStored?.data ?? null;
+
+    if (userId === 'anonymous') {
+        return localSnapshot;
+    }
+
+    try {
+        const userSnap = await getDoc(doc(firestore(), 'Users', userId));
+        const remoteSnapshot = userSnap.data()?.onboarding as OnboardingSnapshot | undefined;
+        return remoteSnapshot ?? localSnapshot;
+    } catch (error) {
+        console.warn('Failed to load onboarding snapshot:', error);
+        return localSnapshot;
+    }
+};
+
+const COURSE_VALUES: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze', 'dessert', 'pastry'];
+
+const normalizeCourseValue = (value: unknown): MenuRecipeCourse | null => {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    return COURSE_VALUES.includes(value as MenuRecipeCourse) ? (value as MenuRecipeCourse) : null;
+};
+
+type FirestoreRecipeDoc = {
+    name: string;
+    brief: string;
+    ingredients: MenuRecipe['ingredients'];
+    instructions: MenuRecipe['instructions'];
+    macrosPerServing: MenuRecipe['macrosPerServing'];
+    metadata: {
+        course: MenuRecipeCourse;
+        servings: number;
+        prepTimeMinutes: number;
+        cookTimeMinutes: number;
+        totalTimeMinutes: number;
+    };
+};
+
+const parseRecipeDoc = (data?: FirestoreRecipeDoc): MenuRecipe | null => {
+    const course = normalizeCourseValue(data?.metadata?.course);
+    if (!data || !course) {
+        return null;
+    }
+
+    return {
+        course,
+        name: data.name,
+        brief: data.brief,
+        servings: data.metadata?.servings ?? 1,
+        prepTimeMinutes: data.metadata?.prepTimeMinutes ?? 0,
+        cookTimeMinutes: data.metadata?.cookTimeMinutes ?? 0,
+        totalTimeMinutes: data.metadata?.totalTimeMinutes ?? 0,
+        ingredients: data.ingredients ?? [],
+        instructions: data.instructions ?? [],
+        macrosPerServing: data.macrosPerServing ?? {
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0,
+        },
+    };
+};
+
+const fetchRecipeById = async (recipeId: string) => {
+    try {
+        const recipeSnap = await getDoc(doc(firestore(), 'recipes', recipeId));
+        if (!recipeSnap.exists()) {
+            return null;
+        }
+        const data = recipeSnap.data() as FirestoreRecipeDoc | undefined;
+        return parseRecipeDoc(data);
+    } catch (error) {
+        console.warn('Failed to fetch recipe by id:', error);
+        return null;
+    }
+};
+
+type MenuRecipeParamsPayload = {
+    userId: string;
+    date: string;
+    dayOfWeek: string;
+    onboardingHash?: string;
+    dietaryRestrictions: string[];
+    allergies: string[];
+    cuisinePreferences: string[];
+    timePreference: 'quick' | 'balanced' | 'elaborate';
+    skillLevel: 'beginner' | 'intermediate' | 'expert';
+    equipment: string[];
+    householdSize: number;
+    routine?: RoutineDay;
+    mealType: MenuMealType;
+    generateImage?: boolean;
+    menu: MenuDecisionWithLinks;
+};
+
+type GenerateRecipeResponse = {
+    success: boolean;
+    menuRecipes: MenuRecipesResponse;
+};
+
+type WeeklyMenuRequest = {
+    userId: string;
+    weekStart: string;
+    startDate?: string;
+    onboarding?: OnboardingSnapshot | null;
+    onboardingHash?: string;
+    generateImage?: boolean;
+};
+
+type WeeklyMenuResponse = {
+    success: boolean;
+    weekStart: string;
+    timestamp?: string;
+};
+
+type LoadGroceriesOptions = {
+    allowWeeklyGeneration?: boolean;
+};
+
+type LoadGroceriesResult = {
+    hasAnyMenu: boolean;
+    ingredientCount: number;
+};
+
 const categorizeItems = (items: GroceryItem[]): GroceryCategory[] => {
     const buckets = new Map<string, GroceryCategory>();
     // Pre-fill all categories to order them as per config
@@ -359,6 +567,8 @@ export default function GroceriesScreen() {
     const [menuStatus, setMenuStatus] = useState<MenuGenerationStatus | null>(null);
     const [isMenuGenerating, setIsMenuGenerating] = useState(false);
     const pollCleanupRef = useRef<(() => void) | null>(null);
+    const loadInProgressRef = useRef(false);
+    const clearGeneratingAfterLoadRef = useRef(false);
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [isCheckingOut, setIsCheckingOut] = useState(false);
     const floatingButtonAnim = useRef(new Animated.Value(0)).current;
@@ -397,12 +607,65 @@ export default function GroceriesScreen() {
         }
 
         // Helper to load groceries from existing menus
-        const loadGroceriesFromMenus = async () => {
+        const loadGroceriesFromMenus = async (
+            attempt = 0,
+            options?: LoadGroceriesOptions
+        ): Promise<LoadGroceriesResult> => {
+            if (attempt === 0) {
+                if (loadInProgressRef.current) {
+                    return { hasAnyMenu: false, ingredientCount: 0 };
+                }
+                loadInProgressRef.current = true;
+            }
             try {
                 const weekDates = buildWeekDateKeys(today);
                 const allIngredients = new Map<string, GroceryItem>();
                 const amountTotals = new Map<string, Map<string, { total: number; label: string }>>();
-                const onboardingHash = buildOnboardingHash(null);
+                const onboardingSnapshot = await loadOnboardingSnapshot(userId);
+                const onboardingHash = buildOnboardingHash(onboardingSnapshot);
+                const routines = onboardingSnapshot?.routines ?? DEFAULT_ROUTINES;
+                let hasAnyMenu = false;
+                const allowWeeklyGeneration = options?.allowWeeklyGeneration ?? true;
+
+                const normalizeMenuKey = (course: string, name: string) =>
+                    `${course}:${name.trim().toLocaleLowerCase('tr-TR')}`;
+
+                const recipesMatchMenu = (menu: MenuDecisionWithLinks, recipes: MenuRecipe[]) => {
+                    const recipeKeys = new Set(recipes.map((item) => normalizeMenuKey(item.course, item.name)));
+                    return menu.items.every((item) => recipeKeys.has(normalizeMenuKey(item.course, item.name)));
+                };
+
+                const persistRecipeCaches = async (
+                    dateKey: string,
+                    mealType: MenuMealType,
+                    menuDecision: MenuDecisionWithLinks,
+                    menuRecipes: MenuRecipesResponse
+                ) => {
+                    try {
+                        const cachedAt = new Date().toISOString();
+                        const cacheData: MenuCache = {
+                            menu: menuDecision,
+                            recipes: menuRecipes,
+                            cachedAt,
+                            onboardingHash: onboardingHash ?? undefined,
+                        };
+                        await AsyncStorage.setItem(
+                            buildMenuCacheKey(userId, dateKey, mealType),
+                            JSON.stringify(cacheData)
+                        );
+                        const recipesCache: MenuRecipesCache = {
+                            data: menuRecipes,
+                            cachedAt,
+                            onboardingHash: onboardingHash ?? undefined,
+                        };
+                        await AsyncStorage.setItem(
+                            buildMenuRecipesKey(userId, mealType),
+                            JSON.stringify(recipesCache)
+                        );
+                    } catch (cacheError) {
+                        console.warn('Grocery cache write error:', cacheError);
+                    }
+                };
 
                 const processMeal = (
                     dateLabel: string,
@@ -475,41 +738,219 @@ export default function GroceriesScreen() {
                     });
                 };
 
-                const promises = weekDates.map(async ({ dateKey, label }) => {
-                    const [breakfast, lunch, dinner] = await Promise.all([
-                        fetchMenuBundle(userId, dateKey, 'breakfast', onboardingHash),
-                        fetchMenuBundle(userId, dateKey, 'lunch', onboardingHash),
-                        fetchMenuBundle(userId, dateKey, 'dinner', onboardingHash),
-                    ]);
+                const loadRecipesForMeal = async (
+                    dateKey: string,
+                    mealType: MenuMealType
+                ): Promise<MenuRecipe[]> => {
+                    try {
+                        const bundle = await fetchMenuBundle(userId, dateKey, mealType, null);
+                        if (bundle?.recipes?.recipes?.length) {
+                            await persistRecipeCaches(dateKey, mealType, bundle.menu, bundle.recipes);
+                            return bundle.recipes.recipes;
+                        }
+                    } catch (bundleError) {
+                        console.warn('Grocery menu bundle read error:', bundleError);
+                    }
 
-                    if (breakfast?.recipes?.recipes) {
-                        breakfast.recipes.recipes.forEach(r =>
-                            processMeal(label, 'Kahvaltı', r.name, r.course, r.ingredients || [])
-                        );
+                    let cachedMenu: MenuCache | null = null;
+                    try {
+                        const cachedMenuRaw = await AsyncStorage.getItem(buildMenuCacheKey(userId, dateKey, mealType));
+                        if (cachedMenuRaw) {
+                            cachedMenu = JSON.parse(cachedMenuRaw) as MenuCache;
+                        }
+                    } catch (cacheError) {
+                        console.warn('Grocery menu cache read error:', cacheError);
                     }
-                    if (lunch?.recipes?.recipes) {
-                        lunch.recipes.recipes.forEach(r =>
-                            processMeal(label, 'Öğle', r.name, r.course, r.ingredients || [])
-                        );
-                    }
-                    if (dinner?.recipes?.recipes) {
-                        dinner.recipes.recipes.forEach(r =>
-                            processMeal(label, 'Akşam', r.name, r.course, r.ingredients || [])
-                        );
-                    }
-                });
 
-                await Promise.all(promises);
+                    let menuDecision: MenuDecisionWithLinks | null = cachedMenu?.menu ?? null;
+                    try {
+                        const firestoreMenu = await fetchMenuDecision(userId, dateKey, mealType, null);
+                        if (firestoreMenu) {
+                            menuDecision = firestoreMenu;
+                        }
+                    } catch (menuError) {
+                        console.warn('Grocery menu decision read error:', menuError);
+                    }
+
+                    if (!menuDecision?.items?.length) {
+                        return [];
+                    }
+                    hasAnyMenu = true;
+
+                    const hasHashMismatch =
+                        typeof onboardingHash === 'string' &&
+                        cachedMenu?.onboardingHash &&
+                        cachedMenu.onboardingHash !== onboardingHash;
+
+                    if (!hasHashMismatch && cachedMenu?.recipes?.recipes?.length) {
+                        if (recipesMatchMenu(menuDecision, cachedMenu.recipes.recipes)) {
+                            return cachedMenu.recipes.recipes;
+                        }
+                    }
+
+                    try {
+                        const rawRecipesCache = await AsyncStorage.getItem(buildMenuRecipesKey(userId, mealType));
+                        const parsedRecipes = parseMenuRecipesCache(rawRecipesCache, onboardingHash);
+                        if (parsedRecipes?.recipes?.length && recipesMatchMenu(menuDecision, parsedRecipes.recipes)) {
+                            return parsedRecipes.recipes;
+                        }
+                    } catch (recipesCacheError) {
+                        console.warn('Grocery recipes cache read error:', recipesCacheError);
+                    }
+
+                    const recipeIds = menuDecision.items
+                        .map((item) => (typeof item.recipeId === 'string' ? item.recipeId : null))
+                        .filter((value): value is string => Boolean(value));
+
+                    if (recipeIds.length) {
+                        const recipesFromDb: MenuRecipe[] = [];
+                        for (const recipeId of recipeIds) {
+                            const recipe = await fetchRecipeById(recipeId);
+                            if (recipe) {
+                                recipesFromDb.push(recipe);
+                            }
+                        }
+
+                        if (recipesFromDb.length && recipesMatchMenu(menuDecision, recipesFromDb)) {
+                            const menuRecipes: MenuRecipesResponse = {
+                                menuType: menuDecision.menuType,
+                                cuisine: menuDecision.cuisine,
+                                totalTimeMinutes: menuDecision.totalTimeMinutes,
+                                recipes: recipesFromDb,
+                            };
+                            await persistRecipeCaches(dateKey, mealType, menuDecision, menuRecipes);
+                            return recipesFromDb;
+                        }
+                    }
+
+                    const dayKey = getDayKey(dateKey);
+                    const routineForDay = routines[dayKey];
+
+                    const menuParams: MenuRecipeParamsPayload = {
+                        userId,
+                        date: dateKey,
+                        dayOfWeek: dayKey,
+                        dietaryRestrictions: onboardingSnapshot?.dietary?.restrictions ?? [],
+                        allergies: onboardingSnapshot?.dietary?.allergies ?? [],
+                        cuisinePreferences: onboardingSnapshot?.cuisine?.selected ?? [],
+                        timePreference: onboardingSnapshot?.cooking?.timePreference ?? 'balanced',
+                        skillLevel: onboardingSnapshot?.cooking?.skillLevel ?? 'intermediate',
+                        equipment: onboardingSnapshot?.cooking?.equipment ?? [],
+                        householdSize: onboardingSnapshot?.householdSize ?? 1,
+                        routine: routineForDay
+                            ? {
+                                type: routineForDay.type,
+                                gymTime: routineForDay.gymTime,
+                                officeMealToGo: routineForDay.officeMealToGo,
+                                officeBreakfastAtHome: routineForDay.officeBreakfastAtHome,
+                                schoolBreakfast: routineForDay.schoolBreakfast,
+                                remoteMeals: routineForDay.remoteMeals,
+                                excludeFromPlan: routineForDay.excludeFromPlan,
+                            }
+                            : undefined,
+                        mealType,
+                        generateImage: false,
+                        menu: menuDecision,
+                        ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
+                    };
+
+                    try {
+                        const callRecipe = functions.httpsCallable<
+                            { params: MenuRecipeParamsPayload },
+                            GenerateRecipeResponse
+                        >('generateOpenAIRecipe');
+                        const response = await callRecipe({ params: menuParams });
+                        const menuRecipes = response.data?.menuRecipes;
+
+                        if (!menuRecipes?.recipes?.length) {
+                            return [];
+                        }
+
+                        if (!recipesMatchMenu(menuDecision, menuRecipes.recipes)) {
+                            return [];
+                        }
+
+                        await persistRecipeCaches(dateKey, mealType, menuDecision, menuRecipes);
+                        return menuRecipes.recipes;
+                    } catch (generationError) {
+                        console.warn('Grocery recipe generation error:', generationError);
+                        return [];
+                    }
+                };
+
+                for (const { dateKey, label } of weekDates) {
+                    const breakfastRecipes = await loadRecipesForMeal(dateKey, 'breakfast');
+                    const lunchRecipes = await loadRecipesForMeal(dateKey, 'lunch');
+                    const dinnerRecipes = await loadRecipesForMeal(dateKey, 'dinner');
+
+                    breakfastRecipes.forEach((recipe) =>
+                        processMeal(label, 'Kahvaltı', recipe.name, recipe.course, recipe.ingredients || [])
+                    );
+                    lunchRecipes.forEach((recipe) =>
+                        processMeal(label, 'Öğle', recipe.name, recipe.course, recipe.ingredients || [])
+                    );
+                    dinnerRecipes.forEach((recipe) =>
+                        processMeal(label, 'Akşam', recipe.name, recipe.course, recipe.ingredients || [])
+                    );
+                }
+
+                if (!hasAnyMenu && attempt === 0 && allowWeeklyGeneration) {
+                    try {
+                        const todayKey = buildDateKey(today);
+                        const callWeeklyMenu = functions.httpsCallable<
+                            { request: WeeklyMenuRequest },
+                            WeeklyMenuResponse
+                        >('generateWeeklyMenu');
+                        await callWeeklyMenu({
+                            request: {
+                                userId,
+                                weekStart,
+                                startDate: todayKey,
+                                generateImage: false,
+                                ...(onboardingSnapshot ? { onboarding: onboardingSnapshot } : {}),
+                                ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
+                            },
+                        });
+                        return loadGroceriesFromMenus(1, options);
+                    } catch (weeklyError) {
+                        console.warn('Grocery weekly menu generation error:', weeklyError);
+                    }
+                }
 
                 const items = Array.from(allIngredients.values());
                 const categorized = categorizeItems(items);
                 setGroceryCategories(categorized);
+                if (clearGeneratingAfterLoadRef.current && hasAnyMenu) {
+                    clearGeneratingAfterLoadRef.current = false;
+                    setIsMenuGenerating(false);
+                }
+                return {
+                    hasAnyMenu,
+                    ingredientCount: allIngredients.size,
+                };
             } catch (error) {
                 console.error('Failed to fetch grocery list:', error);
+                clearGeneratingAfterLoadRef.current = false;
+                return { hasAnyMenu: false, ingredientCount: 0 };
             } finally {
-                setLoading(false);
-                setRefreshing(false);
+                if (attempt === 0) {
+                    loadInProgressRef.current = false;
+                    setLoading(false);
+                    setRefreshing(false);
+                }
             }
+        };
+
+        const triggerLoadGroceries = (options?: LoadGroceriesOptions) => {
+            loadGroceriesFromMenus(0, options)
+                .then((result) => {
+                    if (options?.allowWeeklyGeneration === false && result.hasAnyMenu) {
+                        setIsMenuGenerating(false);
+                    }
+                })
+                .catch((error) => {
+                    console.warn('Grocery load trigger error:', error);
+                });
         };
 
         // Subscribe to menu generation status
@@ -521,20 +962,28 @@ export default function GroceriesScreen() {
 
                 if (status.state === 'in_progress') {
                     // Still generating - show progress UI
+                    clearGeneratingAfterLoadRef.current = true;
                     setIsMenuGenerating(true);
                     setLoading(false);
+                    setRefreshing(false);
+                    // If menus already exist, load them without re-triggering weekly generation.
+                    triggerLoadGroceries({ allowWeeklyGeneration: false });
                 } else if (status.state === 'completed') {
                     // Generation complete - fetch groceries
+                    clearGeneratingAfterLoadRef.current = false;
                     setIsMenuGenerating(false);
-                    loadGroceriesFromMenus();
+                    triggerLoadGroceries({ allowWeeklyGeneration: true });
                 } else if (status.state === 'failed') {
                     // Generation failed
+                    clearGeneratingAfterLoadRef.current = false;
                     setIsMenuGenerating(false);
                     setLoading(false);
+                    setRefreshing(false);
                 } else {
                     // Pending (no generation started yet) - try to load existing menus
+                    clearGeneratingAfterLoadRef.current = false;
                     setIsMenuGenerating(false);
-                    loadGroceriesFromMenus();
+                    triggerLoadGroceries({ allowWeeklyGeneration: true });
                 }
             }
         );

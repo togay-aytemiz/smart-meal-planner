@@ -191,30 +191,97 @@ const findExistingRecipe = async (hash: string): Promise<string | null> => {
   return snapshot.empty ? null : snapshot.docs[0].id;
 };
 
+type MenuDocumentParams = Pick<MenuGenerationRequest, "date" | "dayOfWeek" | "onboardingHash">;
+
+const buildMenuItemKey = (course: string, name: string) =>
+  `${course}:${normalizeText(name)}`;
+
+const buildExistingRecipeMap = (existing?: DocumentData): Map<string, string> => {
+  const map = new Map<string, string>();
+  if (!existing?.items) {
+    return map;
+  }
+
+  if (Array.isArray(existing.items)) {
+    for (const item of existing.items) {
+      if (!item?.recipeId || !item?.course || !item?.name) {
+        continue;
+      }
+      map.set(buildMenuItemKey(item.course, item.name), item.recipeId);
+    }
+    return map;
+  }
+
+  const legacy = existing.items;
+  if (legacy?.main?.recipeId && legacy?.main?.name) {
+    map.set(buildMenuItemKey("main", legacy.main.name), legacy.main.recipeId);
+  }
+  if (legacy?.side?.recipeId && legacy?.side?.name) {
+    map.set(buildMenuItemKey("side", legacy.side.name), legacy.side.recipeId);
+  }
+  if (legacy?.extra?.recipeId && legacy?.extra?.type && legacy?.extra?.name) {
+    map.set(buildMenuItemKey(legacy.extra.type, legacy.extra.name), legacy.extra.recipeId);
+  }
+
+  return map;
+};
+
 const buildMenuDocument = ({
   menu,
   params,
   recipeLinks,
+  existingRecipeMap,
   provider,
   userId,
 }: {
   menu: MenuDecision;
-  params: MenuRecipeGenerationParams;
-  recipeLinks: RecipeLink[];
+  params: MenuDocumentParams | MenuRecipeGenerationParams;
+  recipeLinks?: RecipeLink[];
+  existingRecipeMap?: Map<string, string>;
   provider: string;
   userId: string;
 }): DocumentData => {
+  const hasRecipeLinks = Array.isArray(recipeLinks) && recipeLinks.length > 0;
+  const existingMap = existingRecipeMap ?? new Map<string, string>();
+
+  const resolveRecipeId = (item: MenuDecision["items"][number]) => {
+    if (hasRecipeLinks) {
+      const link = findRecipeLink(
+        recipeLinks!,
+        item.course as MenuRecipeCourse,
+        item.name
+      );
+      if (link?.id) {
+        return link.id;
+      }
+    }
+
+    const existingId = existingMap.get(buildMenuItemKey(item.course, item.name));
+    if (existingId) {
+      return existingId;
+    }
+
+    return item.recipeId ?? null;
+  };
+
   const menuItems = menu.items.map((item) => {
-    const link = findRecipeLink(recipeLinks, item.course as MenuRecipeCourse, item.name);
-    if (!link) {
-      throw new Error("Menu recipe mapping is incomplete");
+    const recipeId = resolveRecipeId(item);
+    if (recipeId) {
+      return {
+        course: item.course,
+        name: item.name,
+        recipeId,
+      };
     }
     return {
       course: item.course,
       name: item.name,
-      recipeId: link.id,
     };
   });
+
+  const recipeIds = menuItems
+    .map((item) => item.recipeId)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
 
   const doc: DocumentData = {
     userId,
@@ -225,13 +292,16 @@ const buildMenuDocument = ({
     totalTimeMinutes: menu.totalTimeMinutes,
     reasoning: menu.reasoning,
     items: menuItems,
-    recipeIds: menuItems.map((item) => item.recipeId),
     source: {
       provider,
     },
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };
+
+  if (recipeIds.length) {
+    doc.recipeIds = recipeIds;
+  }
 
   if (params.onboardingHash) {
     doc.onboardingHash = params.onboardingHash;
@@ -994,11 +1064,9 @@ export const generateWeeklyMenu = onCall(async (request) => {
     }
 
     const usedDishNames = new Set<string>();
-    const createdRecipeHashes = new Map<string, string>(); // Hash -> ID (for batch deduplication)
 
     const openai = new OpenAIProvider();
     const provider = openai.getName();
-    const recipesRef = db.collection("recipes");
     const menusRef = db.collection("menus");
     const batch = db.batch();
 
@@ -1006,12 +1074,10 @@ export const generateWeeklyMenu = onCall(async (request) => {
       string,
       {
         menu: MenuDecision;
-        recipeLinks: RecipeLink[];
         mainDishName?: string;
       }
     >();
 
-    let recipeCount = 0;
     let menuCount = 0;
 
     const normalizeDishName = (value: string) =>
@@ -1087,79 +1153,10 @@ export const generateWeeklyMenu = onCall(async (request) => {
         menu.menuType = assignment.mealType;
       }
 
-      const recipeParams: MenuRecipeGenerationParams = {
-        ...menuRequest,
-        menu,
-      };
-      const recipesResponse = await openai.generateRecipe(recipeParams);
-      const menuRecipes = recipesResponse as MenuRecipesResponse;
-
-      if (!menuRecipes?.recipes || !Array.isArray(menuRecipes.recipes)) {
-        throw new functions.HttpsError(
-          "internal",
-          "Menu recipes response is invalid"
-        );
-      }
-
-      const menuDocId = buildMenuDocId(userId, assignment.date, menu.menuType);
-
-      // Process recipes with deduplication (parallel for speed, but coordinated via map)
-      const recipeLinks = await Promise.all(menuRecipes.recipes.map(async (recipe) => {
-        const hash = buildRecipeHash(recipe, menu.cuisine);
-
-        // 1. Check in-memory batch cache (created in this request)
-        if (createdRecipeHashes.has(hash)) {
-          const existingId = createdRecipeHashes.get(hash)!;
-          // console.log(`Reusing IN-BATCH recipe: ${recipe.name}`);
-          return {
-            id: existingId,
-            course: recipe.course,
-            name: recipe.name,
-          };
-        }
-
-        // 2. Check Firestore (globally existing)
-        const existingId = await findExistingRecipe(hash);
-        if (existingId) {
-          // console.log(`Reusing FIRESTORE recipe: ${recipe.name}`);
-          // Cache for subsequent slots in this request
-          createdRecipeHashes.set(hash, existingId);
-          return {
-            id: existingId,
-            course: recipe.course,
-            name: recipe.name,
-          };
-        }
-
-        // 3. Create new
-        const recipeRef = recipesRef.doc();
-        const recipeDoc = buildRecipeDocument({
-          recipe,
-          menu,
-          menuId: menuDocId,
-          userId,
-          provider,
-        });
-
-        batch.set(recipeRef, recipeDoc);
-
-        // Register in cache
-        createdRecipeHashes.set(hash, recipeRef.id);
-
-        return {
-          id: recipeRef.id,
-          course: recipe.course,
-          name: recipe.name,
-        };
-      }));
-
-      recipeCount += recipeLinks.length;
-
       const mainDishName = menu.items.find((item) => item.course === "main")?.name;
 
       slotResults.set(slotKey, {
         menu,
-        recipeLinks,
         mainDishName,
       });
     };
@@ -1211,6 +1208,10 @@ export const generateWeeklyMenu = onCall(async (request) => {
         menuType: assignment.mealType,
       };
 
+      const menuDocId = buildMenuDocId(userId, assignment.date, assignment.mealType);
+      const existingSnap = await menusRef.doc(menuDocId).get();
+      const existingRecipeMap = buildExistingRecipeMap(existingSnap.data());
+
       const menuRequest = onboardingToMenuRequest(onboarding, assignment.date, {
         mealType: assignment.mealType,
         existingPantry: payload.existingPantry,
@@ -1221,20 +1222,13 @@ export const generateWeeklyMenu = onCall(async (request) => {
         onboardingHash: payload.onboardingHash,
       });
 
-      const menuParams: MenuRecipeGenerationParams = {
-        ...menuRequest,
-        userId,
-        menu: menuForDay,
-      };
-
       const menuDoc = buildMenuDocument({
         menu: menuForDay,
-        params: menuParams,
-        recipeLinks: slotResult.recipeLinks,
+        params: menuRequest,
+        existingRecipeMap,
         provider,
         userId,
       });
-      const menuDocId = buildMenuDocId(userId, assignment.date, assignment.mealType);
       batch.set(menusRef.doc(menuDocId), menuDoc, { merge: true });
       menuCount += 1;
     }
@@ -1250,7 +1244,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
       singleDay: singleDay ?? null,
       totalMenus: menuCount,
       uniqueMenus: slotResults.size,
-      recipesCreated: recipeCount,
+      recipesCreated: 0,
       model: provider,
       timestamp: new Date().toISOString(),
     };

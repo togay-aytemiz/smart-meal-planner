@@ -9,7 +9,7 @@ import { useSampleMenu } from '../../contexts/sample-menu-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows } from '../../theme/spacing';
-import type { MenuDecision, MenuMealType, MenuRecipeCourse } from '../../types/menu-recipes';
+import type { MenuDecision, MenuMealType, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 type WeekdayKey = keyof WeeklyRoutine;

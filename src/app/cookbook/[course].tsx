@@ -3,15 +3,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { useUser } from '../../contexts/user-context';
 import { useCookbook } from '../../hooks/use-cookbook';
 import { colors } from '../../theme/colors';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import MealDetail from '../../components/cookbook/meal-detail';
-import { fetchMenuBundle } from '../../utils/menu-storage';
+import { functions } from '../../config/firebase';
+import { fetchMenuDecision, type MenuDecisionWithLinks } from '../../utils/menu-storage';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
-import { MenuDecision, MenuMealType, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
+import { MenuMealType, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
+import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
 const STORAGE_KEY = '@smart_meal_planner:onboarding';
 const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
@@ -40,14 +43,34 @@ const resolveRecipeName = (value: string | string[] | undefined) => {
 };
 
 const normalizeText = (value: string) => value.trim().toLowerCase();
+const normalizeMenuKey = (course: string, name: string) => `${course}:${normalizeText(name)}`;
+const recipesMatchMenu = (menu: MenuDecisionWithLinks, recipes: MenuRecipe[]) => {
+    const recipeKeys = new Set(recipes.map((item) => normalizeMenuKey(item.course, item.name)));
+    return menu.items.every((item) => recipeKeys.has(normalizeMenuKey(item.course, item.name)));
+};
+const buildFavoriteRecipeId = (course: MenuRecipeCourse, name: string) =>
+    `${course}-${name}`
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '');
 
 const buildMenuRecipesKey = (userId: string, mealType: MenuMealType) =>
     `${MENU_RECIPES_STORAGE_KEY}:${userId}:${mealType}`;
 const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
 
+const DEFAULT_ROUTINES: WeeklyRoutine = {
+    monday: { type: 'office', gymTime: 'none' },
+    tuesday: { type: 'office', gymTime: 'none' },
+    wednesday: { type: 'office', gymTime: 'none' },
+    thursday: { type: 'office', gymTime: 'none' },
+    friday: { type: 'office', gymTime: 'none' },
+    saturday: { type: 'remote', gymTime: 'none' },
+    sunday: { type: 'remote', gymTime: 'none' },
+};
+
 type MenuCache = {
-    menu: MenuDecision;
-    recipes: MenuRecipesResponse;
+    menu: MenuDecisionWithLinks;
+    recipes?: MenuRecipesResponse;
     cachedAt: string;
     onboardingHash?: string;
 };
@@ -60,6 +83,22 @@ type MenuRecipesCache = {
 
 const buildMenuCacheKey = (userId: string, date: string, mealType: MenuMealType) =>
     `${MENU_CACHE_STORAGE_KEY}:${userId}:${date}:${mealType}`;
+
+const recipeMemoryCache = new Map<string, MenuRecipe>();
+
+const buildDetailCacheKey = ({
+    userId,
+    date,
+    mealType,
+    course,
+    recipeName,
+}: {
+    userId: string;
+    date: string;
+    mealType: MenuMealType;
+    course: MenuRecipeCourse;
+    recipeName?: string | null;
+}) => `${userId}:${date}:${mealType}:${course}:${recipeName ?? ''}`;
 
 const resolveDate = (value: string | string[] | undefined) => {
     if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -99,6 +138,140 @@ const parseMenuRecipesCache = (
     return data;
 };
 
+const getDayKey = (dateKey: string): keyof WeeklyRoutine => {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof WeeklyRoutine;
+};
+
+const loadOnboardingSnapshot = async (userId: string): Promise<OnboardingSnapshot | null> => {
+    const localRaw = await AsyncStorage.getItem(STORAGE_KEY);
+    const localStored = localRaw ? (JSON.parse(localRaw) as { data?: OnboardingSnapshot }) : null;
+    const localSnapshot = localStored?.data ?? null;
+
+    if (userId === 'anonymous') {
+        return localSnapshot;
+    }
+
+    try {
+        const userSnap = await getDoc(doc(firestore(), 'Users', userId));
+        const remoteSnapshot = userSnap.data()?.onboarding as OnboardingSnapshot | undefined;
+        return remoteSnapshot ?? localSnapshot;
+    } catch (error) {
+        console.warn('Failed to load onboarding snapshot:', error);
+        return localSnapshot;
+    }
+};
+
+type FirestoreRecipeDoc = {
+    name: string;
+    brief: string;
+    ingredients: MenuRecipe['ingredients'];
+    instructions: MenuRecipe['instructions'];
+    macrosPerServing: MenuRecipe['macrosPerServing'];
+    metadata: {
+        course: MenuRecipeCourse;
+        servings: number;
+        prepTimeMinutes: number;
+        cookTimeMinutes: number;
+        totalTimeMinutes: number;
+    };
+};
+
+const parseRecipeDoc = (data?: FirestoreRecipeDoc): MenuRecipe | null => {
+    const course = normalizeCourse(data?.metadata?.course);
+    if (!data || !course) {
+        return null;
+    }
+
+    return {
+        course,
+        name: data.name,
+        brief: data.brief,
+        servings: data.metadata?.servings ?? 1,
+        prepTimeMinutes: data.metadata?.prepTimeMinutes ?? 0,
+        cookTimeMinutes: data.metadata?.cookTimeMinutes ?? 0,
+        totalTimeMinutes: data.metadata?.totalTimeMinutes ?? 0,
+        ingredients: data.ingredients ?? [],
+        instructions: data.instructions ?? [],
+        macrosPerServing: data.macrosPerServing ?? {
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0,
+        },
+    };
+};
+
+const fetchRecipeById = async (recipeId: string) => {
+    try {
+        const recipeSnap = await getDoc(doc(firestore(), 'recipes', recipeId));
+        if (!recipeSnap.exists()) {
+            return null;
+        }
+        const data = recipeSnap.data() as FirestoreRecipeDoc | undefined;
+        return parseRecipeDoc(data);
+    } catch (error) {
+        console.warn('Failed to fetch recipe by id:', error);
+        return null;
+    }
+};
+
+const fetchFavoriteRecipe = async (
+    userId: string,
+    course: MenuRecipeCourse,
+    recipeName: string
+) => {
+    if (userId === 'anonymous') {
+        return null;
+    }
+
+    const favoriteId = buildFavoriteRecipeId(course, recipeName);
+    try {
+        const favoriteSnap = await getDoc(doc(firestore(), 'Users', userId, 'favorites', favoriteId));
+        if (!favoriteSnap.exists()) {
+            return null;
+        }
+        const data = favoriteSnap.data() as { recipe?: MenuRecipe } | undefined;
+        const recipe = data?.recipe;
+        if (!recipe) {
+            return null;
+        }
+        // Favoriler, detay ekranında tarih/menuden bagimsiz en guvenilir kaynaktir.
+        return recipe;
+    } catch (error) {
+        console.warn('Failed to fetch favorite recipe:', error);
+        return null;
+    }
+};
+
+type MenuRecipeParamsPayload = {
+    userId: string;
+    date: string;
+    dayOfWeek: string;
+    onboardingHash?: string;
+    dietaryRestrictions: string[];
+    allergies: string[];
+    cuisinePreferences: string[];
+    timePreference: 'quick' | 'balanced' | 'elaborate';
+    skillLevel: 'beginner' | 'intermediate' | 'expert';
+    equipment: string[];
+    householdSize: number;
+    routine?: RoutineDay;
+    mealType: MenuMealType;
+    generateImage?: boolean;
+    menu: MenuDecisionWithLinks;
+};
+
+type GenerateRecipeResponse = {
+    success: boolean;
+    menuRecipes: MenuRecipesResponse;
+    reusedRecipeCount?: number;
+    newRecipeCount?: number;
+    model?: string;
+    timestamp?: string;
+};
+
 export default function CookbookDetailScreen() {
     const router = useRouter();
     const { course, mealType, date, recipeName } = useLocalSearchParams<{
@@ -109,8 +282,25 @@ export default function CookbookDetailScreen() {
     }>();
     const { state: userState } = useUser();
     const { isFavorite, toggleFavorite } = useCookbook();
-    const [recipe, setRecipe] = useState<MenuRecipe | null>(null);
-    const [loading, setLoading] = useState(true);
+    const resolvedDate = resolveDate(date);
+    const resolvedMealType = resolveMealType(mealType);
+    const resolvedRecipeName = resolveRecipeName(recipeName);
+    const normalizedRecipeName = resolvedRecipeName ? normalizeText(resolvedRecipeName) : null;
+    const courseKey = normalizeCourse(course);
+    const isCookbookEntry = !date || !mealType;
+    const userId = userState.user?.uid ?? 'anonymous';
+    const detailCacheKey = courseKey
+        ? buildDetailCacheKey({
+            userId,
+            date: resolvedDate,
+            mealType: resolvedMealType,
+            course: courseKey,
+            recipeName: normalizedRecipeName,
+        })
+        : null;
+    const cachedRecipe = detailCacheKey ? recipeMemoryCache.get(detailCacheKey) ?? null : null;
+    const [recipe, setRecipe] = useState<MenuRecipe | null>(() => cachedRecipe);
+    const [loading, setLoading] = useState(() => !cachedRecipe);
     const [error, setError] = useState<string | null>(null);
     const [showFeedback, setShowFeedback] = useState<'added' | 'removed' | null>(null);
     const feedbackOpacity = useRef(new Animated.Value(0)).current;
@@ -149,25 +339,30 @@ export default function CookbookDetailScreen() {
         let isMounted = true;
 
         const loadRecipe = async () => {
-            setLoading(true);
             setError(null);
 
             try {
-                const courseKey = normalizeCourse(course);
                 if (!courseKey) {
                     throw new Error('Tarif bulunamadı');
                 }
 
-                const userId = userState.user?.uid ?? 'anonymous';
-                const resolvedDate = resolveDate(date);
-                const resolvedMealType = resolveMealType(mealType);
-                const resolvedRecipeName = resolveRecipeName(recipeName);
-                const normalizedRecipeName = resolvedRecipeName ? normalizeText(resolvedRecipeName) : null;
-                const onboardingRaw = await AsyncStorage.getItem(STORAGE_KEY);
-                const onboardingStored = onboardingRaw
-                    ? (JSON.parse(onboardingRaw) as { data?: OnboardingSnapshot })
-                    : null;
-                const onboardingHash = buildOnboardingHash(onboardingStored?.data ?? null);
+                let hasResolved = Boolean(cachedRecipe);
+
+                if (isMounted) {
+                    if (cachedRecipe) {
+                        setRecipe(cachedRecipe);
+                        setLoading(false);
+                    } else {
+                        setRecipe(null);
+                        setLoading(true);
+                    }
+                }
+
+                const onboardingSnapshot = await loadOnboardingSnapshot(userId);
+                const onboardingHash = buildOnboardingHash(onboardingSnapshot);
+                const dayKey = getDayKey(resolvedDate);
+                const routines = onboardingSnapshot?.routines ?? DEFAULT_ROUTINES;
+                const routineForDay = routines[dayKey];
 
                 const findRecipeMatch = (recipes: MenuRecipe[]) => {
                     if (normalizedRecipeName) {
@@ -175,39 +370,63 @@ export default function CookbookDetailScreen() {
                             (item) =>
                                 item.course === courseKey && normalizeText(item.name) === normalizedRecipeName
                         );
-                        if (exactMatch) {
-                            return exactMatch;
-                        }
+                        return exactMatch ?? null;
                     }
                     return recipes.find((item) => item.course === courseKey) ?? null;
                 };
 
-                try {
-                    const firestoreMenu = await fetchMenuBundle(
-                        userId,
-                        resolvedDate,
-                        resolvedMealType,
-                        onboardingHash
-                    );
-                    const match = firestoreMenu?.recipes?.recipes
-                        ? findRecipeMatch(firestoreMenu.recipes.recipes)
-                        : null;
-                    if (match && isMounted && firestoreMenu?.recipes) {
+                const cacheKey = detailCacheKey;
+                const setRecipeFromMatch = (match: MenuRecipe) => {
+                    hasResolved = true;
+                    if (cacheKey) {
+                        recipeMemoryCache.set(cacheKey, match);
+                    }
+                    if (isMounted) {
                         setRecipe(match);
+                        setLoading(false);
+                    }
+                };
+
+                if (isCookbookEntry && resolvedRecipeName) {
+                    const favoriteRecipe = await fetchFavoriteRecipe(userId, courseKey, resolvedRecipeName);
+                    if (favoriteRecipe) {
+                        setRecipeFromMatch(favoriteRecipe);
+                        return;
+                    }
+                    throw new Error('Tarif bulunamadı');
+                }
+
+                const persistRecipeCaches = async (
+                    menuDecision: MenuDecisionWithLinks,
+                    menuRecipes: MenuRecipesResponse
+                ) => {
+                    try {
+                        const cachedAt = new Date().toISOString();
+                        const cacheData: MenuCache = {
+                            menu: menuDecision,
+                            recipes: menuRecipes,
+                            cachedAt,
+                            onboardingHash: onboardingHash ?? undefined,
+                        };
+                        await AsyncStorage.setItem(
+                            buildMenuCacheKey(userId, resolvedDate, resolvedMealType),
+                            JSON.stringify(cacheData)
+                        );
                         const recipesCache: MenuRecipesCache = {
-                            data: firestoreMenu.recipes,
-                            cachedAt: new Date().toISOString(),
+                            data: menuRecipes,
+                            cachedAt,
                             onboardingHash: onboardingHash ?? undefined,
                         };
                         await AsyncStorage.setItem(
                             buildMenuRecipesKey(userId, resolvedMealType),
                             JSON.stringify(recipesCache)
                         );
-                        return;
+                    } catch (cacheError) {
+                        console.warn('Cookbook cache write error:', cacheError);
                     }
-                } catch (firestoreError) {
-                    console.warn('Cookbook Firestore read error:', firestoreError);
-                }
+                };
+
+                let menuDecision: MenuDecisionWithLinks | null = null;
 
                 try {
                     const cachedMenuRaw = await AsyncStorage.getItem(
@@ -219,11 +438,12 @@ export default function CookbookDetailScreen() {
                             typeof onboardingHash === 'string' &&
                             (!cachedMenu.onboardingHash || cachedMenu.onboardingHash !== onboardingHash);
                         if (!hasHashMismatch) {
-                            const match = cachedMenu?.recipes?.recipes
+                            menuDecision = cachedMenu.menu;
+                            const match = cachedMenu.recipes?.recipes
                                 ? findRecipeMatch(cachedMenu.recipes.recipes)
                                 : null;
-                            if (match && isMounted) {
-                                setRecipe(match);
+                            if (match) {
+                                setRecipeFromMatch(match);
                                 return;
                             }
                         }
@@ -232,21 +452,111 @@ export default function CookbookDetailScreen() {
                     console.warn('Cookbook cache read error:', cacheError);
                 }
 
+                try {
+                    const firestoreMenu = await fetchMenuDecision(userId, resolvedDate, resolvedMealType, null);
+                    if (firestoreMenu) {
+                        menuDecision = firestoreMenu;
+                    }
+                } catch (firestoreError) {
+                    console.warn('Cookbook menu read error:', firestoreError);
+                }
+
+                if (!menuDecision?.items?.length) {
+                    throw new Error('Menü bulunamadı');
+                }
+
                 const raw =
                     (await AsyncStorage.getItem(buildMenuRecipesKey(userId, resolvedMealType))) ??
                     (await AsyncStorage.getItem(MENU_RECIPES_STORAGE_KEY));
                 const parsed = parseMenuRecipesCache(raw, onboardingHash);
                 if (!parsed) {
+                    if (isMounted && !cachedRecipe) {
+                        setLoading(true);
+                    }
+                } else if (recipesMatchMenu(menuDecision, parsed.recipes)) {
+                    const match = findRecipeMatch(parsed.recipes);
+                    if (match) {
+                        setRecipeFromMatch(match);
+                        return;
+                    }
+                }
+
+                const menuItem = menuDecision.items.find((item) => {
+                    if (item.course !== courseKey) {
+                        return false;
+                    }
+                    if (normalizedRecipeName) {
+                        return normalizeText(item.name) === normalizedRecipeName;
+                    }
+                    return true;
+                });
+
+                if (!menuItem) {
                     throw new Error('Tarif bulunamadı');
                 }
 
-                const match = findRecipeMatch(parsed.recipes);
-                if (!match) {
-                    throw new Error('Tarif bulunamadı');
+                if (typeof menuItem.recipeId === 'string' && menuItem.recipeId.length > 0) {
+                    const recipeFromDb = await fetchRecipeById(menuItem.recipeId);
+                    if (recipeFromDb) {
+                        setRecipeFromMatch(recipeFromDb);
+                        return;
+                    }
                 }
 
-                if (isMounted) {
-                    setRecipe(match);
+                const menuParams: MenuRecipeParamsPayload = {
+                    userId,
+                    date: resolvedDate,
+                    dayOfWeek: dayKey,
+                    dietaryRestrictions: onboardingSnapshot?.dietary?.restrictions ?? [],
+                    allergies: onboardingSnapshot?.dietary?.allergies ?? [],
+                    cuisinePreferences: onboardingSnapshot?.cuisine?.selected ?? [],
+                    timePreference: onboardingSnapshot?.cooking?.timePreference ?? 'balanced',
+                    skillLevel: onboardingSnapshot?.cooking?.skillLevel ?? 'intermediate',
+                    equipment: onboardingSnapshot?.cooking?.equipment ?? [],
+                    householdSize: onboardingSnapshot?.householdSize ?? 1,
+                    routine: routineForDay
+                        ? {
+                            type: routineForDay.type,
+                            gymTime: routineForDay.gymTime,
+                            officeMealToGo: routineForDay.officeMealToGo,
+                            officeBreakfastAtHome: routineForDay.officeBreakfastAtHome,
+                            schoolBreakfast: routineForDay.schoolBreakfast,
+                            remoteMeals: routineForDay.remoteMeals,
+                            excludeFromPlan: routineForDay.excludeFromPlan,
+                        }
+                        : undefined,
+                    mealType: resolvedMealType,
+                    generateImage: false,
+                    menu: menuDecision,
+                    ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
+                };
+
+                try {
+                    const callRecipe = functions.httpsCallable<
+                        { params: MenuRecipeParamsPayload },
+                        GenerateRecipeResponse
+                    >('generateOpenAIRecipe');
+                    const response = await callRecipe({ params: menuParams });
+                    const menuRecipes = response.data?.menuRecipes;
+
+                    if (!menuRecipes?.recipes?.length) {
+                        throw new Error('Tarif üretilemedi');
+                    }
+
+                    const generatedMatch = findRecipeMatch(menuRecipes.recipes);
+                    if (!generatedMatch) {
+                        throw new Error('Tarif bulunamadı');
+                    }
+
+                    setRecipeFromMatch(generatedMatch);
+                    await persistRecipeCaches(menuDecision, menuRecipes);
+                    return;
+                } catch (generationError) {
+                    console.warn('Cookbook recipe generation error:', generationError);
+                }
+
+                if (!hasResolved) {
+                    throw new Error('Tarif bulunamadı');
                 }
             } catch (err: unknown) {
                 console.error('Cookbook detail error:', err);
@@ -266,18 +576,18 @@ export default function CookbookDetailScreen() {
         return () => {
             isMounted = false;
         };
-    }, [course, userState.isLoading, userState.user?.uid]);
+    }, [course, date, mealType, recipeName, userState.isLoading, userState.user?.uid]);
 
     return (
         <SafeAreaView style={styles.container} edges={['left', 'right']}>
-            {loading && (
+            {loading && !recipe && (
                 <View style={styles.stateContainer}>
                     <ActivityIndicator size="small" color={colors.primary} />
                     <Text style={styles.stateText}>Tarif hazırlanıyor...</Text>
                 </View>
             )}
 
-            {error && !loading && (
+            {error && !loading && !recipe && (
                 <View style={styles.stateContainer}>
                     <Text style={styles.stateText}>{error}</Text>
                     <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
@@ -286,7 +596,7 @@ export default function CookbookDetailScreen() {
                 </View>
             )}
 
-            {!loading && !error && recipe && (
+            {!error && recipe && (
                 <>
                     <MealDetail
                         recipe={recipe}
@@ -319,7 +629,7 @@ export default function CookbookDetailScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.background,
     },
     stateContainer: {
         paddingHorizontal: spacing.lg,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, type ComponentProps } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, type ComponentProps } from 'react';
 import {
     Image,
     ScrollView,
@@ -20,9 +20,9 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows, hitSlop } from '../../theme/spacing';
 import { formatLongDateTr, getGreeting } from '../../utils/dates';
-import { fetchMenuBundle, type MenuBundle } from '../../utils/menu-storage';
+import { fetchMenuDecision, type MenuDecisionWithLinks } from '../../utils/menu-storage';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
-import type { MenuDecision, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
+import type { MenuDecision, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -40,8 +40,8 @@ type CalendarDay = {
 type MealItem = {
     id: string;
     title: string;
-    timeMinutes: number;
-    calories: number;
+    timeMinutes?: number;
+    calories?: number;
     category: string;
     categoryIcon: IconName;
     icon: IconName;
@@ -50,7 +50,7 @@ type MealItem = {
 };
 
 type MealSectionKey = 'breakfast' | 'lunch' | 'dinner';
-type MenuMealType = MenuRecipesResponse['menuType'];
+type MenuMealType = MenuDecision['menuType'];
 
 type MealSection = {
     id: MealSectionKey;
@@ -167,9 +167,6 @@ const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; med
     },
 };
 
-const CARD_GRADIENT_BASE64 =
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAACVGAYAAADc5P5VAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABVSURBVHgB7c6xDYAwDABBE2ZkFqZgL/ZmL2ZgJ0pCQ8VH+cv3yWfMzBfZ7/f7/f7+9X1/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f3+/v38/p/d7f1Y5+xIAAAAASUVORK5CYII=';
-
 const SECTION_META: Record<MealSectionKey, { title: string; icon: IconName; tint: string; iconColor: string }> = {
     breakfast: {
         title: 'Kahvaltı',
@@ -196,13 +193,6 @@ const buildDateKey = (date: Date) => {
     const month = `${date.getMonth() + 1}`.padStart(2, '0');
     const day = `${date.getDate()}`.padStart(2, '0');
     return `${year}-${month}-${day}`;
-};
-
-const addDaysToDateKey = (dateKey: string, days: number) => {
-    const [year, month, day] = dateKey.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    date.setDate(date.getDate() + days);
-    return buildDateKey(date);
 };
 
 const resolveWeekStartKey = (date: Date) => {
@@ -241,8 +231,8 @@ const getDayKey = (date: Date) =>
     date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof WeeklyRoutine;
 
 type MenuCache = {
-    menu: MenuDecision;
-    recipes: MenuRecipesResponse;
+    menu: MenuDecisionWithLinks;
+    recipes?: MenuRecipesResponse;
     cachedAt: string;
     onboardingHash?: string;
 };
@@ -315,12 +305,14 @@ const loadMenuCache = async (
 const persistMenuCache = async (userId: string, date: string, mealType: MenuMealType, data: MenuCache) => {
     try {
         await AsyncStorage.setItem(buildMenuCacheKey(userId, date, mealType), JSON.stringify(data));
-        const recipesCache: MenuRecipesCache = {
-            data: data.recipes,
-            cachedAt: data.cachedAt,
-            onboardingHash: data.onboardingHash,
-        };
-        await AsyncStorage.setItem(buildMenuRecipesKey(userId, mealType), JSON.stringify(recipesCache));
+        if (data.recipes) {
+            const recipesCache: MenuRecipesCache = {
+                data: data.recipes,
+                cachedAt: data.cachedAt,
+                onboardingHash: data.onboardingHash,
+            };
+            await AsyncStorage.setItem(buildMenuRecipesKey(userId, mealType), JSON.stringify(recipesCache));
+        }
     } catch (error) {
         console.warn('Menu cache write error:', error);
     }
@@ -338,22 +330,25 @@ const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
     return { breakfast: false, lunch: false, dinner: true };
 };
 
-const buildMealItems = (recipes: MenuRecipe[]): MealItem[] => {
-    return recipes
-        .filter((recipe) => COURSE_META[recipe.course])
+const buildMealItems = (menu: MenuDecisionWithLinks): MealItem[] => {
+    const itemCount = menu.items.length || 1;
+    const perItemTime =
+        menu.totalTimeMinutes > 0 ? Math.max(5, Math.round(menu.totalTimeMinutes / itemCount)) : undefined;
+
+    return menu.items
+        .filter((item) => COURSE_META[item.course])
         .sort((first, second) => COURSE_ORDER.indexOf(first.course) - COURSE_ORDER.indexOf(second.course))
-        .map((recipe) => {
-            const courseMeta = COURSE_META[recipe.course];
+        .map((item) => {
+            const courseMeta = COURSE_META[item.course];
             return {
-                id: `${recipe.course}-${recipe.name}`,
-                title: recipe.name,
-                timeMinutes: recipe.totalTimeMinutes,
-                calories: Math.round(recipe.macrosPerServing?.calories ?? 0),
+                id: `${item.course}-${item.name}`,
+                title: item.name,
+                timeMinutes: perItemTime,
                 category: courseMeta.label,
                 categoryIcon: courseMeta.icon,
                 icon: courseMeta.icon,
                 mediaTone: courseMeta.mediaTone,
-                course: recipe.course,
+                course: item.course,
             };
         });
 };
@@ -391,16 +386,15 @@ const ensureWeeklyMenu = async ({
     weekStart,
     onboarding,
     onboardingHash,
-    singleDay,
+    force = false,
 }: {
     userId: string;
     weekStart: string;
     onboarding: OnboardingSnapshot | null;
     onboardingHash?: string | null;
-    singleDay?: string;
+    force?: boolean;
 }): Promise<{ cache: WeeklyMenuCache | null; error: string | null }> => {
-    // If requesting full week, check cache first
-    if (!singleDay) {
+    if (!force) {
         const cached = await loadWeeklyMenuCache(userId, onboardingHash);
         if (cached?.weekStart === weekStart) {
             return { cache: cached, error: null };
@@ -408,6 +402,7 @@ const ensureWeeklyMenu = async ({
     }
 
     try {
+        const todayKey = buildDateKey(new Date());
         const callWeeklyMenu = functions.httpsCallable<
             { request: WeeklyMenuRequest },
             WeeklyMenuResponse
@@ -416,70 +411,25 @@ const ensureWeeklyMenu = async ({
             request: {
                 userId,
                 weekStart,
-                ...(singleDay ? { singleDay } : {}),
+                startDate: todayKey,
+                generateImage: false,
                 ...(onboarding ? { onboarding } : {}),
                 ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
             },
         });
         const resolvedWeekStart = response.data?.weekStart ?? weekStart;
 
-        // Only cache if we generated the full week
-        if (!singleDay) {
-            const cache: WeeklyMenuCache = {
-                weekStart: resolvedWeekStart,
-                generatedAt: new Date().toISOString(),
-                ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
-            };
-            await persistWeeklyMenuCache(userId, cache);
-            return { cache, error: null };
-        }
-
-        return { cache: null, error: null };
+        const cache: WeeklyMenuCache = {
+            weekStart: resolvedWeekStart,
+            generatedAt: new Date().toISOString(),
+            ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
+        };
+        await persistWeeklyMenuCache(userId, cache);
+        return { cache, error: null };
     } catch (error) {
         console.warn('Weekly menu generation failed:', error);
         return { cache: null, error: getFunctionsErrorMessage(error) };
     }
-};
-
-// Generate remaining days in background (fire and forget)
-const generateRemainingDaysInBackground = (
-    userId: string,
-    weekStart: string,
-    onboarding: OnboardingSnapshot | null,
-    onboardingHash: string | null,
-    excludeDay: string
-) => {
-    const todayKey = buildDateKey(new Date());
-    const startDate = todayKey === excludeDay ? addDaysToDateKey(excludeDay, 1) : todayKey;
-    const excludeDates = [excludeDay];
-    // Fire and forget - don't await
-    (async () => {
-        try {
-            const callWeeklyMenu = functions.httpsCallable<
-                { request: WeeklyMenuRequest },
-                WeeklyMenuResponse
-            >('generateWeeklyMenu');
-            await callWeeklyMenu({
-                request: {
-                    userId,
-                    weekStart,
-                    startDate,
-                    excludeDates,
-                    ...(onboarding ? { onboarding } : {}),
-                    ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
-                },
-            });
-            // Cache the full week once complete
-            await persistWeeklyMenuCache(userId, {
-                weekStart,
-                generatedAt: new Date().toISOString(),
-                ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
-            });
-            console.log('Background menu generation complete');
-        } catch (error) {
-            console.warn('Background menu generation failed:', error);
-        }
-    })();
 };
 
 export default function TodayScreen() {
@@ -497,7 +447,7 @@ export default function TodayScreen() {
         ? formatLongDateTr(selectedDay.date)
         : selectedDay.date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    const [menuBundles, setMenuBundles] = useState<Record<MealSectionKey, MenuBundle | null>>({
+    const [menuBundles, setMenuBundles] = useState<Record<MealSectionKey, MenuDecisionWithLinks | null>>({
         breakfast: null,
         lunch: null,
         dinner: null,
@@ -509,6 +459,7 @@ export default function TodayScreen() {
     const [error, setError] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const weeklyGenerationKeyRef = useRef<string | null>(null);
 
     const selectedRoutine = weeklyRoutine[getDayKey(selectedDay.date)];
     const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
@@ -518,10 +469,10 @@ export default function TodayScreen() {
     const mealItemsByType = useMemo(() => {
         const buildItems = (mealType: MealSectionKey) => {
             const bundle = menuBundles[mealType];
-            if (!bundle?.recipes?.recipes?.length) {
+            if (!bundle?.items?.length) {
                 return [] as MealItem[];
             }
-            return buildMealItems(bundle.recipes.recipes);
+            return buildMealItems(bundle);
         };
 
         return {
@@ -571,7 +522,7 @@ export default function TodayScreen() {
     const reasoningText = useMemo(() => {
         const order: MealSectionKey[] = ['dinner'];
         for (const mealType of order) {
-            const text = menuBundles[mealType]?.menu.reasoning?.trim();
+            const text = menuBundles[mealType]?.reasoning?.trim();
             if (text) {
                 return text;
             }
@@ -632,7 +583,10 @@ export default function TodayScreen() {
                 const weekStart = resolveWeekStartKey(activeDate);
                 const weeklyCache = await loadWeeklyMenuCache(userId, onboardingHash);
                 const hasWeeklyCache = weeklyCache?.weekStart === weekStart;
-                let didTriggerRemainingDays = false;
+                const referenceDate = new Date(activeDate.getFullYear(), activeDate.getMonth(), activeDate.getDate());
+                const remainingWeekKeys = weekDays
+                    .filter((day) => day.date.getTime() >= referenceDate.getTime())
+                    .map((day) => day.key);
 
                 if (!mealTypes.length) {
                     if (isMounted) {
@@ -642,7 +596,7 @@ export default function TodayScreen() {
                     return;
                 }
 
-                const cachedBundles: Record<MealSectionKey, MenuBundle | null> = {
+                const cachedBundles: Record<MealSectionKey, MenuDecisionWithLinks | null> = {
                     breakfast: null,
                     lunch: null,
                     dinner: null,
@@ -651,10 +605,7 @@ export default function TodayScreen() {
                 for (const mealType of mealTypes) {
                     const cachedMenu = await loadMenuCache(userId, dateKey, mealType, onboardingHash);
                     if (cachedMenu) {
-                        cachedBundles[mealType] = {
-                            menu: cachedMenu.menu,
-                            recipes: cachedMenu.recipes,
-                        };
+                        cachedBundles[mealType] = cachedMenu.menu;
                     }
                 }
 
@@ -664,7 +615,7 @@ export default function TodayScreen() {
 
                 const hasCachedMenu = mealTypes.some((mealType) => Boolean(cachedBundles[mealType]));
 
-                const updateBundle = (mealType: MealSectionKey, bundle: MenuBundle) => {
+                const updateBundle = (mealType: MealSectionKey, bundle: MenuDecisionWithLinks) => {
                     if (!isMounted) {
                         return;
                     }
@@ -682,13 +633,12 @@ export default function TodayScreen() {
                         try {
                             // Skip hash checking when fetching from Firestore - we want to load existing menus
                             // even if the local onboarding data has changed. Hash is only used for generation decisions.
-                            const firestoreMenu = await fetchMenuBundle(userId, dateKey, mealType, null);
+                            const firestoreMenu = await fetchMenuDecision(userId, dateKey, mealType, null);
                             console.log('🍽️ Firestore result for', mealType, ':', firestoreMenu ? 'FOUND' : 'NOT FOUND');
                             if (firestoreMenu) {
                                 updateBundle(mealType, firestoreMenu);
                                 await persistMenuCache(userId, dateKey, mealType, {
-                                    menu: firestoreMenu.menu,
-                                    recipes: firestoreMenu.recipes,
+                                    menu: firestoreMenu,
                                     cachedAt: new Date().toISOString(),
                                     onboardingHash: onboardingHash ?? undefined,
                                 });
@@ -706,49 +656,72 @@ export default function TodayScreen() {
                 };
 
                 let { loadedCount, lastError } = await loadMenusFromFirestore();
+                const weeklyKey = `${weekStart}:${onboardingHash ?? ''}`;
 
                 if (!hasCachedMenu && loadedCount === 0) {
-                    const todayResult = await ensureWeeklyMenu({
+                    weeklyGenerationKeyRef.current = weeklyKey;
+                    const weeklyResult = await ensureWeeklyMenu({
                         userId,
                         weekStart,
                         onboarding: resolvedSnapshot,
                         onboardingHash,
-                        singleDay: dateKey,
+                        force: true,
                     });
+                    weeklyGenerationKeyRef.current = null;
 
-                    if (todayResult.error && isMounted) {
-                        setError(todayResult.error);
+                    if (weeklyResult.error && isMounted) {
+                        setError(weeklyResult.error);
                     } else {
                         const retry = await loadMenusFromFirestore();
                         loadedCount = retry.loadedCount;
                         lastError = retry.lastError;
-
-                        // Start background generation for remaining days
-                        generateRemainingDaysInBackground(
-                            userId,
-                            weekStart,
-                            resolvedSnapshot,
-                            onboardingHash,
-                            dateKey
-                        );
-                        didTriggerRemainingDays = true;
                     }
                 }
 
-                if (
-                    !didTriggerRemainingDays &&
-                    selectedDay.isToday &&
-                    !hasWeeklyCache &&
-                    (hasCachedMenu || loadedCount > 0)
-                ) {
-                    generateRemainingDaysInBackground(
-                        userId,
-                        weekStart,
-                        resolvedSnapshot,
-                        onboardingHash,
-                        dateKey
-                    );
-                    didTriggerRemainingDays = true;
+                if (selectedDay.isToday && !hasWeeklyCache && (hasCachedMenu || loadedCount > 0)) {
+                    const hasRemainingWeekMenus = async () => {
+                        if (!remainingWeekKeys.length) {
+                            return false;
+                        }
+                        for (const dateKey of remainingWeekKeys) {
+                            try {
+                                const menu = await fetchMenuDecision(userId, dateKey, 'dinner', null);
+                                if (!menu?.items?.length) {
+                                    return false;
+                                }
+                            } catch (menuCheckError) {
+                                console.warn('Weekly menu presence check failed:', menuCheckError);
+                                return false;
+                            }
+                        }
+                        return true;
+                    };
+
+                    const weekAlreadyGenerated = await hasRemainingWeekMenus();
+
+                    if (weekAlreadyGenerated) {
+                        await persistWeeklyMenuCache(userId, {
+                            weekStart,
+                            generatedAt: new Date().toISOString(),
+                            onboardingHash: onboardingHash ?? undefined,
+                        });
+                    } else if (weeklyGenerationKeyRef.current !== weeklyKey) {
+                        weeklyGenerationKeyRef.current = weeklyKey;
+                        ensureWeeklyMenu({
+                            userId,
+                            weekStart,
+                            onboarding: resolvedSnapshot,
+                            onboardingHash,
+                        })
+                            .catch((backgroundError) => {
+                                console.warn('Background weekly generation failed:', backgroundError);
+                            })
+                            .finally(() => {
+                                if (weeklyGenerationKeyRef.current === weeklyKey) {
+                                    weeklyGenerationKeyRef.current = null;
+                                }
+                            });
+                    }
                 }
 
                 if (isMounted) {
@@ -915,48 +888,65 @@ export default function TodayScreen() {
                                         style={styles.mealCard}
                                         onPress={() => handleOpenMeal(section.id, item.course, item.title)}
                                     >
-                                        <View style={[styles.mealHero, { backgroundColor: item.mediaTone }]} />
-                                        <MaterialCommunityIcons
-                                            name={item.icon}
-                                            size={72}
-                                            color={colors.textPrimary}
-                                            style={styles.mealHeroIcon}
+                                        <View
+                                            pointerEvents="none"
+                                            style={[
+                                                styles.mealAccent,
+                                                { backgroundColor: item.mediaTone },
+                                            ]}
                                         />
-                                        <Image
-                                            source={{ uri: CARD_GRADIENT_BASE64 }}
-                                            style={styles.mealGradient}
-                                            resizeMode="stretch"
-                                        />
-                                        <View style={styles.mealChips}>
-                                            <View style={styles.mealChip}>
+                                        <View style={styles.mealCardHeader}>
+                                            <View
+                                                style={[
+                                                    styles.mealBadge,
+                                                    { backgroundColor: item.mediaTone },
+                                                ]}
+                                            >
                                                 <MaterialCommunityIcons
-                                                    name={item.categoryIcon}
-                                                    size={12}
-                                                    color={colors.textInverse}
+                                                    name={item.icon}
+                                                    size={22}
+                                                    color={colors.textPrimary}
                                                 />
-                                                <Text style={styles.mealChipText}>{item.category}</Text>
                                             </View>
-                                            <View style={styles.mealChip}>
-                                                <MaterialCommunityIcons
-                                                    name="clock-outline"
-                                                    size={12}
-                                                    color={colors.textInverse}
-                                                />
-                                                <Text style={styles.mealChipText}>{item.timeMinutes} dk</Text>
-                                            </View>
-                                            <View style={styles.mealChip}>
-                                                <MaterialCommunityIcons
-                                                    name="fire"
-                                                    size={12}
-                                                    color={colors.textInverse}
-                                                />
-                                                <Text style={styles.mealChipText}>{item.calories} kcal</Text>
+                                            <View style={styles.mealMetaRow}>
+                                                {typeof item.timeMinutes === 'number' && item.timeMinutes > 0 && (
+                                                    <View style={styles.mealMetaChip}>
+                                                        <MaterialCommunityIcons
+                                                            name="clock-outline"
+                                                            size={12}
+                                                            color={colors.textSecondary}
+                                                        />
+                                                        <Text style={styles.mealMetaText}>
+                                                            {item.timeMinutes} dk
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                                {typeof item.calories === 'number' && item.calories > 0 && (
+                                                    <View style={styles.mealMetaChip}>
+                                                        <MaterialCommunityIcons
+                                                            name="fire"
+                                                            size={12}
+                                                            color={colors.textSecondary}
+                                                        />
+                                                        <Text style={styles.mealMetaText}>
+                                                            {item.calories} kcal
+                                                        </Text>
+                                                    </View>
+                                                )}
                                             </View>
                                         </View>
-                                        <View style={styles.mealTitleRow}>
+                                        <View style={styles.mealCardBody}>
                                             <Text style={styles.mealTitle} numberOfLines={2}>
                                                 {item.title}
                                             </Text>
+                                            <View style={styles.mealCategoryRow}>
+                                                <MaterialCommunityIcons
+                                                    name={item.categoryIcon}
+                                                    size={14}
+                                                    color={colors.textSecondary}
+                                                />
+                                                <Text style={styles.mealCategoryText}>{item.category}</Text>
+                                            </View>
                                         </View>
                                     </TouchableOpacity>
                                 ))
@@ -1002,6 +992,7 @@ const styles = StyleSheet.create({
     calendarRow: {
         flexDirection: 'row',
         gap: spacing.xs,
+        marginTop: spacing.xs,
     },
     daySlot: {
         flex: 1,
@@ -1133,65 +1124,81 @@ const styles = StyleSheet.create({
         gap: spacing.md,
     },
     mealCard: {
-        minHeight: 180,
+        minHeight: 160,
         borderRadius: radius.lg,
         overflow: 'hidden',
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.borderLight,
+        padding: spacing.md,
+        gap: spacing.md,
+        position: 'relative',
         ...shadows.sm,
     },
-    mealHero: {
-        ...StyleSheet.absoluteFillObject,
-    },
-    mealHeroIcon: {
+    mealAccent: {
         position: 'absolute',
-        right: spacing.lg,
-        top: spacing.lg,
-        opacity: 0.18,
+        width: 160,
+        height: 160,
+        borderRadius: 80,
+        right: -60,
+        top: -60,
+        opacity: 0.35,
     },
-    mealGradient: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: 120,
-        opacity: 0.8,
+    mealCardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        zIndex: 1,
     },
-    mealChips: {
-        position: 'absolute',
-        top: spacing.sm,
-        left: spacing.sm,
-        right: spacing.sm,
+    mealBadge: {
+        width: 44,
+        height: 44,
+        borderRadius: radius.full,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+    mealMetaRow: {
         flexDirection: 'row',
         alignItems: 'center',
         flexWrap: 'wrap',
         gap: spacing.xs,
+        marginLeft: 'auto',
     },
-    mealChip: {
+    mealMetaChip: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
-        backgroundColor: 'rgba(0, 0, 0, 0.35)',
+        backgroundColor: colors.surfaceAlt,
         borderRadius: radius.full,
         paddingVertical: 4,
         paddingHorizontal: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
     },
-    mealChipText: {
+    mealMetaText: {
         ...typography.caption,
         fontSize: 11,
         lineHeight: 14,
-        color: colors.textInverse,
+        color: colors.textSecondary,
     },
-    mealTitleRow: {
-        position: 'absolute',
-        left: spacing.md,
-        right: spacing.md,
-        bottom: spacing.md,
+    mealCardBody: {
+        gap: spacing.xs,
+        zIndex: 1,
     },
     mealTitle: {
         ...typography.h3,
-        color: colors.textInverse,
+        color: colors.textPrimary,
+    },
+    mealCategoryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    mealCategoryText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
     },
     emptyMealCard: {
         flexDirection: 'row',

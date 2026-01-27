@@ -8,11 +8,11 @@ type FirestoreMenuDoc = {
     reasoning?: string;
     onboardingHash?: string | null;
     items:
-        | Array<{ course: MenuRecipeCourse; name: string; recipeId: string }>
+        | Array<{ course: MenuRecipeCourse; name: string; recipeId?: string | null }>
         | {
-            main: { name: string; recipeId: string };
-            side: { name: string; recipeId: string };
-            extra: { type: MenuRecipeCourse; name: string; recipeId: string };
+            main: { name: string; recipeId?: string | null };
+            side: { name: string; recipeId?: string | null };
+            extra: { type: MenuRecipeCourse; name: string; recipeId?: string | null };
         };
     recipeIds?: string[];
 };
@@ -37,6 +37,14 @@ export type MenuBundle = {
     recipes: MenuRecipesResponse;
 };
 
+export type MenuDecisionWithLinks = Omit<MenuDecision, 'items'> & {
+    items: Array<{
+        course: MenuRecipeCourse;
+        name: string;
+        recipeId?: string | null;
+    }>;
+};
+
 const COURSE_VALUES: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze', 'dessert', 'pastry'];
 
 const normalizeCourse = (value: unknown): MenuRecipeCourse | null => {
@@ -46,36 +54,65 @@ const normalizeCourse = (value: unknown): MenuRecipeCourse | null => {
     return COURSE_VALUES.includes(value as MenuRecipeCourse) ? (value as MenuRecipeCourse) : null;
 };
 
-const resolveMenuItems = (menuData: FirestoreMenuDoc) => {
+type ResolvedMenuItem = {
+    course: MenuRecipeCourse;
+    name: string;
+    recipeId?: string | null;
+};
+
+const resolveMenuItems = (
+    menuData: FirestoreMenuDoc,
+    options?: { requireRecipeId?: boolean }
+): ResolvedMenuItem[] | null => {
+    const requireRecipeId = Boolean(options?.requireRecipeId);
+
     if (Array.isArray(menuData.items)) {
-        const normalized = menuData.items
-            .map((item) => ({
-                course: normalizeCourse(item.course),
-                name: item.name,
-                recipeId: item.recipeId,
-            }))
-            .filter((item): item is { course: MenuRecipeCourse; name: string; recipeId: string } => {
-                return Boolean(item.course && item.name && item.recipeId);
-            });
+        const normalized: ResolvedMenuItem[] = [];
+        for (const item of menuData.items) {
+            const course = normalizeCourse(item.course);
+            const name = item.name;
+            const recipeId = typeof item.recipeId === 'string' ? item.recipeId : null;
+            if (!course || !name) {
+                continue;
+            }
+            if (requireRecipeId && !recipeId) {
+                continue;
+            }
+            if (recipeId) {
+                normalized.push({ course, name, recipeId });
+            } else {
+                normalized.push({ course, name });
+            }
+        }
 
         return normalized.length ? normalized : null;
     }
 
     const legacy = menuData.items;
-    if (!legacy?.main?.recipeId || !legacy.side?.recipeId || !legacy.extra?.recipeId) {
+    if (!legacy?.main?.name || !legacy?.side?.name || !legacy?.extra?.name) {
         return null;
     }
-
-    const extraCourse = normalizeCourse(legacy.extra.type);
+    const extraCourse = normalizeCourse(legacy?.extra?.type);
     if (!extraCourse) {
         return null;
     }
 
-    return [
-        { course: 'main' as MenuRecipeCourse, name: legacy.main.name, recipeId: legacy.main.recipeId },
-        { course: 'side' as MenuRecipeCourse, name: legacy.side.name, recipeId: legacy.side.recipeId },
-        { course: extraCourse, name: legacy.extra.name, recipeId: legacy.extra.recipeId },
-    ];
+    const items: ResolvedMenuItem[] = [];
+    const mainRecipeId = typeof legacy.main.recipeId === 'string' ? legacy.main.recipeId : null;
+    const sideRecipeId = typeof legacy.side.recipeId === 'string' ? legacy.side.recipeId : null;
+    const extraRecipeId = typeof legacy.extra.recipeId === 'string' ? legacy.extra.recipeId : null;
+
+    if (!requireRecipeId || mainRecipeId) {
+        items.push(mainRecipeId ? { course: 'main', name: legacy.main.name, recipeId: mainRecipeId } : { course: 'main', name: legacy.main.name });
+    }
+    if (!requireRecipeId || sideRecipeId) {
+        items.push(sideRecipeId ? { course: 'side', name: legacy.side.name, recipeId: sideRecipeId } : { course: 'side', name: legacy.side.name });
+    }
+    if (!requireRecipeId || extraRecipeId) {
+        items.push(extraRecipeId ? { course: extraCourse, name: legacy.extra.name, recipeId: extraRecipeId } : { course: extraCourse, name: legacy.extra.name });
+    }
+
+    return items.length ? items : null;
 };
 
 export const buildMenuDocId = (userId: string, date: string, menuType: MenuMealType) =>
@@ -106,7 +143,7 @@ export const fetchMenuBundle = async (
         }
     }
 
-    const resolvedItems = resolveMenuItems(menuData);
+    const resolvedItems = resolveMenuItems(menuData, { requireRecipeId: true });
     if (!resolvedItems?.length) {
         return null;
     }
@@ -114,7 +151,7 @@ export const fetchMenuBundle = async (
     const recipeIds = (menuData.recipeIds?.length
         ? menuData.recipeIds
         : resolvedItems.map((item) => item.recipeId)
-    ).filter(Boolean);
+    ).filter((value): value is string => typeof value === 'string' && value.length > 0);
 
     const recipeSnaps = await Promise.all(
         recipeIds.map((recipeId) => getDoc(doc(firestore(), 'recipes', recipeId)))
@@ -185,7 +222,7 @@ export const fetchMenuDecision = async (
     date: string,
     menuType: MenuMealType,
     expectedOnboardingHash?: string | null
-): Promise<MenuDecision | null> => {
+): Promise<MenuDecisionWithLinks | null> => {
     const menuId = buildMenuDocId(userId, date, menuType);
     const menuSnap = await getDoc(doc(firestore(), 'menus', menuId));
 
@@ -205,7 +242,7 @@ export const fetchMenuDecision = async (
         }
     }
 
-    const resolvedItems = resolveMenuItems(menuData);
+    const resolvedItems = resolveMenuItems(menuData, { requireRecipeId: false });
     if (!resolvedItems?.length) {
         return null;
     }
@@ -219,6 +256,7 @@ export const fetchMenuDecision = async (
         items: resolvedItems.map((item) => ({
             course: item.course,
             name: item.name,
+            ...(item.recipeId ? { recipeId: item.recipeId } : {}),
         })),
     };
 };

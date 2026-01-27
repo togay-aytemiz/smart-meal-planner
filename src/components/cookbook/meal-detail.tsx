@@ -1,39 +1,73 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect, type ComponentProps } from 'react';
 import {
     Animated,
-    Image,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
-    Dimensions,
+    type ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { spacing, radius, shadows } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { MenuIngredient, MenuInstruction, MenuRecipe } from '../../types/menu-recipes';
+import { MenuIngredient, MenuInstruction, MenuRecipe, MenuRecipeCourse } from '../../types/menu-recipes';
 
 type TabKey = 'ingredients' | 'instructions' | 'nutrition';
 
 interface MealDetailProps {
     recipe: MenuRecipe;
     appName?: string;
-    imageUrl?: string | null;
     onBack?: () => void;
     onFavorite?: () => void;
     isFavorited?: boolean;
 }
 
-const HERO_HEIGHT = 360;
-const HEADER_HEIGHT = 56;
-const PLACEHOLDER_IMAGE = require('../../../assets/splash-icon.png');
+type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-// Stronger smooth gradient (Black -> Transparent)
-const GRADIENT_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAACVGAYAAADc5P5VAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABVSURBVHgB7c6xDYAwDABBE2ZkFqZgL/ZmL2ZgJ0pCQ8VH+cv3yWfMzBfZ7/f7/f7+9X1/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f3+/v38/p/d7f1Y5+xIAAAAASUVORK5CYII=';
+const HEADER_HEIGHT = 56;
 const BRIEF_FALLBACK =
     'Taze sebzelerle zenginleştirilmiş hafif bulgur pilavı; pratik, dengeli ve güne iyi gelen bir lezzet.';
+
+
+const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; tone: string }> = {
+    main: {
+        label: 'Ana Yemek',
+        icon: 'silverware-fork-knife',
+        tone: colors.surfaceAlt,
+    },
+    side: {
+        label: 'Yan Yemek',
+        icon: 'pot-steam-outline',
+        tone: colors.borderLight,
+    },
+    soup: {
+        label: 'Çorba',
+        icon: 'pot-steam-outline',
+        tone: colors.accentSoft,
+    },
+    salad: {
+        label: 'Salata',
+        icon: 'leaf',
+        tone: colors.successLight,
+    },
+    meze: {
+        label: 'Meze',
+        icon: 'food',
+        tone: colors.surfaceMuted,
+    },
+    dessert: {
+        label: 'Tatlı',
+        icon: 'cupcake',
+        tone: colors.errorLight,
+    },
+    pastry: {
+        label: 'Hamur İşi',
+        icon: 'bread-slice-outline',
+        tone: colors.surfaceAlt,
+    },
+};
 
 const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'ingredients', label: 'Malzemeler' },
@@ -72,7 +106,6 @@ const formatTimeValue = (minutes: number) => {
 export default function MealDetail({
     recipe,
     appName = 'Omnoo',
-    imageUrl,
     onBack,
     onFavorite,
     isFavorited = false,
@@ -81,40 +114,13 @@ export default function MealDetail({
     const [activeTab, setActiveTab] = useState<TabKey>('ingredients');
     const [tabContainerWidth, setTabContainerWidth] = useState(0);
     const [tabContainerY, setTabContainerY] = useState(0);
-    const scrollY = useRef(new Animated.Value(0)).current;
     const tabIndicatorX = useRef(new Animated.Value(0)).current;
-    const scrollViewRef = useRef<Animated.ScrollView | null>(null);
+    const scrollViewRef = useRef<ScrollView | null>(null);
 
     const brief = recipe.brief?.trim() || BRIEF_FALLBACK;
-    const resolvedImageUrl = imageUrl?.trim();
-    const imageSource = resolvedImageUrl ? { uri: resolvedImageUrl } : PLACEHOLDER_IMAGE;
+    const courseMeta = COURSE_META[recipe.course] ?? COURSE_META.main;
 
-    // Animation thresholds
-    const scrollThreshold = HERO_HEIGHT - HEADER_HEIGHT - insets.top - 40;
-
-    // Header background opacity based on scroll
-    const headerBgOpacity = scrollY.interpolate({
-        inputRange: [0, scrollThreshold],
-        outputRange: [0, 1],
-        extrapolate: 'clamp',
-    });
-
-    // Text/Icon color interpolation (white to black)
-    const headerTextColor = scrollY.interpolate({
-        inputRange: [0, scrollThreshold],
-        outputRange: [colors.textInverse, colors.textPrimary],
-        extrapolate: 'clamp',
-    });
-    const headerShadowColor = scrollY.interpolate({
-        inputRange: [0, 40],
-        outputRange: ['rgba(0, 0, 0, 0.35)', 'rgba(0, 0, 0, 0)'],
-        extrapolate: 'clamp',
-    });
-    const headerShadowStyle = {
-        textShadowColor: headerShadowColor,
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 3,
-    };
+    const headerTextColor = colors.textPrimary;
 
     const nutritionRows = useMemo(() => {
         const { calories, protein, carbs, fat } = recipe.macrosPerServing;
@@ -161,60 +167,25 @@ export default function MealDetail({
 
     return (
         <View style={styles.container}>
-            {/* Fixed Hero Image */}
-            <View style={[styles.heroContainer, { height: HERO_HEIGHT }]}>
-                <Image source={imageSource} style={styles.heroImage} />
-
-                {/* Smooth Gradient Overlay */}
-                <View style={styles.gradientContainer}>
-                    <Image
-                        source={{ uri: GRADIENT_BASE64 }}
-                        style={styles.gradientImage}
-                        resizeMode="stretch"
-                    />
-                </View>
-            </View>
-
-            {/* Fixed Header */}
-            <Animated.View
-                style={[
-                    styles.header,
-                    {
-                        paddingTop: insets.top,
-                        height: HEADER_HEIGHT + insets.top,
-                    },
-                ]}
-            >
-                {/* Animated background that fades in on scroll */}
-                <Animated.View
-                    style={[
-                        styles.headerBackground,
-                        {
-                            opacity: headerBgOpacity,
-                        },
-                    ]}
-                />
-
-                <View style={styles.headerContent}>
+            <View style={[styles.topBar, { paddingTop: insets.top }]}>
+                <View style={styles.topBarContent}>
                     {onBack ? (
                         <TouchableOpacity
                             onPress={onBack}
                             activeOpacity={0.7}
                             style={styles.iconButton}
                         >
-                            <Animated.Text style={[{ color: headerTextColor }, headerShadowStyle]}>
-                                <MaterialCommunityIcons name="arrow-left" size={28} />
-                            </Animated.Text>
+                            <MaterialCommunityIcons
+                                name="arrow-left"
+                                size={26}
+                                color={headerTextColor}
+                            />
                         </TouchableOpacity>
                     ) : (
                         <View style={styles.headerSpacer} />
                     )}
 
-                    <Animated.Text
-                        style={[styles.brandText, { color: headerTextColor }, headerShadowStyle]}
-                    >
-                        {appName}
-                    </Animated.Text>
+                    <Text style={styles.brandText}>{appName}</Text>
 
                     {onFavorite ? (
                         <TouchableOpacity
@@ -222,39 +193,32 @@ export default function MealDetail({
                             activeOpacity={0.7}
                             style={styles.iconButton}
                         >
-                            <Animated.Text style={[{ color: headerTextColor }, headerShadowStyle]}>
-                                <MaterialCommunityIcons
-                                    name={isFavorited ? 'heart' : 'heart-outline'}
-                                    size={28}
-                                />
-                            </Animated.Text>
+                            <MaterialCommunityIcons
+                                name={isFavorited ? 'heart' : 'heart-outline'}
+                                size={26}
+                                color={isFavorited ? colors.error : headerTextColor}
+                            />
                         </TouchableOpacity>
                     ) : (
                         <View style={styles.headerSpacer} />
                     )}
                 </View>
-            </Animated.View>
+            </View>
 
             {/* Scrollable Content */}
             <Animated.ScrollView
                 ref={scrollViewRef}
-                contentContainerStyle={[
-                    styles.scrollContent,
-                    { paddingTop: HERO_HEIGHT },
-                ]}
-                scrollEventThrottle={16}
-                onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-                    { useNativeDriver: false }
-                )}
+                contentContainerStyle={styles.scrollContent}
             >
                 <View style={[styles.details, { paddingBottom: spacing.xxl + insets.bottom }]}>
-                    <Image
-                        source={{ uri: GRADIENT_BASE64 }}
-                        style={styles.detailsGradient}
-                        resizeMode="stretch"
-                        pointerEvents="none"
-                    />
+                    <View style={styles.coursePill}>
+                        <MaterialCommunityIcons
+                            name={courseMeta.icon}
+                            size={14}
+                            color={colors.textSecondary}
+                        />
+                        <Text style={styles.coursePillText}>{courseMeta.label}</Text>
+                    </View>
                     <Text style={styles.title}>{recipe.name}</Text>
 
                     <View style={styles.metaRow}>
@@ -382,49 +346,17 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
-    heroContainer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        overflow: 'hidden',
-    },
-    heroImage: {
-        ...StyleSheet.absoluteFillObject,
-        width: '100%',
-        height: '100%',
-        resizeMode: 'cover',
-    },
-    gradientContainer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 180, // Increased height for smoother transition
-    },
-    gradientImage: {
-        width: '100%',
-        height: '100%',
-    },
-    header: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 10,
-    },
-    headerBackground: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: colors.surface,
+    topBar: {
+        backgroundColor: colors.background,
         borderBottomWidth: 1,
         borderBottomColor: colors.borderLight,
     },
-    headerContent: {
-        flex: 1,
+    topBarContent: {
+        height: HEADER_HEIGHT,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: spacing.md,
+        paddingHorizontal: spacing.lg,
     },
     brandText: {
         ...typography.h3,
@@ -442,32 +374,29 @@ const styles = StyleSheet.create({
         height: 44,
     },
     scrollContent: {
+        paddingTop: spacing.md,
         paddingBottom: 0,
     },
     details: {
-        backgroundColor: colors.surface,
-        borderTopLeftRadius: radius.xl,
-        borderTopRightRadius: radius.xl,
-        marginTop: -radius.xl,
         paddingTop: spacing.lg,
         paddingHorizontal: spacing.lg,
         gap: spacing.lg,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -6 },
-        shadowOpacity: 0.08,
-        shadowRadius: 14,
-        elevation: 6,
     },
-    detailsGradient: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 120,
-        borderTopLeftRadius: radius.xl,
-        borderTopRightRadius: radius.xl,
-        tintColor: colors.surface,
-        opacity: 0.85,
+    coursePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        alignSelf: 'flex-start',
+        backgroundColor: colors.surfaceMuted,
+        borderRadius: radius.full,
+        paddingVertical: 4,
+        paddingHorizontal: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+    coursePillText: {
+        ...typography.caption,
+        color: colors.textSecondary,
     },
     title: {
         ...typography.h2,

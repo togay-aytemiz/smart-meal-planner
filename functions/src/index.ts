@@ -1183,6 +1183,8 @@ export const generateWeeklyMenu = onCall(async (request) => {
       const baseRequest = onboardingToMenuRequest(onboarding, assignment.date, {
         mealType: assignment.mealType,
         existingPantry: payload.existingPantry,
+        pantryOnly: payload.pantryOnly,
+        requiredIngredients: payload.requiredIngredients,
         avoidIngredients: payload.avoidIngredients,
         avoidItemNames: cleanedAvoidItemNames.length ? cleanedAvoidItemNames : undefined,
         maxPrepTime: payload.maxPrepTime,
@@ -1295,6 +1297,8 @@ export const generateWeeklyMenu = onCall(async (request) => {
       const menuRequest = onboardingToMenuRequest(onboarding, assignment.date, {
         mealType: assignment.mealType,
         existingPantry: payload.existingPantry,
+        pantryOnly: payload.pantryOnly,
+        requiredIngredients: payload.requiredIngredients,
         avoidIngredients: payload.avoidIngredients,
         maxPrepTime: payload.maxPrepTime,
         maxCookTime: payload.maxCookTime,

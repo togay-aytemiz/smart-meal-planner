@@ -74,6 +74,8 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     householdSize,
     routine,
     existingPantry,
+    pantryOnly,
+    requiredIngredients,
     avoidIngredients,
     avoidItemNames,
     maxPrepTime,
@@ -141,6 +143,8 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
       equipment: equipment.length > 0 ? equipment : undefined,
       routine: routineContext ?? undefined,
       existingPantry: existingPantry?.length ? existingPantry : undefined,
+      pantryOnly: pantryOnly ? true : undefined,
+      requiredIngredients: requiredIngredients?.length ? requiredIngredients : undefined,
       avoidIngredients: avoidIngredients?.length ? avoidIngredients : undefined,
       maxPrepTime,
       maxCookTime,
@@ -162,6 +166,15 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     "- Zaman tercihini ve maxPrepTime/maxCookTime sınırlarını dikkate al.",
     "- Ekipman listesi yoksa temel mutfak ekipmanlarını varsay.",
   ];
+
+  if (requiredIngredients?.length) {
+    rules.push("- requiredIngredients listesinden en az birini menüde mutlaka kullan.");
+    rules.push("- Mümkünse requiredIngredients ana yemekte yer alsın.");
+  }
+
+  if (pantryOnly && existingPantry?.length) {
+    rules.push("- SADECE existingPantry listesindeki malzemeleri kullan; liste dışına çıkma.");
+  }
 
   if (avoidItemNames && avoidItemNames.length > 0) {
     rules.push(

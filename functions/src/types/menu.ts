@@ -143,6 +143,8 @@ export interface MenuGenerationRequest {
 
   // Additional context
   existingPantry?: string[];
+  pantryOnly?: boolean;
+  requiredIngredients?: string[];
   avoidIngredients?: string[];
   avoidItemNames?: string[];
   maxPrepTime?: number;
@@ -176,6 +178,8 @@ export type WeeklyMenuGenerationRequest = {
   onboardingHash?: string;
   repeatMode?: "consecutive" | "spaced";
   existingPantry?: string[];
+  pantryOnly?: boolean;
+  requiredIngredients?: string[];
   avoidIngredients?: string[];
   maxPrepTime?: number;
   maxCookTime?: number;

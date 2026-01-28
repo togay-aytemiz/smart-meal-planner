@@ -1,19 +1,26 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type ComponentProps } from 'react';
 import {
+    Animated,
+    ActivityIndicator,
     Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
+    useWindowDimensions,
     View,
     RefreshControl,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { TabScreenHeader, ReasoningBubble } from '../../components/ui';
+import { Button, Input, TabScreenHeader, ReasoningBubble } from '../../components/ui';
 import { functions } from '../../config/firebase';
 import { useUser } from '../../contexts/user-context';
 import { colors } from '../../theme/colors';
@@ -79,6 +86,8 @@ type WeeklyMenuRequest = {
     excludeDates?: string[];
     repeatMode?: 'consecutive' | 'spaced';
     existingPantry?: string[];
+    pantryOnly?: boolean;
+    requiredIngredients?: string[];
     avoidIngredients?: string[];
     maxPrepTime?: number;
     maxCookTime?: number;
@@ -189,6 +198,58 @@ const SECTION_META: Record<MealSectionKey, { title: string; icon: IconName; tint
     },
 };
 
+type ChangeReason = 'mustUse' | 'disliked' | 'cuisine' | 'quick';
+
+const CHANGE_REASONS: Array<{
+    key: ChangeReason;
+    title: string;
+    description: string;
+    icon: IconName;
+}> = [
+    {
+        key: 'mustUse',
+        title: 'Özel malzeme isteğim var',
+        description: 'Malzemeyi yaz, menüde kullanalım.',
+        icon: 'star-outline',
+    },
+    {
+        key: 'disliked',
+        title: 'Sevmediğim malzeme var',
+        description: 'İstemediğin malzemeyi yaz.',
+        icon: 'food-off-outline',
+    },
+    {
+        key: 'cuisine',
+        title: 'Canım başka mutfak çekiyor',
+        description: 'Başka bir mutfak seç.',
+        icon: 'silverware-variant',
+    },
+    {
+        key: 'quick',
+        title: 'Daha hızlı/pratik olsun',
+        description: 'Daha kısa hazırlık süresi.',
+        icon: 'timer-outline',
+    },
+];
+
+const CUISINE_OPTIONS: Array<{ key: string; label: string }> = [
+    { key: 'turkish', label: 'Türk' },
+    { key: 'mediterranean', label: 'Akdeniz' },
+    { key: 'italian', label: 'İtalyan' },
+    { key: 'asian', label: 'Asya' },
+    { key: 'middle-eastern', label: 'Ortadoğu' },
+    { key: 'mexican', label: 'Meksika' },
+    { key: 'indian', label: 'Hint' },
+    { key: 'french', label: 'Fransız' },
+    { key: 'japanese', label: 'Japon' },
+    { key: 'chinese', label: 'Çin' },
+    { key: 'thai', label: 'Tayland' },
+    { key: 'american', label: 'Amerikan' },
+];
+
+const QUICK_PREP_MAX = 15;
+const QUICK_COOK_MAX = 40;
+
 const buildDateKey = (date: Date) => {
     const year = date.getFullYear();
     const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -242,6 +303,11 @@ type MenuRecipesCache = {
     data: MenuRecipesResponse;
     cachedAt: string;
     onboardingHash?: string;
+};
+
+type PantryItem = {
+    name: string;
+    normalizedName?: string;
 };
 
 const buildMenuCacheKey = (userId: string, date: string, mealType: MenuMealType) =>
@@ -382,6 +448,34 @@ const getFunctionsErrorMessage = (error: unknown) => {
     return 'Bir hata oluştu.';
 };
 
+const normalizeIngredient = (value: string) => value.trim().toLocaleLowerCase('tr-TR');
+
+const parseIngredientList = (value: string): string[] =>
+    value
+        .split(/[,\n]/)
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+
+const buildOverrideSnapshot = (
+    base: OnboardingSnapshot | null,
+    options: { cuisineKey?: string | null; quick?: boolean }
+): OnboardingSnapshot | null => {
+    if (!base) {
+        return null;
+    }
+
+    const nextCuisine = options.cuisineKey ? [options.cuisineKey] : base.cuisine?.selected ?? [];
+    const nextTimePreference = options.quick
+        ? 'quick'
+        : base.cooking?.timePreference ?? 'balanced';
+
+    return {
+        ...base,
+        cuisine: { ...(base.cuisine ?? {}), selected: nextCuisine },
+        cooking: { ...(base.cooking ?? {}), timePreference: nextTimePreference },
+    };
+};
+
 const ensureWeeklyMenu = async ({
     userId,
     weekStart,
@@ -460,8 +554,23 @@ export default function TodayScreen() {
     const [error, setError] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [changeSheetVisible, setChangeSheetVisible] = useState(false);
+    const [changeReason, setChangeReason] = useState<ChangeReason | null>(null);
+    const [requiredIngredients, setRequiredIngredients] = useState('');
+    const [dislikedIngredients, setDislikedIngredients] = useState('');
+    const [selectedCuisine, setSelectedCuisine] = useState<string | null>(null);
+    const [usePantryOnly, setUsePantryOnly] = useState(false);
+    const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+    const [resolvedSnapshot, setResolvedSnapshot] = useState<OnboardingSnapshot | null>(null);
+    const [resolvedOnboardingHash, setResolvedOnboardingHash] = useState<string | null>(null);
+    const [isRegeneratingMenu, setIsRegeneratingMenu] = useState(false);
+    const [changeMenuError, setChangeMenuError] = useState<string | null>(null);
     const weeklyGenerationKeyRef = useRef<string | null>(null);
     const regenerationHandledRef = useRef<string | null>(null);
+    const { height: windowHeight } = useWindowDimensions();
+    const sheetTranslateY = useRef(new Animated.Value(windowHeight)).current;
+    const sheetOpacity = useRef(new Animated.Value(0)).current;
+    const insets = useSafeAreaInsets();
 
     const selectedRoutine = weeklyRoutine[getDayKey(selectedDay.date)];
     const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
@@ -533,6 +642,32 @@ export default function TodayScreen() {
     }, [menuBundles]);
     const showReasoning = !error && reasoningText.length > 0;
 
+    const pantryCount = pantryItems.length;
+    const pantryOnlyDisabled = pantryCount < 5;
+    const pantryOnlyHint = pantryOnlyDisabled
+        ? 'Bu seçeneği kullanmak için en az 5 malzeme kayıtlı olmalı.'
+        : 'Sadece kayıtlı malzemelere öncelik verilir.';
+
+    const pantryList = useMemo(() => {
+        const names = pantryItems
+            .map((item) => item.name.trim())
+            .filter((name) => name.length > 0);
+        return Array.from(new Set(names));
+    }, [pantryItems]);
+
+    const pantryNormalizedSet = useMemo(() => {
+        const values = pantryItems
+            .map((item) => normalizeIngredient(item.name))
+            .filter((name) => name.length > 0);
+        return new Set(values);
+    }, [pantryItems]);
+
+    const availableCuisines = useMemo(() => {
+        const selected = new Set(resolvedSnapshot?.cuisine?.selected ?? []);
+        const filtered = CUISINE_OPTIONS.filter((option) => !selected.has(option.key));
+        return filtered.length ? filtered : CUISINE_OPTIONS;
+    }, [resolvedSnapshot]);
+
     useFocusEffect(
         useCallback(() => {
             if (userState.isLoading) {
@@ -598,6 +733,16 @@ export default function TodayScreen() {
                         const data = userDoc.data();
                         const remoteSnapshot = data?.onboarding as OnboardingSnapshot | undefined;
                         resolvedSnapshot = remoteSnapshot ?? fallbackSnapshot;
+                        const remotePantry = Array.isArray(data?.pantry?.items) ? data?.pantry?.items : [];
+                        const mappedPantry = remotePantry
+                            .map((item: PantryItem) => ({
+                                name: String(item?.name ?? '').trim(),
+                                normalizedName: item?.normalizedName ? String(item.normalizedName) : undefined,
+                            }))
+                            .filter((item) => item.name.length > 0);
+                        if (isMounted) {
+                            setPantryItems(mappedPantry);
+                        }
                     } catch (readError) {
                         console.warn('Failed to load onboarding data:', readError);
                     }
@@ -609,6 +754,11 @@ export default function TodayScreen() {
 
                 const onboardingHash = buildOnboardingHash(resolvedSnapshot);
 
+                setResolvedSnapshot(resolvedSnapshot);
+                setResolvedOnboardingHash(onboardingHash);
+                if (userId === 'anonymous') {
+                    setPantryItems([]);
+                }
                 setUserName(resolvedSnapshot?.profile?.name ?? '');
                 setWeeklyRoutine(resolvedSnapshot?.routines ?? DEFAULT_ROUTINES);
 
@@ -844,6 +994,172 @@ export default function TodayScreen() {
         }
     }, [loading]);
 
+    useEffect(() => {
+        if (pantryOnlyDisabled && usePantryOnly) {
+            setUsePantryOnly(false);
+        }
+    }, [pantryOnlyDisabled, usePantryOnly]);
+
+    useEffect(() => {
+        if (!changeSheetVisible) {
+            return;
+        }
+        sheetTranslateY.setValue(windowHeight);
+        sheetOpacity.setValue(0);
+        Animated.parallel([
+            Animated.timing(sheetOpacity, {
+                toValue: 1,
+                duration: 220,
+                useNativeDriver: true,
+            }),
+            Animated.timing(sheetTranslateY, {
+                toValue: 0,
+                duration: 280,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, [changeSheetVisible, sheetOpacity, sheetTranslateY, windowHeight]);
+
+    const handleOpenChangeSheet = () => {
+        setChangeMenuError(null);
+        setChangeSheetVisible(true);
+    };
+
+    const closeChangeSheet = (onClosed?: () => void) => {
+        if (isRegeneratingMenu) {
+            return;
+        }
+        Animated.parallel([
+            Animated.timing(sheetOpacity, {
+                toValue: 0,
+                duration: 200,
+                useNativeDriver: true,
+            }),
+            Animated.timing(sheetTranslateY, {
+                toValue: windowHeight,
+                duration: 240,
+                useNativeDriver: true,
+            }),
+        ]).start(({ finished }) => {
+            if (finished) {
+                setChangeSheetVisible(false);
+                setChangeMenuError(null);
+                onClosed?.();
+            }
+        });
+    };
+
+    const handleCloseChangeSheet = () => {
+        closeChangeSheet();
+    };
+
+    const handleTogglePantryOnly = () => {
+        if (pantryOnlyDisabled) {
+            return;
+        }
+        setUsePantryOnly((prev) => !prev);
+    };
+
+    const handleRegenerateMenu = async () => {
+        if (isRegeneratingMenu) {
+            return;
+        }
+
+        if (!changeReason) {
+            setChangeMenuError('Lütfen bir neden seç.');
+            return;
+        }
+
+        const requiredList =
+            changeReason === 'mustUse' ? parseIngredientList(requiredIngredients) : [];
+        const dislikedList =
+            changeReason === 'disliked' ? parseIngredientList(dislikedIngredients) : [];
+
+        if (changeReason === 'mustUse' && requiredList.length === 0) {
+            setChangeMenuError('Lütfen kullanmak istediğin malzemeleri yaz.');
+            return;
+        }
+        if (changeReason === 'disliked' && dislikedList.length === 0) {
+            setChangeMenuError('Lütfen istemediğin malzemeleri yaz.');
+            return;
+        }
+
+        if (changeReason === 'cuisine' && !selectedCuisine) {
+            setChangeMenuError('Lütfen bir mutfak seç.');
+            return;
+        }
+
+        if (usePantryOnly && pantryOnlyDisabled) {
+            setChangeMenuError('Bu seçenek için yeterli malzeme yok.');
+            return;
+        }
+
+        if (!resolvedSnapshot || !userState.user?.uid) {
+            setChangeMenuError('Menü oluşturmak için kullanıcı verisi gerekli.');
+            return;
+        }
+
+        setChangeMenuError(null);
+        setIsRegeneratingMenu(true);
+
+        try {
+            const userId = userState.user.uid;
+            const weekStart = resolveWeekStartKey(selectedDay.date);
+            const onboardingOverride = buildOverrideSnapshot(resolvedSnapshot, {
+                cuisineKey: changeReason === 'cuisine' ? selectedCuisine : null,
+                quick: changeReason === 'quick',
+            });
+
+            if (!onboardingOverride) {
+                setChangeMenuError('Menü oluşturma verisi bulunamadı.');
+                return;
+            }
+
+            const callWeeklyMenu = functions.httpsCallable<
+                { request: WeeklyMenuRequest },
+                WeeklyMenuResponse
+            >('generateWeeklyMenu');
+
+            await callWeeklyMenu({
+                request: {
+                    userId,
+                    weekStart,
+                    singleDay: selectedDay.key,
+                    onboarding: onboardingOverride,
+                    ...(resolvedOnboardingHash ? { onboardingHash: resolvedOnboardingHash } : {}),
+                    ...(usePantryOnly && pantryList.length ? { existingPantry: pantryList } : {}),
+                    ...(usePantryOnly && requiredList.length === 0 ? { pantryOnly: true } : {}),
+                    ...(requiredList.length ? { requiredIngredients: requiredList } : {}),
+                    ...(dislikedList.length ? { avoidIngredients: dislikedList } : {}),
+                    ...(changeReason === 'quick'
+                        ? { maxPrepTime: QUICK_PREP_MAX, maxCookTime: QUICK_COOK_MAX }
+                        : {}),
+                    generateImage: false,
+                },
+            });
+
+            const mealTypesToClear = (['breakfast', 'lunch', 'dinner'] as MenuMealType[]).filter(
+                (mealType) => mealPlan[mealType]
+            );
+            const keysToRemove: string[] = [];
+            for (const mealType of mealTypesToClear) {
+                keysToRemove.push(buildMenuCacheKey(userId, selectedDay.key, mealType));
+                keysToRemove.push(buildMenuRecipesKey(userId, mealType));
+            }
+            if (keysToRemove.length) {
+                await AsyncStorage.multiRemove(keysToRemove);
+            }
+
+            closeChangeSheet(() => {
+                setRefreshKey((prev) => prev + 1);
+            });
+        } catch (err) {
+            setChangeMenuError(getFunctionsErrorMessage(err));
+        } finally {
+            setIsRegeneratingMenu(false);
+        }
+    };
+
     const displayName = userName.trim() ? `${greeting} ${userName}` : greeting;
 
     const handleOpenMeal = (mealType: MealSectionKey, course: MenuRecipeCourse, recipeName: string) => {
@@ -937,6 +1253,24 @@ export default function TodayScreen() {
                         <Text style={styles.dayTitle}>{selectedDayLabel}</Text>
                         <Text style={styles.daySubtitle}>{selectedDaySubtitle}</Text>
                     </View>
+                    <TouchableOpacity
+                        style={[
+                            styles.changeMenuButton,
+                            (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
+                                styles.changeMenuButtonDisabled,
+                        ]}
+                        onPress={handleOpenChangeSheet}
+                        disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
+                        hitSlop={hitSlop}
+                        activeOpacity={0.85}
+                    >
+                        <MaterialCommunityIcons
+                            name="swap-horizontal"
+                            size={18}
+                            color={colors.textPrimary}
+                        />
+                        <Text style={styles.changeMenuText}>Menüyü değiştir</Text>
+                    </TouchableOpacity>
                 </View>
 
                 {isHoliday ? (
@@ -1044,6 +1378,223 @@ export default function TodayScreen() {
                     </View>
                 ))}
             </ScrollView>
+
+            <Modal
+                transparent
+                visible={changeSheetVisible}
+                animationType="fade"
+                onRequestClose={handleCloseChangeSheet}
+                presentationStyle="overFullScreen"
+            >
+                <View style={styles.sheetOverlay}>
+                    <Animated.View style={[styles.sheetBackdrop, { opacity: sheetOpacity }]} />
+                    <Pressable style={StyleSheet.absoluteFillObject} onPress={handleCloseChangeSheet} />
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        style={styles.sheetWrapper}
+                    >
+                        <Animated.View
+                            style={[
+                                styles.sheetContainer,
+                                {
+                                    paddingBottom: spacing.lg + insets.bottom,
+                                    transform: [{ translateY: sheetTranslateY }],
+                                },
+                            ]}
+                        >
+                            <View style={styles.sheetHandle} />
+                            <View style={styles.sheetHeader}>
+                                <Text style={styles.sheetTitle}>Menüyü değiştir</Text>
+                                <TouchableOpacity
+                                    onPress={handleCloseChangeSheet}
+                                    hitSlop={hitSlop}
+                                    disabled={isRegeneratingMenu}
+                                >
+                                    <MaterialCommunityIcons name="close" size={20} color={colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <ScrollView
+                                contentContainerStyle={styles.sheetContent}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                <View style={styles.sheetSection}>
+                                    {CHANGE_REASONS.map((option) => {
+                                        const isSelected = changeReason === option.key;
+                                        return (
+                                            <TouchableOpacity
+                                                key={option.key}
+                                                style={[
+                                                    styles.reasonCard,
+                                                    isSelected && styles.reasonCardSelected,
+                                                ]}
+                                                onPress={() => {
+                                                    setChangeReason(option.key);
+                                                    setChangeMenuError(null);
+                                                }}
+                                                activeOpacity={0.85}
+                                            >
+                                                <View style={styles.reasonIcon}>
+                                                    <MaterialCommunityIcons
+                                                        name={option.icon}
+                                                        size={18}
+                                                        color={colors.textPrimary}
+                                                    />
+                                                </View>
+                                                <View style={styles.reasonBody}>
+                                                    <Text style={styles.reasonTitle} numberOfLines={1}>
+                                                        {option.title}
+                                                    </Text>
+                                                    <Text style={styles.reasonDescription} numberOfLines={1}>
+                                                        {option.description}
+                                                    </Text>
+                                                </View>
+                                                <View
+                                                    style={[
+                                                        styles.reasonRadio,
+                                                        isSelected && styles.reasonRadioSelected,
+                                                    ]}
+                                                >
+                                                    {isSelected ? (
+                                                        <View style={styles.reasonRadioDot} />
+                                                    ) : null}
+                                                </View>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+
+                                {changeReason === 'mustUse' ? (
+                                    <View style={styles.sheetSection}>
+                                        <Input
+                                            label="Kullanmak istediğin malzemeler"
+                                            placeholder="Örn: tavuk, kıyma"
+                                            value={requiredIngredients}
+                                            onChangeText={(value) => {
+                                                setRequiredIngredients(value);
+                                                if (changeMenuError) {
+                                                    setChangeMenuError(null);
+                                                }
+                                            }}
+                                            autoCapitalize="none"
+                                        />
+                                    </View>
+                                ) : null}
+
+                                {changeReason === 'disliked' ? (
+                                    <View style={styles.sheetSection}>
+                                        <Input
+                                            label="İstemediğin malzemeler"
+                                            placeholder="Örn: soğan, sarımsak"
+                                            value={dislikedIngredients}
+                                            onChangeText={(value) => {
+                                                setDislikedIngredients(value);
+                                                if (changeMenuError) {
+                                                    setChangeMenuError(null);
+                                                }
+                                            }}
+                                            autoCapitalize="none"
+                                        />
+                                    </View>
+                                ) : null}
+
+                                {changeReason === 'cuisine' ? (
+                                    <View style={styles.sheetSection}>
+                                        <Text style={styles.sheetLabel}>Mutfak seç</Text>
+                                        <View style={styles.cuisineGrid}>
+                                            {availableCuisines.map((option) => {
+                                                const isSelected = selectedCuisine === option.key;
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={option.key}
+                                                        style={[
+                                                            styles.cuisineChip,
+                                                            isSelected && styles.cuisineChipSelected,
+                                                        ]}
+                                                        onPress={() => {
+                                                            setSelectedCuisine(option.key);
+                                                            setChangeMenuError(null);
+                                                        }}
+                                                        activeOpacity={0.85}
+                                                    >
+                                                        <Text
+                                                            style={[
+                                                                styles.cuisineChipText,
+                                                                isSelected && styles.cuisineChipTextSelected,
+                                                            ]}
+                                                        >
+                                                            {option.label}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    </View>
+                                ) : null}
+
+                                {changeReason === 'quick' ? (
+                                    <View style={styles.sheetSection}>
+                                        <View style={styles.quickInfo}>
+                                            <MaterialCommunityIcons
+                                                name="timer-outline"
+                                                size={18}
+                                                color={colors.textSecondary}
+                                            />
+                                            <Text style={styles.quickInfoText}>
+                                                Hazırlık süresi {QUICK_PREP_MAX} dakikanın altında hedeflenir.
+                                            </Text>
+                                        </View>
+                                    </View>
+                                ) : null}
+
+                                <View style={styles.sheetDivider} />
+
+                                <TouchableOpacity
+                                    style={styles.pantryRow}
+                                    onPress={handleTogglePantryOnly}
+                                    disabled={pantryOnlyDisabled}
+                                    activeOpacity={0.85}
+                                >
+                                    <View
+                                        style={[
+                                            styles.checkbox,
+                                            usePantryOnly && styles.checkboxChecked,
+                                            pantryOnlyDisabled && styles.checkboxDisabled,
+                                        ]}
+                                    >
+                                        {usePantryOnly ? (
+                                            <MaterialCommunityIcons name="check" size={14} color={colors.textInverse} />
+                                        ) : null}
+                                    </View>
+                                    <View style={styles.pantryText}>
+                                        <Text style={styles.pantryTitle}>Sadece evdeki malzemeler</Text>
+                                        <Text style={styles.pantrySubtitle}>{pantryOnlyHint}</Text>
+                                    </View>
+                                </TouchableOpacity>
+
+                                {changeMenuError ? (
+                                    <Text style={styles.sheetError}>{changeMenuError}</Text>
+                                ) : null}
+                            </ScrollView>
+
+                            <View style={styles.sheetFooter}>
+                                {isRegeneratingMenu ? (
+                                    <View style={styles.sheetLoading}>
+                                        <ActivityIndicator size="small" color={colors.primary} />
+                                        <Text style={styles.sheetLoadingText}>Menü güncelleniyor...</Text>
+                                    </View>
+                                ) : null}
+                                <Button
+                                    title="Yeniden Oluştur"
+                                    onPress={handleRegenerateMenu}
+                                    loading={isRegeneratingMenu}
+                                    fullWidth
+                                />
+                            </View>
+                        </Animated.View>
+                    </KeyboardAvoidingView>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -1155,6 +1706,24 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+    },
+    changeMenuButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.sm,
+        borderRadius: radius.full,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
+    },
+    changeMenuButtonDisabled: {
+        opacity: 0.5,
+    },
+    changeMenuText: {
+        ...typography.caption,
+        color: colors.textSecondary,
     },
     holidayCard: {
         flexDirection: 'row',
@@ -1293,5 +1862,207 @@ const styles = StyleSheet.create({
         ...typography.bodySmall,
         color: colors.textSecondary,
         flex: 1,
+    },
+    sheetOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: colors.transparent,
+    },
+    sheetWrapper: {
+        width: '100%',
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    sheetBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: colors.overlay,
+    },
+    sheetContainer: {
+        backgroundColor: colors.surface,
+        borderTopLeftRadius: radius.xl,
+        borderTopRightRadius: radius.xl,
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.lg,
+        maxHeight: '94%',
+        ...shadows.lg,
+    },
+    sheetHandle: {
+        width: 44,
+        height: 4,
+        borderRadius: radius.full,
+        backgroundColor: colors.border,
+        alignSelf: 'center',
+        marginTop: spacing.sm,
+        marginBottom: spacing.md,
+    },
+    sheetHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: spacing.md,
+    },
+    sheetTitle: {
+        ...typography.h3,
+        color: colors.textPrimary,
+    },
+    sheetContent: {
+        paddingBottom: spacing.md,
+        gap: spacing.md,
+    },
+    sheetSection: {
+        gap: spacing.sm,
+    },
+    sheetLabel: {
+        ...typography.label,
+        color: colors.textPrimary,
+    },
+    reasonCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        backgroundColor: colors.surfaceAlt,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: colors.border,
+        padding: spacing.md,
+    },
+    reasonCardSelected: {
+        borderColor: colors.primary,
+        backgroundColor: colors.surface,
+    },
+    reasonIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: radius.full,
+        backgroundColor: colors.surface,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+    reasonBody: {
+        flex: 1,
+        gap: spacing.xs,
+    },
+    reasonTitle: {
+        ...typography.label,
+        color: colors.textPrimary,
+    },
+    reasonDescription: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+    },
+    reasonRadio: {
+        width: 20,
+        height: 20,
+        borderRadius: radius.full,
+        borderWidth: 1.5,
+        borderColor: colors.borderStrong,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    reasonRadioSelected: {
+        borderColor: colors.primary,
+    },
+    reasonRadioDot: {
+        width: 10,
+        height: 10,
+        borderRadius: radius.full,
+        backgroundColor: colors.primary,
+    },
+    cuisineGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: spacing.sm,
+    },
+    cuisineChip: {
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        borderRadius: radius.full,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
+    },
+    cuisineChipSelected: {
+        borderColor: colors.primary,
+        backgroundColor: colors.primary,
+    },
+    cuisineChipText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+    },
+    cuisineChipTextSelected: {
+        color: colors.textOnPrimary,
+    },
+    quickInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        backgroundColor: colors.surfaceAlt,
+        borderRadius: radius.lg,
+        padding: spacing.md,
+    },
+    quickInfoText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        flex: 1,
+    },
+    sheetDivider: {
+        height: 1,
+        backgroundColor: colors.borderLight,
+        marginVertical: spacing.md,
+    },
+    pantryRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: spacing.sm,
+    },
+    checkbox: {
+        width: 20,
+        height: 20,
+        borderRadius: radius.sm,
+        borderWidth: 1.5,
+        borderColor: colors.borderStrong,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.surface,
+        marginTop: 2,
+    },
+    checkboxChecked: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    checkboxDisabled: {
+        opacity: 0.4,
+    },
+    pantryText: {
+        flex: 1,
+        gap: spacing.xs,
+    },
+    pantryTitle: {
+        ...typography.label,
+        color: colors.textPrimary,
+    },
+    pantrySubtitle: {
+        ...typography.bodySmall,
+        color: colors.textMuted,
+    },
+    sheetError: {
+        ...typography.bodySmall,
+        color: colors.error,
+    },
+    sheetFooter: {
+        paddingTop: spacing.md,
+    },
+    sheetLoading: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.sm,
+        marginBottom: spacing.sm,
+    },
+    sheetLoadingText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
     },
 });

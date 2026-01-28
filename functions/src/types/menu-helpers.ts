@@ -18,6 +18,8 @@ export function onboardingToMenuRequest(
   date?: string, // YYYY-MM-DD format - if not provided, uses Monday for MVP testing
   options?: {
     existingPantry?: string[];
+    pantryOnly?: boolean;
+    requiredIngredients?: string[];
     avoidIngredients?: string[];
     avoidItemNames?: string[];
     maxPrepTime?: number;
@@ -96,6 +98,8 @@ export function onboardingToMenuRequest(
 
     // Additional context
     existingPantry: options?.existingPantry,
+    pantryOnly: options?.pantryOnly,
+    requiredIngredients: options?.requiredIngredients,
     avoidIngredients: options?.avoidIngredients,
     avoidItemNames: options?.avoidItemNames,
     maxPrepTime: options?.maxPrepTime,

@@ -83,6 +83,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     previousPreferences,
     mealType,
     weeklyContext,
+    cuisinePriority,
   } = request;
 
   const calculatedDayOfWeek =
@@ -138,6 +139,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
       cuisinePreferences: resolvedCuisinePreferences.length
         ? resolvedCuisinePreferences
         : undefined,
+      cuisinePriority: cuisinePriority ?? undefined,
       timePreference,
       skillLevel,
       equipment: equipment.length > 0 ? equipment : undefined,
@@ -203,11 +205,23 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   rules.push(
     "- Mutfak seçimi: Kullanıcının mutfak tercihleri varsa onlardan birini seç; yoksa Türk mutfağı seç."
   );
-  if (resolvedCuisinePreferences.length === 1) {
+  if (resolvedCuisinePreferences.length >= 1 && cuisinePriority === "high") {
+    const preferredCuisine = resolvedCuisinePreferences[0];
+    const anchorCount = resolvedMealType === "dinner" ? 2 : 1;
     rules.push(
-      `- ZORUNLU MUTFAK: "${resolvedCuisinePreferences[0]}". Başka mutfak önerme.`
+      `- MUTFAK ÖNCELİĞİ: "${preferredCuisine}". Menü öğeleri bu mutfakla güçlü ilişki taşımalı (isim/teknik/ingredient).`
     );
-    rules.push("- Ana yemek ve yan/extra, seçilen mutfağa uygun olmalı.");
+    rules.push(
+      `- Menüdeki öğelerin en az ${anchorCount} tanesi seçilen mutfağa açıkça ait olmalı.`
+    );
+    rules.push(
+      "- Genel/yerel ev yemeği veya belirsiz mutfak önerilerinden kaçın."
+    );
+    if (resolvedCuisinePreferences.length > 1) {
+      rules.push(
+        "- Birden fazla mutfak seçildiyse tek birini seç ve menü boyunca aynı mutfak çizgisinde kal."
+      );
+    }
   }
   if (prefersNonTurkishCuisine) {
     rules.push(
@@ -215,7 +229,7 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
     );
   }
   rules.push(
-    "- Mutfak-kategori uyumu: Türk (çorba/salata/meze), İtalyan (pasta/risotto + salata), Asya (pirinç/erişte + çorba), Amerikan (side + salata), Modern/Bowl (ana odaklı, hafif eşlikçi)."
+    "- Mutfak-kategori uyumu: Türk (çorba/salata/meze), İtalyan (pasta/risotto), Çin (wok/stir-fry + pirinç/erişte), Amerikan (grill/roast + side), Modern/Bowl (ana odaklı, hafif eşlikçi)."
   );
   rules.push(
     "- weeklyContext varsa repeatMode/ingredientSynergyFrom/seasonalityHint ipuçlarını uygula."

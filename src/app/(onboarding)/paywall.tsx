@@ -1,18 +1,24 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image, ImageSourcePropType } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image, ImageSourcePropType, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useRef, useEffect } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Purchases, { type PurchasesOffering, type PurchasesPackage } from 'react-native-purchases';
 import { Button } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { usePremium } from '../../contexts/premium-context';
 
 export default function PaywallScreen() {
     const router = useRouter();
     const { dispatch } = useOnboarding();
-    const [selectedPlan, setSelectedPlan] = useState<'yearly' | 'monthly'>('yearly');
+    const { presentPaywall, restorePurchases, openCustomerCenter, isPremium } = usePremium();
+    const [selectedPlan, setSelectedPlan] = useState<'weekly' | 'monthly'>('monthly');
+    const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(null);
+    const [pricingError, setPricingError] = useState<string | null>(null);
+    const [isPurchasing, setIsPurchasing] = useState(false);
 
     // Simple pulse animation for the badge
     const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -25,6 +31,46 @@ export default function PaywallScreen() {
             ])
         ).start();
     }, []);
+
+    useEffect(() => {
+        const loadOfferings = async () => {
+            try {
+                const offerings = await Purchases.getOfferings();
+                setCurrentOffering(offerings.current ?? null);
+            } catch (error) {
+                console.warn('RevenueCat offerings error:', error);
+                setPricingError('Fiyatlar yüklenemedi.');
+            }
+        };
+
+        loadOfferings();
+    }, []);
+
+    const weeklyPackage = currentOffering?.availablePackages.find(
+        (pkg) => pkg.packageType === Purchases.PACKAGE_TYPE.WEEKLY
+    );
+    const monthlyPackage = currentOffering?.availablePackages.find(
+        (pkg) => pkg.packageType === Purchases.PACKAGE_TYPE.MONTHLY
+    );
+
+    const resolvePriceLabel = (pkg?: PurchasesPackage | null) =>
+        pkg?.product?.priceString ? pkg.product.priceString : '—';
+
+    const handlePurchase = async () => {
+        if (isPurchasing) {
+            return;
+        }
+        if (isPremium) {
+            handleContinue();
+            return;
+        }
+        setIsPurchasing(true);
+        await presentPaywall();
+        setIsPurchasing(false);
+        if (isPremium) {
+            handleContinue();
+        }
+    };
 
     const handleContinue = () => {
         dispatch({ type: 'SET_STEP', payload: 13 });
@@ -69,31 +115,34 @@ export default function PaywallScreen() {
                 </View>
 
                 <Text style={styles.planLabel}>Deneme süresi için plan seçin:</Text>
+                {pricingError ? <Text style={styles.priceError}>{pricingError}</Text> : null}
 
                 {/* Plans Row */}
                 <View style={styles.plansRow}>
-                    {/* Yearly Plan */}
+                    {/* Weekly Plan */}
                     <TouchableOpacity
-                        style={[styles.planCard, selectedPlan === 'yearly' && styles.selectedCard]}
-                        onPress={() => setSelectedPlan('yearly')}
+                        style={[styles.planCard, selectedPlan === 'weekly' && styles.selectedCard]}
+                        onPress={() => setSelectedPlan('weekly')}
                         activeOpacity={0.9}
                     >
                         <Animated.View style={[styles.badgeContainer, { transform: [{ scale: scaleAnim }] }]}>
-                            <Text style={styles.badgeText}>%62 TASARRUF</Text>
+                            <Text style={styles.badgeText}>ESNEK</Text>
                         </Animated.View>
 
                         <View style={styles.cardHeader}>
-                            <Text style={styles.cardTitle}>YILLIK</Text>
-                            {selectedPlan === 'yearly' ? (
+                            <Text style={styles.cardTitle}>HAFTALIK</Text>
+                            {selectedPlan === 'weekly' ? (
                                 <MaterialCommunityIcons name="check-circle" size={24} color={colors.primary} />
                             ) : (
                                 <MaterialCommunityIcons name="circle-outline" size={24} color={colors.textMuted} />
                             )}
                         </View>
 
-                        <Text style={styles.priceText}>₺39.99<Text style={styles.pricePeriod}>/ay</Text></Text>
-                        <Text style={styles.secondaryPrice}>₺479.99/yıl</Text>
-                        <Text style={styles.billingText}>7 gün sonra faturalanır</Text>
+                        <Text style={styles.priceText}>
+                            {resolvePriceLabel(weeklyPackage)}
+                            <Text style={styles.pricePeriod}>/hafta</Text>
+                        </Text>
+                        <Text style={styles.billingText}>İstediğin zaman iptal edebilirsin</Text>
                     </TouchableOpacity>
 
                     {/* Monthly Plan */}
@@ -111,8 +160,11 @@ export default function PaywallScreen() {
                             )}
                         </View>
 
-                        <Text style={styles.priceText}>₺79.99<Text style={styles.pricePeriod}>/ay</Text></Text>
-                        <Text style={styles.billingText}>7 gün sonra faturalanır</Text>
+                        <Text style={styles.priceText}>
+                            {resolvePriceLabel(monthlyPackage)}
+                            <Text style={styles.pricePeriod}>/ay</Text>
+                        </Text>
+                        <Text style={styles.billingText}>İstediğin zaman iptal edebilirsin</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -123,11 +175,23 @@ export default function PaywallScreen() {
             {/* Footer */}
             <View style={styles.footer}>
                 <Button
-                    title="7 Gün Ücretsiz Dene"
-                    onPress={handleContinue}
+                    title="Premium'a Geç"
+                    onPress={handlePurchase}
                     fullWidth
                     size="large"
+                    loading={isPurchasing}
                 />
+                <View style={styles.footerLinks}>
+                    <TouchableOpacity onPress={restorePurchases} activeOpacity={0.8}>
+                        <Text style={styles.footerLinkText}>Restore Purchases</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => Linking.openURL('https://omnoo.app/terms')} activeOpacity={0.8}>
+                        <Text style={styles.footerLinkText}>Terms</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => Linking.openURL('https://omnoo.app/privacy')} activeOpacity={0.8}>
+                        <Text style={styles.footerLinkText}>Privacy</Text>
+                    </TouchableOpacity>
+                </View>
                 <Button
                     title="Şimdilik Geç"
                     onPress={handleContinue}
@@ -215,6 +279,23 @@ const styles = StyleSheet.create({
         ...typography.h3,
         textAlign: 'center',
         marginBottom: spacing.md,
+    },
+    priceError: {
+        ...typography.caption,
+        color: colors.textMuted,
+        textAlign: 'center',
+        marginBottom: spacing.sm,
+    },
+    footerLinks: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.lg,
+        marginTop: spacing.sm,
+    },
+    footerLinkText: {
+        ...typography.caption,
+        color: colors.primary,
     },
     plansRow: {
         flexDirection: 'row',

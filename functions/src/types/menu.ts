@@ -122,6 +122,7 @@ export interface MenuGenerationRequest {
   date: string; // YYYY-MM-DD
   dayOfWeek?: string; // Auto-calculated from date if not provided
   onboardingHash?: string;
+  cuisinePriority?: "normal" | "high";
 
   // User preferences (from onboarding)
   dietaryRestrictions: string[];
@@ -185,6 +186,7 @@ export type WeeklyMenuGenerationRequest = {
   avoidIngredients?: string[];
   maxPrepTime?: number;
   maxCookTime?: number;
+  cuisinePriority?: "normal" | "high";
   generateImage?: boolean;
   forceRegenerate?: boolean;
 };

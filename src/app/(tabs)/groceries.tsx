@@ -300,13 +300,6 @@ const getDayKey = (dateKey: string): keyof WeeklyRoutine => {
     return date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof WeeklyRoutine;
 };
 
-const isRoutineExcluded = (routine: RoutineDay | undefined) => {
-    if (!routine) {
-        return false;
-    }
-    return routine.excludeFromPlan === true || routine.type === 'off';
-};
-
 const loadOnboardingSnapshot = async (userId: string): Promise<OnboardingSnapshot | null> => {
     const localRaw = await AsyncStorage.getItem(STORAGE_KEY);
     const localStored = localRaw ? (JSON.parse(localRaw) as { data?: OnboardingSnapshot }) : null;
@@ -962,16 +955,7 @@ export default function GroceriesScreen() {
                     await Promise.all(workers);
                 };
                 const recipeTasks: Array<() => Promise<void>> = [];
-                const excludedDateKeys = new Set(
-                    weekDates
-                        .filter(({ dateKey }) => isRoutineExcluded(routines[getDayKey(dateKey)]))
-                        .map(({ dateKey }) => dateKey)
-                );
-
                 for (const { dateKey, label } of weekDates) {
-                    if (excludedDateKeys.has(dateKey)) {
-                        continue;
-                    }
                     for (const mealType of mealTypes) {
                         recipeTasks.push(async () => {
                             const recipes = await loadRecipesForMeal(dateKey, mealType);

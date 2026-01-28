@@ -30,6 +30,10 @@ import { fetchMenuDecision, type MenuDecisionWithLinks } from '../../utils/menu-
 import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
 import { clearWeeklyRegenerationRequest, loadWeeklyRegenerationRequest } from '../../utils/week-regeneration';
 import { setMenuChangeSignal } from '../../utils/menu-change-signal';
+import { loadPremiumStatus } from '../../utils/premium-status';
+import { requestRewardedAd } from '../../utils/rewarded-ads';
+import { getWeeklyRecipeViews, incrementWeeklyRecipeViews } from '../../utils/usage-limits';
+import { monetizationConfig } from '../../config/monetization';
 import type { MenuDecision, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
@@ -91,6 +95,7 @@ type WeeklyMenuRequest = {
     avoidIngredients?: string[];
     maxPrepTime?: number;
     maxCookTime?: number;
+    cuisinePriority?: 'normal' | 'high';
     generateImage?: boolean;
     forceRegenerate?: boolean;
 };
@@ -588,7 +593,7 @@ export default function TodayScreen() {
         [menuBundles]
     );
     const hasAnyMenuForDay = hasMenuByType.breakfast || hasMenuByType.lunch || hasMenuByType.dinner;
-    const showHolidayCta = isHoliday && !hasAnyMenuForDay;
+    const showHolidayEmpty = isHoliday && !hasAnyMenuForDay;
     const displayMealPlan = useMemo(
         () => ({
             breakfast: mealPlan.breakfast || hasMenuByType.breakfast,
@@ -802,8 +807,9 @@ export default function TodayScreen() {
                 const routines = resolvedSnapshot?.routines ?? DEFAULT_ROUTINES;
                 const routineForDay = routines[dayKey];
                 const planForDay = buildMealPlan(routineForDay);
+                const shouldFetchHolidayMenu = Boolean(routineForDay?.excludeFromPlan || routineForDay?.type === 'off');
                 const mealTypes = (['breakfast', 'lunch', 'dinner'] as MealSectionKey[]).filter(
-                    (mealType) => planForDay[mealType]
+                    (mealType) => planForDay[mealType] || (shouldFetchHolidayMenu && mealType === 'dinner')
                 );
                 const weekStart = resolveWeekStartKey(activeDate);
                 const weeklyCache = await loadWeeklyMenuCache(userId, onboardingHash);
@@ -1145,6 +1151,19 @@ export default function TodayScreen() {
             return;
         }
 
+        const userId = userState.user.uid;
+        const isPremium = await loadPremiumStatus(userId);
+        if (!isPremium) {
+            const allowed = await requestRewardedAd({
+                title: 'Menüyü değiştirmek için reklam izle',
+                message: 'Devam etmek için kısa bir reklam izleyebilirsin.',
+            });
+            if (!allowed) {
+                setChangeMenuError('Reklam izlenmeden devam edilemez.');
+                return;
+            }
+        }
+
         setChangeMenuError(null);
         setIsRegeneratingMenu(true);
 
@@ -1155,7 +1174,6 @@ export default function TodayScreen() {
         setError(null);
 
         try {
-            const userId = userState.user.uid;
             const weekStart = resolveWeekStartKey(selectedDay.date);
             let onboardingOverride = buildOverrideSnapshot(resolvedSnapshot, {
                 cuisineKey: changeReason === 'cuisine' ? selectedCuisine : null,
@@ -1167,7 +1185,7 @@ export default function TodayScreen() {
                 return;
             }
 
-            if (changeSheetMode === 'create' && isHoliday) {
+            if (isHoliday) {
                 const dayKey = getDayKey(selectedDay.date);
                 const fallbackRoutine = DEFAULT_ROUTINES[dayKey];
                 const currentRoutine = onboardingOverride.routines?.[dayKey] ?? fallbackRoutine;
@@ -1200,6 +1218,7 @@ export default function TodayScreen() {
                     ...(usePantryOnly && requiredList.length === 0 ? { pantryOnly: true } : {}),
                     ...(requiredList.length ? { requiredIngredients: requiredList } : {}),
                     ...(dislikedList.length ? { avoidIngredients: dislikedList } : {}),
+                    ...(changeReason === 'cuisine' ? { cuisinePriority: 'high' } : {}),
                     ...(changeReason === 'quick'
                         ? { maxPrepTime: QUICK_PREP_MAX, maxCookTime: QUICK_COOK_MAX }
                         : {}),
@@ -1239,8 +1258,23 @@ export default function TodayScreen() {
 
     const displayName = userName.trim() ? `${greeting} ${userName}` : greeting;
 
-    const handleOpenMeal = (mealType: MealSectionKey, course: MenuRecipeCourse, recipeName: string) => {
+    const handleOpenMeal = async (mealType: MealSectionKey, course: MenuRecipeCourse, recipeName: string) => {
         const date = selectedDay?.key ?? buildDateKey(new Date());
+        const userId = userState.user?.uid ?? 'anonymous';
+        const isPremium = await loadPremiumStatus(userId);
+        if (!isPremium) {
+            const usedCount = await getWeeklyRecipeViews(userId, date);
+            if (usedCount >= monetizationConfig.limits.freeWeeklyRecipeViews) {
+                const allowed = await requestRewardedAd({
+                    title: 'Tarif için reklam izle',
+                    message: 'Haftalık ücretsiz tarif hakkın doldu. İzleyip devam edebilirsin.',
+                });
+                if (!allowed) {
+                    return;
+                }
+            }
+            await incrementWeeklyRecipeViews(userId, date, 1);
+        }
         router.push({
             pathname: '/cookbook/[course]',
             params: { course, mealType, date, recipeName },
@@ -1330,7 +1364,7 @@ export default function TodayScreen() {
                         <Text style={styles.dayTitle}>{selectedDayLabel}</Text>
                         <Text style={styles.daySubtitle}>{selectedDaySubtitle}</Text>
                     </View>
-                    {!showHolidayCta ? (
+                    {!showHolidayEmpty ? (
                         <TouchableOpacity
                             style={[
                                 styles.changeMenuButton,
@@ -1352,42 +1386,35 @@ export default function TodayScreen() {
                     ) : null}
                 </View>
 
-                {isHoliday ? (
-                    showHolidayCta ? (
-                        <View style={styles.holidayEmpty}>
+                {showHolidayEmpty ? (
+                    <View style={styles.holidayEmpty}>
+                        <Image
+                            source={require('../../../assets/vacation.png')}
+                            style={styles.holidayEmptyImage}
+                            resizeMode="contain"
+                        />
+                        <Text style={styles.holidayEmptyTitle}>Omnoo tatilde</Text>
+                        <Text style={styles.holidayEmptySubtitle}>
+                            Bu günü tatil olarak işaretlediğin için Omnoo menü oluşturmadı.
+                        </Text>
+                        <TouchableOpacity
+                            style={[
+                                styles.holidayCta,
+                                (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
+                                    styles.changeMenuButtonDisabled,
+                            ]}
+                            onPress={() => handleOpenChangeSheet('create')}
+                            disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
+                            activeOpacity={0.85}
+                        >
                             <Image
-                                source={require('../../../assets/vacation.png')}
-                                style={styles.holidayEmptyImage}
+                                source={require('../../../assets/pw-chef.png')}
+                                style={styles.holidayCtaIcon}
                                 resizeMode="contain"
                             />
-                            <Text style={styles.holidayEmptyTitle}>Omnoo tatilde</Text>
-                            <Text style={styles.holidayEmptySubtitle}>
-                                Bu günü tatil olarak işaretlediğin için Omnoo menü oluşturmadı.
-                            </Text>
-                            <TouchableOpacity
-                                style={[
-                                    styles.holidayCta,
-                                    (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
-                                        styles.changeMenuButtonDisabled,
-                                ]}
-                                onPress={() => handleOpenChangeSheet('create')}
-                                disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
-                                activeOpacity={0.85}
-                            >
-                                <Image
-                                    source={require('../../../assets/pw-chef.png')}
-                                    style={styles.holidayCtaIcon}
-                                    resizeMode="contain"
-                                />
-                                <Text style={styles.holidayCtaText}>Menü oluştur</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ) : (
-                        <View style={styles.holidayCard}>
-                            <MaterialCommunityIcons name="calendar-star" size={18} color={colors.accent} />
-                            <Text style={styles.holidayText}>Bu günü tatil olarak işaretledin.</Text>
-                        </View>
-                    )
+                            <Text style={styles.holidayCtaText}>Menü oluştur</Text>
+                        </TouchableOpacity>
+                    </View>
                 ) : null}
 
                 {showReasoning ? (
@@ -1848,22 +1875,6 @@ const styles = StyleSheet.create({
     changeMenuText: {
         ...typography.caption,
         color: colors.textSecondary,
-    },
-    holidayCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.sm,
-        backgroundColor: colors.surface,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: colors.border,
-        padding: spacing.md,
-        ...shadows.sm,
-    },
-    holidayText: {
-        ...typography.bodySmall,
-        color: colors.textSecondary,
-        flex: 1,
     },
     holidayEmpty: {
         alignItems: 'center',

@@ -25,6 +25,7 @@ export function onboardingToMenuRequest(
     maxPrepTime?: number;
     maxCookTime?: number;
     generateImage?: boolean;
+    cuisinePriority?: "normal" | "high";
     mealType?: MealType;
     onboardingHash?: string;
     previousPreferences?: {
@@ -73,6 +74,7 @@ export function onboardingToMenuRequest(
     date: routineDate,
     dayOfWeek,
     onboardingHash: options?.onboardingHash,
+    cuisinePriority: options?.cuisinePriority,
 
     // User preferences from onboarding
     dietaryRestrictions: onboarding.dietary.restrictions || [],

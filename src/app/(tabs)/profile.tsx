@@ -8,6 +8,7 @@ import firestore, { doc, getDoc, updateDoc, setDoc, serverTimestamp } from '@rea
 import { useRouter } from 'expo-router';
 import { TabScreenHeader } from '../../components/ui';
 import { useUser } from '../../contexts/user-context';
+import { usePremium } from '../../contexts/premium-context';
 import type { OnboardingData, RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -153,6 +154,7 @@ const EQUIPMENT: LabeledEmojiItem[] = [
 export default function ProfileScreen() {
     const router = useRouter();
     const { state: userState } = useUser();
+    const { isPremium, presentPaywall, restorePurchases } = usePremium();
     const [onboardingData, setOnboardingData] = useState<Partial<OnboardingData> | null>(null);
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
     const [isEditingName, setIsEditingName] = useState(false);
@@ -534,6 +536,31 @@ export default function ProfileScreen() {
 
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Ayarlar</Text>
+
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => {
+                                if (isPremium) {
+                                    restorePurchases();
+                                } else {
+                                    presentPaywall();
+                                }
+                            }}
+                            activeOpacity={0.9}
+                        >
+                            <View style={styles.menuItemContent}>
+                                <View style={styles.menuIconBadge}>
+                                    <MaterialCommunityIcons name="star-circle" size={18} color={colors.primary} />
+                                </View>
+                                <View>
+                                    <Text style={styles.menuItemText}>Üyelik</Text>
+                                    <Text style={styles.menuItemSubtext}>
+                                        {isPremium ? 'Omnoo Unlimited' : 'Ücretsiz plan'}
+                                    </Text>
+                                </View>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
 
                         <TouchableOpacity style={styles.menuItem} onPress={handleResetOnboarding} activeOpacity={0.9}>
                             <View style={styles.menuItemContent}>
@@ -985,6 +1012,11 @@ const styles = StyleSheet.create({
         ...typography.body,
         color: colors.textPrimary,
         fontWeight: '600',
+    },
+    menuItemSubtext: {
+        ...typography.caption,
+        color: colors.textSecondary,
+        marginTop: 2,
     },
     loadingContainer: {
         flex: 1,

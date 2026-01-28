@@ -1223,6 +1223,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
         avoidItemNames: cleanedAvoidItemNames.length ? cleanedAvoidItemNames : undefined,
         maxPrepTime: payload.maxPrepTime,
         maxCookTime: payload.maxCookTime,
+        cuisinePriority: payload.cuisinePriority,
         generateImage: payload.generateImage,
         onboardingHash: payload.onboardingHash,
       });

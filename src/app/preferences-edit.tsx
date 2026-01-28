@@ -32,6 +32,8 @@ import {
     type PreferenceChange,
     type RoutineChange,
 } from '../utils/week-regeneration';
+import { loadPremiumStatus } from '../utils/premium-status';
+import { requestRewardedAd } from '../utils/rewarded-ads';
 
 const STORAGE_KEY = '@smart_meal_planner:onboarding';
 const HEADER_HEIGHT = 56;
@@ -682,6 +684,16 @@ export default function PreferencesEditScreen() {
         setSaveIntent('regenerate');
         setIsSaving(true);
         try {
+            const isPremium = await loadPremiumStatus(userId);
+            if (!isPremium) {
+                const allowed = await requestRewardedAd({
+                    title: 'Haftalık menüyü yenilemek için reklam izle',
+                    message: 'Devam etmek için kısa bir reklam izlemen gerekiyor.',
+                });
+                if (!allowed) {
+                    return;
+                }
+            }
             await requestWeeklyRegeneration(snapshotToSave, routineChangesToPersist, preferenceChangesToPersist);
             setPendingSaveSnapshot(null);
             setPendingRegenerationChanges(null);

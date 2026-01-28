@@ -48,6 +48,45 @@ const recipesMatchMenu = (menu: MenuDecisionWithLinks, recipes: MenuRecipe[]) =>
     const recipeKeys = new Set(recipes.map((item) => normalizeMenuKey(item.course, item.name)));
     return menu.items.every((item) => recipeKeys.has(normalizeMenuKey(item.course, item.name)));
 };
+const applyRecipeMetrics = (menu: MenuDecisionWithLinks, recipes: MenuRecipe[]): MenuDecisionWithLinks => {
+    if (!recipes.length) {
+        return menu;
+    }
+
+    const metrics = new Map<string, { timeMinutes?: number; calories?: number }>();
+    recipes.forEach((recipe) => {
+        const timeMinutes =
+            typeof recipe.totalTimeMinutes === 'number' && recipe.totalTimeMinutes > 0
+                ? recipe.totalTimeMinutes
+                : undefined;
+        const calories =
+            typeof recipe.macrosPerServing?.calories === 'number' && recipe.macrosPerServing.calories > 0
+                ? recipe.macrosPerServing.calories
+                : undefined;
+        if (timeMinutes || calories) {
+            metrics.set(normalizeMenuKey(recipe.course, recipe.name), { timeMinutes, calories });
+        }
+    });
+
+    if (!metrics.size) {
+        return menu;
+    }
+
+    return {
+        ...menu,
+        items: menu.items.map((item) => {
+            const metric = metrics.get(normalizeMenuKey(item.course, item.name));
+            if (!metric) {
+                return item;
+            }
+            return {
+                ...item,
+                ...(typeof metric.timeMinutes === 'number' ? { timeMinutes: metric.timeMinutes } : {}),
+                ...(typeof metric.calories === 'number' ? { calories: metric.calories } : {}),
+            };
+        }),
+    };
+};
 const buildFavoriteRecipeId = (course: MenuRecipeCourse, name: string) =>
     `${course}-${name}`
         .toLowerCase()
@@ -402,8 +441,9 @@ export default function CookbookDetailScreen() {
                 ) => {
                     try {
                         const cachedAt = new Date().toISOString();
+                        const mergedMenu = applyRecipeMetrics(menuDecision, menuRecipes.recipes);
                         const cacheData: MenuCache = {
-                            menu: menuDecision,
+                            menu: mergedMenu,
                             recipes: menuRecipes,
                             cachedAt,
                             onboardingHash: onboardingHash ?? undefined,

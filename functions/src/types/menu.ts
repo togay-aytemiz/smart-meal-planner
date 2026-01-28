@@ -35,6 +35,8 @@ export interface MenuDecision {
     course: "main" | "side" | ExtraDishType;
     name: string;
     recipeId?: string;
+    timeMinutes?: number;
+    calories?: number;
   }>;
 }
 
@@ -184,4 +186,5 @@ export type WeeklyMenuGenerationRequest = {
   maxPrepTime?: number;
   maxCookTime?: number;
   generateImage?: boolean;
+  forceRegenerate?: boolean;
 };

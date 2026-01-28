@@ -159,12 +159,14 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   const rules: string[] = [
     "- Onboarding ve gün bağlamı esas; soru sorma.",
     "- Menü Mantık Matrisi'ne uygun, uyumlu kombinasyon kur.",
-    "- items alanı { course, name } içeren 1-4 öğelik bir dizi olmalı.",
+    "- items alanı { course, name, timeMinutes, calories } içeren 1-4 öğelik bir dizi olmalı.",
     "- Yemek adları Türkçe olmalı.",
     "- Diyet kısıtları, alerjiler ve avoidIngredients listesi ihlal edilmemeli.",
     "- existingPantry verilmişse önceliklendir.",
     "- Zaman tercihini ve maxPrepTime/maxCookTime sınırlarını dikkate al.",
     "- Ekipman listesi yoksa temel mutfak ekipmanlarını varsay.",
+    "- timeMinutes her öğe için tek başına hazırlanma+pişirme tahminidir (dakika).",
+    "- calories her öğe için kişi başı kcal tahminidir.",
   ];
 
   if (requiredIngredients?.length) {
@@ -201,6 +203,12 @@ export function buildMenuPrompt(request: MenuGenerationRequest): string {
   rules.push(
     "- Mutfak seçimi: Kullanıcının mutfak tercihleri varsa onlardan birini seç; yoksa Türk mutfağı seç."
   );
+  if (resolvedCuisinePreferences.length === 1) {
+    rules.push(
+      `- ZORUNLU MUTFAK: "${resolvedCuisinePreferences[0]}". Başka mutfak önerme.`
+    );
+    rules.push("- Ana yemek ve yan/extra, seçilen mutfağa uygun olmalı.");
+  }
   if (prefersNonTurkishCuisine) {
     rules.push(
       "- Tercihler içinde Türk olmayan bir seçenek varsa mutlaka onlardan birini seç; Türk mutfağına dönme."

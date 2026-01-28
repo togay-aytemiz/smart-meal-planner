@@ -8,7 +8,13 @@ type FirestoreMenuDoc = {
     reasoning?: string;
     onboardingHash?: string | null;
     items:
-        | Array<{ course: MenuRecipeCourse; name: string; recipeId?: string | null }>
+        | Array<{
+            course: MenuRecipeCourse;
+            name: string;
+            recipeId?: string | null;
+            timeMinutes?: number;
+            calories?: number;
+        }>
         | {
             main: { name: string; recipeId?: string | null };
             side: { name: string; recipeId?: string | null };
@@ -42,6 +48,8 @@ export type MenuDecisionWithLinks = Omit<MenuDecision, 'items'> & {
         course: MenuRecipeCourse;
         name: string;
         recipeId?: string | null;
+        timeMinutes?: number;
+        calories?: number;
     }>;
 };
 
@@ -58,6 +66,8 @@ type ResolvedMenuItem = {
     course: MenuRecipeCourse;
     name: string;
     recipeId?: string | null;
+    timeMinutes?: number;
+    calories?: number;
 };
 
 const resolveMenuItems = (
@@ -72,6 +82,8 @@ const resolveMenuItems = (
             const course = normalizeCourse(item.course);
             const name = item.name;
             const recipeId = typeof item.recipeId === 'string' ? item.recipeId : null;
+            const timeMinutes = typeof item.timeMinutes === 'number' ? item.timeMinutes : undefined;
+            const calories = typeof item.calories === 'number' ? item.calories : undefined;
             if (!course || !name) {
                 continue;
             }
@@ -79,9 +91,9 @@ const resolveMenuItems = (
                 continue;
             }
             if (recipeId) {
-                normalized.push({ course, name, recipeId });
+                normalized.push({ course, name, recipeId, timeMinutes, calories });
             } else {
-                normalized.push({ course, name });
+                normalized.push({ course, name, timeMinutes, calories });
             }
         }
 
@@ -203,6 +215,8 @@ export const fetchMenuBundle = async (
         items: resolvedItems.map((item) => ({
             course: item.course,
             name: item.name,
+            ...(typeof item.timeMinutes === 'number' ? { timeMinutes: item.timeMinutes } : {}),
+            ...(typeof item.calories === 'number' ? { calories: item.calories } : {}),
         })),
     };
 
@@ -257,6 +271,8 @@ export const fetchMenuDecision = async (
             course: item.course,
             name: item.name,
             ...(item.recipeId ? { recipeId: item.recipeId } : {}),
+            ...(typeof item.timeMinutes === 'number' ? { timeMinutes: item.timeMinutes } : {}),
+            ...(typeof item.calories === 'number' ? { calories: item.calories } : {}),
         })),
     };
 };

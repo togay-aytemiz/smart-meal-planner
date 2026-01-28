@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { TabScreenHeader, Input, Button } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -13,6 +14,7 @@ import { useUser } from '../../contexts/user-context';
 import { fetchMenuBundle, fetchMenuDecision, type MenuDecisionWithLinks } from '../../utils/menu-storage';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
 import { checkWeeklyMenuCompleteness, subscribeToMenuGenerationStatus, getWeekStartDate, MenuGenerationStatus } from '../../utils/menu-generation-status';
+import { consumeMenuChangeSignal } from '../../utils/menu-change-signal';
 import type { MenuMealType, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
@@ -584,6 +586,7 @@ export default function GroceriesScreen() {
     const pollCleanupRef = useRef<(() => void) | null>(null);
     const loadInProgressRef = useRef(false);
     const clearGeneratingAfterLoadRef = useRef(false);
+    const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [isCheckingOut, setIsCheckingOut] = useState(false);
     const floatingButtonAnim = useRef(new Animated.Value(0)).current;
@@ -608,6 +611,7 @@ export default function GroceriesScreen() {
         const userId = userState.user?.uid;
         if (!userId) {
             setLoading(false);
+            setRefreshing(false);
             return;
         }
 
@@ -649,6 +653,49 @@ export default function GroceriesScreen() {
                     const recipeKeys = new Set(recipes.map((item) => normalizeMenuKey(item.course, item.name)));
                     return menu.items.every((item) => recipeKeys.has(normalizeMenuKey(item.course, item.name)));
                 };
+                const applyRecipeMetrics = (
+                    menu: MenuDecisionWithLinks,
+                    recipes: MenuRecipe[]
+                ): MenuDecisionWithLinks => {
+                    if (!recipes.length) {
+                        return menu;
+                    }
+
+                    const metrics = new Map<string, { timeMinutes?: number; calories?: number }>();
+                    recipes.forEach((recipe) => {
+                        const timeMinutes =
+                            typeof recipe.totalTimeMinutes === 'number' && recipe.totalTimeMinutes > 0
+                                ? recipe.totalTimeMinutes
+                                : undefined;
+                        const calories =
+                            typeof recipe.macrosPerServing?.calories === 'number' &&
+                            recipe.macrosPerServing.calories > 0
+                                ? recipe.macrosPerServing.calories
+                                : undefined;
+                        if (timeMinutes || calories) {
+                            metrics.set(normalizeMenuKey(recipe.course, recipe.name), { timeMinutes, calories });
+                        }
+                    });
+
+                    if (!metrics.size) {
+                        return menu;
+                    }
+
+                    return {
+                        ...menu,
+                        items: menu.items.map((item) => {
+                            const metric = metrics.get(normalizeMenuKey(item.course, item.name));
+                            if (!metric) {
+                                return item;
+                            }
+                            return {
+                                ...item,
+                                ...(typeof metric.timeMinutes === 'number' ? { timeMinutes: metric.timeMinutes } : {}),
+                                ...(typeof metric.calories === 'number' ? { calories: metric.calories } : {}),
+                            };
+                        }),
+                    };
+                };
 
                 const persistRecipeCaches = async (
                     dateKey: string,
@@ -658,8 +705,9 @@ export default function GroceriesScreen() {
                 ) => {
                     try {
                         const cachedAt = new Date().toISOString();
+                        const mergedMenu = applyRecipeMetrics(menuDecision, menuRecipes.recipes);
                         const cacheData: MenuCache = {
-                            menu: menuDecision,
+                            menu: mergedMenu,
                             recipes: menuRecipes,
                             cachedAt,
                             onboardingHash: onboardingHash ?? undefined,
@@ -980,6 +1028,7 @@ export default function GroceriesScreen() {
                     loadInProgressRef.current = false;
                     setLoading(false);
                     setRefreshing(false);
+                    setHasLoadedOnce(true);
                 }
             }
         };
@@ -1032,9 +1081,31 @@ export default function GroceriesScreen() {
         );
     }, [userState.user?.uid]);
 
-    useEffect(() => {
-        fetchWeeklyGroceries();
-    }, [fetchWeeklyGroceries]);
+    useFocusEffect(
+        useCallback(() => {
+            let isActive = true;
+
+            const maybeRefresh = async () => {
+                if (!hasLoadedOnce) {
+                    setRefreshing(true);
+                    fetchWeeklyGroceries();
+                    return;
+                }
+
+                const signal = await consumeMenuChangeSignal();
+                if (signal && isActive) {
+                    setRefreshing(true);
+                    fetchWeeklyGroceries();
+                }
+            };
+
+            maybeRefresh();
+
+            return () => {
+                isActive = false;
+            };
+        }, [fetchWeeklyGroceries, hasLoadedOnce])
+    );
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);

@@ -303,17 +303,27 @@ const buildMenuDocument = ({
 
   const menuItems = menu.items.map((item) => {
     const recipeId = resolveRecipeId(item);
-    if (recipeId) {
-      return {
-        course: item.course,
-        name: item.name,
-        recipeId,
-      };
-    }
-    return {
+    const payload: {
+      course: string;
+      name: string;
+      recipeId?: string;
+      timeMinutes?: number;
+      calories?: number;
+    } = {
       course: item.course,
       name: item.name,
     };
+
+    if (typeof item.timeMinutes === "number") {
+      payload.timeMinutes = item.timeMinutes;
+    }
+    if (typeof item.calories === "number") {
+      payload.calories = item.calories;
+    }
+    if (recipeId) {
+      payload.recipeId = recipeId;
+    }
+    return payload;
   });
 
   const recipeIds = menuItems
@@ -1001,6 +1011,30 @@ export const generateOpenAIRecipe = onCall(async (request) => {
       userId,
     });
 
+    const recipeMetrics = new Map<string, { timeMinutes?: number; calories?: number }>();
+    for (const recipe of menuRecipes.recipes) {
+      const key = buildMenuItemKey(recipe.course, recipe.name);
+      recipeMetrics.set(key, {
+        timeMinutes: recipe.totalTimeMinutes,
+        calories: recipe.macrosPerServing?.calories,
+      });
+    }
+
+    if (Array.isArray(menuDoc.items)) {
+      menuDoc.items = menuDoc.items.map((item) => {
+        const key = buildMenuItemKey(item.course, item.name);
+        const metrics = recipeMetrics.get(key);
+        if (!metrics) {
+          return item;
+        }
+        return {
+          ...item,
+          ...(typeof metrics.timeMinutes === "number" ? { timeMinutes: metrics.timeMinutes } : {}),
+          ...(typeof metrics.calories === "number" ? { calories: metrics.calories } : {}),
+        };
+      });
+    }
+
     batch.set(menuRef, menuDoc, { merge: true });
     await batch.commit();
 
@@ -1126,9 +1160,9 @@ export const generateWeeklyMenu = onCall(async (request) => {
       snap.exists ? isMenuDocValid(snap.data(), expectedOnboardingHash) : false
     );
 
-    if (allMenusExist) {
+    if (!payload.forceRegenerate && allMenusExist) {
       try {
-        await updateMenuGenerationStatus(
+        await safeUpdateMenuGenerationStatus(
           userId,
           weekStart,
           "completed",

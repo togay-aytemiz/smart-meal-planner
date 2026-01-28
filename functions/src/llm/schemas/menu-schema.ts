@@ -18,8 +18,20 @@ const MENU_ITEMS_SCHEMA = {
         type: "string",
         description: "Yemek adı (Türkçe).",
       },
+      timeMinutes: {
+        type: "number",
+        minimum: 5,
+        maximum: 120,
+        description: "Bu öğe için tahmini toplam süre (dakika).",
+      },
+      calories: {
+        type: "number",
+        minimum: 50,
+        maximum: 1200,
+        description: "Kişi başı tahmini kalori (kcal).",
+      },
     },
-    required: ["course", "name"],
+    required: ["course", "name", "timeMinutes", "calories"],
   },
 } as const;
 

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type ComponentProps } from 'react';
 import {
     Animated,
-    ActivityIndicator,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -30,6 +29,7 @@ import { formatLongDateTr, getGreeting } from '../../utils/dates';
 import { fetchMenuDecision, type MenuDecisionWithLinks } from '../../utils/menu-storage';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
 import { clearWeeklyRegenerationRequest, loadWeeklyRegenerationRequest } from '../../utils/week-regeneration';
+import { setMenuChangeSignal } from '../../utils/menu-change-signal';
 import type { MenuDecision, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
@@ -92,6 +92,7 @@ type WeeklyMenuRequest = {
     maxPrepTime?: number;
     maxCookTime?: number;
     generateImage?: boolean;
+    forceRegenerate?: boolean;
 };
 
 type WeeklyMenuResponse = {
@@ -410,7 +411,8 @@ const buildMealItems = (menu: MenuDecisionWithLinks): MealItem[] => {
             return {
                 id: `${item.course}-${item.name}`,
                 title: item.name,
-                timeMinutes: perItemTime,
+                timeMinutes: typeof item.timeMinutes === 'number' ? item.timeMinutes : perItemTime,
+                calories: typeof item.calories === 'number' ? item.calories : undefined,
                 category: courseMeta.label,
                 categoryIcon: courseMeta.icon,
                 icon: courseMeta.icon,
@@ -1026,9 +1028,6 @@ export default function TodayScreen() {
     };
 
     const closeChangeSheet = (onClosed?: () => void) => {
-        if (isRegeneratingMenu) {
-            return;
-        }
         Animated.parallel([
             Animated.timing(sheetOpacity, {
                 toValue: 0,
@@ -1052,6 +1051,15 @@ export default function TodayScreen() {
     const handleCloseChangeSheet = () => {
         closeChangeSheet();
     };
+
+    const closeChangeSheetAsync = () =>
+        new Promise<void>((resolve) => {
+            if (!changeSheetVisible) {
+                resolve();
+                return;
+            }
+            closeChangeSheet(resolve);
+        });
 
     const handleTogglePantryOnly = () => {
         if (pantryOnlyDisabled) {
@@ -1102,6 +1110,12 @@ export default function TodayScreen() {
         setChangeMenuError(null);
         setIsRegeneratingMenu(true);
 
+        await closeChangeSheetAsync();
+
+        setLoading(true);
+        setIsInitialLoading(true);
+        setError(null);
+
         try {
             const userId = userState.user.uid;
             const weekStart = resolveWeekStartKey(selectedDay.date);
@@ -1135,6 +1149,7 @@ export default function TodayScreen() {
                         ? { maxPrepTime: QUICK_PREP_MAX, maxCookTime: QUICK_COOK_MAX }
                         : {}),
                     generateImage: false,
+                    forceRegenerate: true,
                 },
             });
 
@@ -1150,11 +1165,16 @@ export default function TodayScreen() {
                 await AsyncStorage.multiRemove(keysToRemove);
             }
 
-            closeChangeSheet(() => {
-                setRefreshKey((prev) => prev + 1);
+            await setMenuChangeSignal({
+                updatedAt: new Date().toISOString(),
+                dateKey: selectedDay.key,
+                source: 'manual',
             });
+
+            setRefreshKey((prev) => prev + 1);
         } catch (err) {
-            setChangeMenuError(getFunctionsErrorMessage(err));
+            setError(getFunctionsErrorMessage(err));
+            setIsInitialLoading(false);
         } finally {
             setIsRegeneratingMenu(false);
         }
@@ -1578,12 +1598,6 @@ export default function TodayScreen() {
                             </ScrollView>
 
                             <View style={styles.sheetFooter}>
-                                {isRegeneratingMenu ? (
-                                    <View style={styles.sheetLoading}>
-                                        <ActivityIndicator size="small" color={colors.primary} />
-                                        <Text style={styles.sheetLoadingText}>Menü güncelleniyor...</Text>
-                                    </View>
-                                ) : null}
                                 <Button
                                     title="Yeniden Oluştur"
                                     onPress={handleRegenerateMenu}
@@ -2053,16 +2067,5 @@ const styles = StyleSheet.create({
     },
     sheetFooter: {
         paddingTop: spacing.md,
-    },
-    sheetLoading: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.sm,
-        marginBottom: spacing.sm,
-    },
-    sheetLoadingText: {
-        ...typography.bodySmall,
-        color: colors.textSecondary,
     },
 });

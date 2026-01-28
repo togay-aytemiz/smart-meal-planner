@@ -41,6 +41,8 @@ export type MenuDecision = {
         course: MenuRecipeCourse;
         name: string;
         recipeId?: string | null;
+        timeMinutes?: number;
+        calories?: number;
     }>;
 };
 

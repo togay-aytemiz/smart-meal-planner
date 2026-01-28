@@ -1,9 +1,10 @@
 import { View, Text, StyleSheet, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
+import { Button } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
@@ -38,8 +39,10 @@ export default function ProcessingScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
     const { state: userState } = useUser();
-    const { startLoading, waitForFirstMeal, hasStarted } = useSampleMenu();
+    const { startLoading, waitForFirstMeal, hasStarted, reset } = useSampleMenu();
     const [messageIndex, setMessageIndex] = useState(0);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [isRetrying, setIsRetrying] = useState(false);
     const hasNavigatedRef = useRef(false);
 
     // Animations
@@ -73,44 +76,61 @@ export default function ProcessingScreen() {
         };
     }, []);
 
+    const attemptLoad = useCallback(async () => {
+        setLoadError(null);
+
+        // Load onboarding snapshot
+        const userId = userState.user?.uid ?? 'anonymous';
+        let snapshot: OnboardingSnapshot | null = (state.data ?? {}) as OnboardingSnapshot;
+
+        if (userId !== 'anonymous') {
+            try {
+                const userDoc = await getDoc(doc(firestore(), 'Users', userId));
+                const data = userDoc.data();
+                const remoteSnapshot = data?.onboarding as OnboardingSnapshot | undefined;
+                snapshot = remoteSnapshot ?? snapshot;
+            } catch (readError) {
+                console.warn('Failed to load onboarding data:', readError);
+            }
+        }
+
+        // Start loading meals in parallel
+        startLoading(userId, snapshot);
+
+        // Wait for first meal to be ready
+        const success = await waitForFirstMeal();
+        setIsRetrying(false);
+
+        if (!success) {
+            setLoadError('Menü hazırlanamadı. Lütfen tekrar deneyin.');
+            return;
+        }
+
+        // Navigate to analysis
+        if (!hasNavigatedRef.current) {
+            hasNavigatedRef.current = true;
+            dispatch({ type: 'SET_STEP', payload: 11 });
+            router.replace('/(onboarding)/analysis');
+        }
+    }, [dispatch, router, startLoading, state.data, userState.user?.uid, waitForFirstMeal]);
+
     // Start API loading and wait for first meal
     useEffect(() => {
         if (userState.isLoading || hasStarted || hasNavigatedRef.current) {
             return;
         }
 
-        const loadAndNavigate = async () => {
-            // Load onboarding snapshot
-            const userId = userState.user?.uid ?? 'anonymous';
-            let snapshot: OnboardingSnapshot | null = (state.data ?? {}) as OnboardingSnapshot;
+        attemptLoad();
+    }, [attemptLoad, hasStarted, userState.isLoading]);
 
-            if (userId !== 'anonymous') {
-                try {
-                    const userDoc = await getDoc(doc(firestore(), 'Users', userId));
-                    const data = userDoc.data();
-                    const remoteSnapshot = data?.onboarding as OnboardingSnapshot | undefined;
-                    snapshot = remoteSnapshot ?? snapshot;
-                } catch (readError) {
-                    console.warn('Failed to load onboarding data:', readError);
-                }
-            }
-
-            // Start loading meals in parallel
-            startLoading(userId, snapshot);
-
-            // Wait for first meal to be ready
-            const success = await waitForFirstMeal();
-
-            // Navigate to analysis
-            if (!hasNavigatedRef.current) {
-                hasNavigatedRef.current = true;
-                dispatch({ type: 'SET_STEP', payload: 11 });
-                router.replace('/(onboarding)/analysis');
-            }
-        };
-
-        loadAndNavigate();
-    }, [userState.isLoading, hasStarted]);
+    const handleRetry = () => {
+        if (isRetrying) {
+            return;
+        }
+        setLoadError(null);
+        setIsRetrying(true);
+        reset();
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -126,6 +146,27 @@ export default function ProcessingScreen() {
                 <Animated.Text style={[styles.message, { opacity: fadeAnim }]}>
                     {LOADING_MESSAGES[messageIndex]}
                 </Animated.Text>
+
+                {loadError ? (
+                    <View style={styles.errorContainer}>
+                        <Text style={styles.errorText}>{loadError}</Text>
+                        <View style={styles.errorActions}>
+                            <Button
+                                title="Tekrar Dene"
+                                onPress={handleRetry}
+                                loading={isRetrying}
+                                fullWidth
+                            />
+                            <Button
+                                title="Geri Dön"
+                                variant="secondary"
+                                onPress={() => router.back()}
+                                disabled={isRetrying}
+                                fullWidth
+                            />
+                        </View>
+                    </View>
+                ) : null}
             </Animated.View>
         </SafeAreaView>
     );
@@ -158,5 +199,20 @@ const styles = StyleSheet.create({
         color: colors.textPrimary,
         textAlign: 'center',
         minHeight: 60,
+    },
+    errorContainer: {
+        marginTop: spacing.lg,
+        width: '100%',
+        alignItems: 'center',
+    },
+    errorText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        textAlign: 'center',
+        marginBottom: spacing.md,
+    },
+    errorActions: {
+        width: '100%',
+        gap: spacing.sm,
     },
 });

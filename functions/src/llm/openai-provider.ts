@@ -24,6 +24,17 @@ const OPENAI_RETRY_OPTIONS = {
     jitterRatio: 0.2,
 };
 
+const buildProviderError = (prefix: string, error: unknown): Error => {
+    if (error instanceof Error) {
+        const message = error.message || "Unknown error";
+        if (!message.startsWith(prefix)) {
+            error.message = `${prefix}: ${message}`;
+        }
+        return error;
+    }
+    return new Error(`${prefix}: ${getErrorMessage(error)}`);
+};
+
 type OpenAIResponseFormat =
     | ReturnType<typeof getOpenAIMenuSchema>
     | ReturnType<typeof getOpenAIRecipeSchema>
@@ -113,7 +124,7 @@ export class OpenAIProvider {
             return text;
         } catch (error) {
             console.error("OpenAI API error:", error);
-            throw new Error(`OpenAI API failed: ${error}`);
+            throw buildProviderError("OpenAI API failed", error);
         }
     }
 
@@ -130,7 +141,7 @@ export class OpenAIProvider {
             );
         } catch (error) {
             console.error("OpenAI menu generation error:", error);
-            throw new Error(`OpenAI menu generation failed: ${error}`);
+            throw buildProviderError("OpenAI menu generation failed", error);
         }
     }
 
@@ -146,7 +157,7 @@ export class OpenAIProvider {
             );
         } catch (error) {
             console.error("OpenAI recipe generation error:", error);
-            throw new Error(`OpenAI recipe generation failed: ${error}`);
+            throw buildProviderError("OpenAI recipe generation failed", error);
         }
     }
 
@@ -161,7 +172,7 @@ export class OpenAIProvider {
             );
         } catch (error) {
             console.error("OpenAI pantry normalization error:", error);
-            throw new Error(`OpenAI pantry normalization failed: ${error}`);
+            throw buildProviderError("OpenAI pantry normalization failed", error);
         }
     }
 
@@ -176,7 +187,7 @@ export class OpenAIProvider {
             );
         } catch (error) {
             console.error("OpenAI grocery categorization error:", error);
-            throw new Error(`OpenAI grocery categorization failed: ${error}`);
+            throw buildProviderError("OpenAI grocery categorization failed", error);
         }
     }
 

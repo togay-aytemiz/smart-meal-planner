@@ -40,6 +40,17 @@ type GeminiGenerateContentResponse = {
     };
 };
 
+const buildProviderError = (prefix: string, error: unknown): Error => {
+    if (error instanceof Error) {
+        const message = error.message || "Unknown error";
+        if (!message.startsWith(prefix)) {
+            error.message = `${prefix}: ${message}`;
+        }
+        return error;
+    }
+    return new Error(`${prefix}: ${getErrorMessage(error)}`);
+};
+
 export class GeminiProvider {
     private apiKey: string;
     private model: string;
@@ -150,7 +161,7 @@ export class GeminiProvider {
             return await this.generateContent(prompt);
         } catch (error) {
             console.error("Gemini API error:", error);
-            throw new Error(`Gemini API failed: ${error}`);
+            throw buildProviderError("Gemini API failed", error);
         }
     }
 
@@ -187,7 +198,7 @@ export class GeminiProvider {
             }
         } catch (error) {
             console.error("Gemini menu generation error:", error);
-            throw new Error(`Gemini menu generation failed: ${error}`);
+            throw buildProviderError("Gemini menu generation failed", error);
         }
     }
 

@@ -461,6 +461,13 @@ const categorizeItems = (items: GroceryItem[]): GroceryCategory[] => {
 const normalizeName = (value: string) =>
     value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
 
+const toTitleCase = (value: string) =>
+    value
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/(?:^|\s|["'([{])+\S/g, (match) => match.toLocaleUpperCase('tr-TR'));
+
 const normalizeUnit = (value?: string) =>
     value?.trim().toLocaleLowerCase('tr-TR') ?? '';
 
@@ -568,6 +575,7 @@ export default function GroceriesScreen() {
     const [groceryCategories, setGroceryCategories] = useState<GroceryCategory[]>([]);
     const [loading, setLoading] = useState(true);
     const [newPantryItem, setNewPantryItem] = useState('');
+    const [pantryError, setPantryError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [showQuickAdd, setShowQuickAdd] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -1095,6 +1103,18 @@ export default function GroceriesScreen() {
             .map((item) => item.trim())
             .filter((item) => item.length > 0);
 
+    const getPantryErrorMessage = (error: unknown) => {
+        if (error && typeof error === 'object') {
+            const maybeError = error as { details?: { message?: string } | string; message?: string };
+            if (typeof maybeError.details === 'string') return maybeError.details;
+            if (maybeError.details && typeof maybeError.details === 'object' && maybeError.details.message) {
+                return maybeError.details.message;
+            }
+            if (maybeError.message) return maybeError.message;
+        }
+        return 'Ürün eklenirken bir hata oluştu. Lütfen tekrar deneyin.';
+    };
+
     const handleAddPantryItem = async () => {
         const tokens = tokenizeInput(newPantryItem);
         if (!tokens.length || isSaving) return;
@@ -1103,13 +1123,29 @@ export default function GroceriesScreen() {
         if (!userId) return;
 
         setIsSaving(true);
+        setPantryError(null);
         try {
-            const normalizePantry = functions.httpsCallable<
-                { items: string[] },
-                { success: boolean; items: Array<{ input: string; canonical: string; normalized: string }> }
-            >('normalizePantryItems');
-            const response = await normalizePantry({ items: tokens });
-            const normalizedItems = response.data?.items ?? [];
+            let normalizedItems: Array<{ canonical: string; normalized: string }> = [];
+            try {
+                const normalizePantry = functions.httpsCallable<
+                    { items: string[] },
+                    { success: boolean; items: Array<{ input: string; canonical: string; normalized: string }> }
+                >('normalizePantryItems');
+                const response = await normalizePantry({ items: tokens });
+                normalizedItems = (response.data?.items ?? []).map((item) => ({
+                    canonical: item.canonical?.trim() || '',
+                    normalized: item.normalized || normalizeName(item.canonical || ''),
+                }));
+            } catch (error) {
+                console.warn('Pantry normalization failed, using local fallback', error);
+                normalizedItems = tokens.map((item) => {
+                    const canonical = toTitleCase(item);
+                    return {
+                        canonical,
+                        normalized: normalizeName(canonical),
+                    };
+                });
+            }
 
             const merged = new Map<string, PantryItem>();
             pantryItems.forEach((item) => {
@@ -1127,19 +1163,25 @@ export default function GroceriesScreen() {
             });
 
             const updatedItems = Array.from(merged.values());
-            await setDoc(
-                doc(firestore(), 'Users', userId),
-                {
-                    pantry: {
-                        items: updatedItems,
+            try {
+                await setDoc(
+                    doc(firestore(), 'Users', userId),
+                    {
+                        pantry: {
+                            items: updatedItems,
+                            updatedAt: serverTimestamp(),
+                        },
                         updatedAt: serverTimestamp(),
                     },
-                    updatedAt: serverTimestamp(),
-                },
-                { merge: true }
-            );
-            setNewPantryItem('');
-            toggleQuickAdd(false);
+                    { merge: true }
+                );
+                setNewPantryItem('');
+                toggleQuickAdd(false);
+            } catch (error) {
+                console.warn('Failed to save pantry items:', error);
+                setPantryItems(updatedItems);
+                setPantryError(getPantryErrorMessage(error));
+            }
         } finally {
             setIsSaving(false);
         }
@@ -1148,6 +1190,9 @@ export default function GroceriesScreen() {
     const toggleQuickAdd = (nextState: boolean) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setShowQuickAdd(nextState);
+        if (!nextState) {
+            setPantryError(null);
+        }
     };
 
     const handleRemovePantryItem = async (normalizedName?: string) => {
@@ -1392,9 +1437,17 @@ export default function GroceriesScreen() {
                                         label="Yeni ürün ekle"
                                         placeholder="Örn: Nane, sirke, bulgur"
                                         value={newPantryItem}
-                                        onChangeText={setNewPantryItem}
+                                        onChangeText={(value) => {
+                                            setNewPantryItem(value);
+                                            if (pantryError) {
+                                                setPantryError(null);
+                                            }
+                                        }}
                                         autoCapitalize="sentences"
                                     />
+                                    {pantryError ? (
+                                        <Text style={styles.quickAddErrorText}>{pantryError}</Text>
+                                    ) : null}
                                     <View style={styles.quickAddActions}>
                                         <Button
                                             title="Vazgeç"
@@ -1594,6 +1647,11 @@ const styles = StyleSheet.create({
     quickAddText: {
         ...typography.label,
         color: colors.primary,
+    },
+    quickAddErrorText: {
+        ...typography.bodySmall,
+        color: colors.error,
+        marginTop: spacing.sm,
     },
     quickAddActions: {
         flexDirection: 'row',

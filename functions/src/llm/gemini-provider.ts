@@ -6,6 +6,7 @@
 import { getLLMConfig } from "../config/secrets";
 import { buildMenuSystemPrompt, buildMenuPrompt } from "./prompts/menu-prompt";
 import { MenuGenerationRequest } from "../types/menu";
+import { getErrorMessage, isRetryableError, withRetry } from "./retry";
 
 type GeminiContentPart = {
     text: string;
@@ -73,32 +74,63 @@ export class GeminiProvider {
             generationConfig,
         };
 
-        const response = await fetch(url, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
+        const timeoutMs = 25_000;
+        const retryOptions = {
+            maxAttempts: 2,
+            baseDelayMs: 500,
+            maxDelayMs: 2_000,
+            jitterRatio: 0.2,
+        };
+
+        const requestGemini = async () => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal,
+                });
+
+                const responseText = await response.text();
+                let responseJson: GeminiGenerateContentResponse | null = null;
+
+                try {
+                    responseJson = JSON.parse(responseText) as GeminiGenerateContentResponse;
+                } catch {
+                    responseJson = null;
+                }
+
+                if (!response.ok) {
+                    const statusSuffix = responseJson?.error?.status ? ` (${responseJson.error.status})` : "";
+                    const message =
+                        responseJson?.error?.message ||
+                        responseText ||
+                        response.statusText ||
+                        "Gemini API request failed";
+                    const error = new Error(`Gemini API failed${statusSuffix}: ${message}`);
+                    (error as { status?: number }).status = response.status;
+                    throw error;
+                }
+
+                return responseJson ?? { candidates: [] };
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        };
+
+        const responseJson = await withRetry(requestGemini, {
+            ...retryOptions,
+            shouldRetry: isRetryableError,
+            onRetry: (error, attempt, delayMs, maxAttempts) => {
+                console.warn(
+                    `[Gemini] retry ${attempt}/${maxAttempts} in ${delayMs}ms: ${getErrorMessage(error)}`
+                );
             },
-            body: JSON.stringify(payload),
         });
-
-        const responseText = await response.text();
-        let responseJson: GeminiGenerateContentResponse | null = null;
-
-        try {
-            responseJson = JSON.parse(responseText) as GeminiGenerateContentResponse;
-        } catch {
-            responseJson = null;
-        }
-
-        if (!response.ok) {
-            const status = responseJson?.error?.status ? ` (${responseJson.error.status})` : "";
-            const message =
-                responseJson?.error?.message ||
-                responseText ||
-                response.statusText ||
-                "Gemini API request failed";
-            throw new Error(`Gemini API failed${status}: ${message}`);
-        }
 
         const parts = responseJson?.candidates?.[0]?.content?.parts ?? [];
         const text = parts.map((part) => part.text ?? "").join("").trim();

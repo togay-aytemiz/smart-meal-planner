@@ -1,0 +1,91 @@
+[debug] [2026-01-28T06:33:18.264Z] ----------------------------------------------------------------------
+[debug] [2026-01-28T06:33:18.265Z] Command:       /usr/local/bin/node /Users/togay/.local/state/fnm_multishells/40712_1769512070982/bin/firebase deploy --only functions
+[debug] [2026-01-28T06:33:18.265Z] CLI Version:   15.2.1
+[debug] [2026-01-28T06:33:18.266Z] Platform:      darwin
+[debug] [2026-01-28T06:33:18.266Z] Node Version:  v20.11.0
+[debug] [2026-01-28T06:33:18.266Z] Time:          Wed Jan 28 2026 09:33:18 GMT+0300 (GMT+03:00)
+[debug] [2026-01-28T06:33:18.266Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-01-28T06:33:19.211Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-01-28T06:33:19.211Z] > authorizing via signed-in user (togayaytemiz@gmail.com)
+[debug] [2026-01-28T06:33:19.211Z] [iam] checking project smart-meal-planner-8d799 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-01-28T06:33:19.212Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:19.212Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:19.213Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/smart-meal-planner-8d799:testIamPermissions [none]
+[debug] [2026-01-28T06:33:19.213Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/smart-meal-planner-8d799:testIamPermissions x-goog-quota-user=projects/smart-meal-planner-8d799
+[debug] [2026-01-28T06:33:19.213Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smart-meal-planner-8d799:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-01-28T06:33:19.512Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/smart-meal-planner-8d799:testIamPermissions 200
+[debug] [2026-01-28T06:33:19.513Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smart-meal-planner-8d799:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-01-28T06:33:19.513Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:19.513Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:19.513Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/smart-meal-planner-8d799/serviceAccounts/smart-meal-planner-8d799@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-01-28T06:33:19.513Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/smart-meal-planner-8d799/serviceAccounts/smart-meal-planner-8d799@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-01-28T06:33:19.979Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/smart-meal-planner-8d799/serviceAccounts/smart-meal-planner-8d799@appspot.gserviceaccount.com:testIamPermissions 404
+[debug] [2026-01-28T06:33:19.979Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/smart-meal-planner-8d799/serviceAccounts/smart-meal-planner-8d799@appspot.gserviceaccount.com:testIamPermissions {"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}}
+[debug] [2026-01-28T06:33:19.979Z] [functions] service account IAM check errored, deploy may fail: Request to https://iam.googleapis.com/v1/projects/smart-meal-planner-8d799/serviceAccounts/smart-meal-planner-8d799@appspot.gserviceaccount.com:testIamPermissions had HTTP Error: 404, Unknown service account {"name":"FirebaseError","children":[],"context":{"body":{"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}},"response":{"statusCode":404}},"exit":1,"message":"Request to https://iam.googleapis.com/v1/projects/smart-meal-planner-8d799/serviceAccounts/smart-meal-planner-8d799@appspot.gserviceaccount.com:testIamPermissions had HTTP Error: 404, Unknown service account","status":404}
+[info] 
+[info] === Deploying to 'smart-meal-planner-8d799'...
+[info] 
+[info] i  deploying functions 
+[info] Running command: npm --prefix "$RESOURCE_DIR" run build
+[info] ✔  functions: Finished running predeploy script. 
+[debug] [2026-01-28T06:33:21.535Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:21.535Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:21.535Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/smart-meal-planner-8d799 [none]
+[debug] [2026-01-28T06:33:21.759Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/smart-meal-planner-8d799 200
+[debug] [2026-01-28T06:33:21.759Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/smart-meal-planner-8d799 {"projectNumber":"39559179692","projectId":"smart-meal-planner-8d799","lifecycleState":"ACTIVE","name":"smart-meal-planner","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2026-01-09T13:21:07.585628Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-01-28T06:33:21.763Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:21.764Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:21.764Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/smart-meal-planner-8d799/adminSdkConfig [none]
+[debug] [2026-01-28T06:33:22.126Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/smart-meal-planner-8d799/adminSdkConfig 200
+[debug] [2026-01-28T06:33:22.126Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/smart-meal-planner-8d799/adminSdkConfig {"projectId":"smart-meal-planner-8d799","storageBucket":"smart-meal-planner-8d799.firebasestorage.app"}
+[debug] [2026-01-28T06:33:22.127Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:22.127Z] Checked if tokens are valid: true, expires at: 1769585245010
+[debug] [2026-01-28T06:33:22.127Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smart-meal-planner-8d799/configs [none]
+[debug] [2026-01-28T06:33:22.964Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smart-meal-planner-8d799/configs 200
+[debug] [2026-01-28T06:33:22.964Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smart-meal-planner-8d799/configs {}
+[debug] [2026-01-28T06:33:22.966Z] Validating nodejs source
+[debug] [2026-01-28T06:33:23.572Z] > [functions] package.json contents: {
+  "name": "functions",
+  "version": "1.0.0",
+  "description": "Smart Meal Planner - Firebase Cloud Functions",
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "lint": "eslint src --ext .ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@google/generative-ai": "^0.2.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^7.0.4",
+    "openai": "^4.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.55.0",
+    "typescript": "^5.3.0"
+  },
+  "private": true
+}
+[debug] [2026-01-28T06:33:23.572Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2026-01-28T06:33:23.573Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-01-28T06:33:23.585Z] Found firebase-functions binary at '/Users/togay/Desktop/smart-meal-planner/functions/node_modules/.bin/firebase-functions'
+[info] Serving at port 8972
+
+[debug] [2026-01-28T06:33:23.869Z] Got response from /__/functions.yaml {"endpoints":{"health":{"availableMemoryMb":512,"timeoutSeconds":540,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"secretEnvironmentVariables":[{"key":"OPENAI_API_KEY"},{"key":"GEMINI_API_KEY"}],"labels":{},"httpsTrigger":{},"entryPoint":"health"},"testGemini":{"availableMemoryMb":512,"timeoutSeconds":540,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"secretEnvironmentVariables":[{"key":"OPENAI_API_KEY"},{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"testGemini"},"testOpenAI":{"availableMemoryMb":512,"timeoutSeconds":540,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"secretEnvironmentVariables":[{"key":"OPENAI_API_KEY"},{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"testOpenAI"},"normalizePantryItems":{"availableMemoryMb":512,"timeoutSeconds":540,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"secretEnvironmentVariables":[{"key":"OPENAI_API_KEY"},{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"normalizePantryItems"},"categorizeGroceryItems":{"availableMemoryMb":512,"timeoutSeconds":540,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"secretEnvironmentVariables":[{"key":"OPENAI_API_KEY"},{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"categorizeGroceryItems"},"generateOpenAIMenu":{"availableMemoryMb":512,"timeoutSeconds":540,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"secretEnvironmentVariables":[{"key":"OPENAI_API_KEY"},{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"generateOpenAIMenu"},"generateOpenAIRecipe":{"availableMemoryMb":512,"timeoutSeconds":540,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"secretEnvironmentVariables":[{"key":"OPENAI_API_KEY"},{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"generateOpenAIRecipe"},"generateWeeklyMenu":{"availableMemoryMb":512,"timeoutSeconds":540,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"secretEnvironmentVariables":[{"key":"OPENAI_API_KEY"},{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"generateWeeklyMenu"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{},"params":[{"type":"secret","name":"OPENAI_API_KEY"},{"type":"secret","name":"GEMINI_API_KEY"}]}

@@ -14,6 +14,15 @@ import { getOpenAIMenuSchema } from "./schemas/menu-schema";
 import { getOpenAIRecipeSchema } from "./schemas/recipe-schema";
 import { getOpenAIPantrySchema } from "./schemas/pantry-schema";
 import { getOpenAIGrocerySchema } from "./schemas/grocery-schema";
+import { getErrorMessage, isRetryableError, withRetry } from "./retry";
+
+const OPENAI_TIMEOUT_MS = 60_000;
+const OPENAI_RETRY_OPTIONS = {
+    maxAttempts: 2,
+    baseDelayMs: 500,
+    maxDelayMs: 2_000,
+    jitterRatio: 0.2,
+};
 
 type OpenAIResponseFormat =
     | ReturnType<typeof getOpenAIMenuSchema>
@@ -31,19 +40,41 @@ export class OpenAIProvider {
         this.model = config.openai.model;
     }
 
+    private async createChatCompletion(body: OpenAI.ChatCompletionCreateParamsNonStreaming, context: string) {
+        return withRetry(
+            () =>
+                this.client.chat.completions.create(body, {
+                    timeout: OPENAI_TIMEOUT_MS,
+                    maxRetries: 0,
+                }),
+            {
+                ...OPENAI_RETRY_OPTIONS,
+                shouldRetry: isRetryableError,
+                onRetry: (error, attempt, delayMs, maxAttempts) => {
+                    console.warn(
+                        `[OpenAI] ${context} retry ${attempt}/${maxAttempts} in ${delayMs}ms: ${getErrorMessage(error)}`
+                    );
+                },
+            }
+        );
+    }
+
     private async generateStructuredResponse(
         systemPrompt: string,
         userPrompt: string,
         responseFormat: OpenAIResponseFormat
     ): Promise<Record<string, unknown>> {
-        const result = await this.client.chat.completions.create({
-            model: this.model,
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt },
-            ],
-            response_format: responseFormat,
-        });
+        const result = await this.createChatCompletion(
+            {
+                model: this.model,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt },
+                ],
+                response_format: responseFormat,
+            },
+            "structured-response"
+        );
 
         const text = result.choices?.[0]?.message?.content?.trim();
         if (!text) {
@@ -66,10 +97,13 @@ export class OpenAIProvider {
 
     async generateTest(prompt: string): Promise<string> {
         try {
-            const result = await this.client.chat.completions.create({
-                model: this.model,
-                messages: [{ role: "user", content: prompt }],
-            });
+            const result = await this.createChatCompletion(
+                {
+                    model: this.model,
+                    messages: [{ role: "user", content: prompt }],
+                },
+                "test"
+            );
 
             const text = result.choices?.[0]?.message?.content?.trim();
             if (!text) {

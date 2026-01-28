@@ -4,6 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { functions } from '../config/firebase';
 import { fetchMenuDecision } from '../utils/menu-storage';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../utils/onboarding-hash';
@@ -108,12 +109,73 @@ const MEAL_ORDER: MenuMealType[] = ['dinner'];
 const DEFAULT_SAMPLE_DAY: WeekdayKey = 'tuesday';
 const WEEKDAY_PRIORITY: WeekdayKey[] = ['tuesday', 'monday', 'wednesday', 'thursday', 'friday'];
 const WEEKEND_PRIORITY: WeekdayKey[] = ['saturday', 'sunday'];
+const SAMPLE_MENU_CACHE_KEY = '@smart_meal_planner:sample_menu_cache';
+
+type SampleMenuCache = {
+    menu: MenuDecision;
+    cachedAt: string;
+    onboardingHash?: string;
+};
 
 const buildDateKey = (date: Date) => {
     const year = date.getFullYear();
     const month = `${date.getMonth() + 1}`.padStart(2, '0');
     const day = `${date.getDate()}`.padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+const buildSampleMenuCacheKey = (
+    userId: string,
+    date: string,
+    mealType: MenuMealType,
+    onboardingHash?: string | null
+) => `${SAMPLE_MENU_CACHE_KEY}:${userId}:${date}:${mealType}:${onboardingHash ?? 'nohash'}`;
+
+const loadSampleMenuCache = async (
+    userId: string,
+    date: string,
+    mealType: MenuMealType,
+    onboardingHash?: string | null
+): Promise<SampleMenuCache | null> => {
+    try {
+        const raw = await AsyncStorage.getItem(buildSampleMenuCacheKey(userId, date, mealType, onboardingHash));
+        if (!raw) {
+            return null;
+        }
+        const parsed = JSON.parse(raw) as SampleMenuCache;
+        if (!parsed?.menu) {
+            return null;
+        }
+        if (typeof onboardingHash === 'string' && parsed.onboardingHash !== onboardingHash) {
+            return null;
+        }
+        return parsed;
+    } catch (error) {
+        console.warn('[SampleMenuContext] Cache read error:', error);
+        return null;
+    }
+};
+
+const persistSampleMenuCache = async (
+    userId: string,
+    date: string,
+    mealType: MenuMealType,
+    menu: MenuDecision,
+    onboardingHash?: string | null
+) => {
+    const payload: SampleMenuCache = {
+        menu,
+        cachedAt: new Date().toISOString(),
+        ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
+    };
+    try {
+        await AsyncStorage.setItem(
+            buildSampleMenuCacheKey(userId, date, mealType, onboardingHash),
+            JSON.stringify(payload)
+        );
+    } catch (error) {
+        console.warn('[SampleMenuContext] Cache write error:', error);
+    }
 };
 
 const getNextWeekdayDate = (weekday: WeekdayKey) => {
@@ -289,12 +351,7 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
         const fetchMeal = async (mealType: MenuMealType) => {
             const request = buildMenuRequest(onboardingData, userId, dateKey, dayKey, mealType, onboardingHash);
 
-            try {
-                const menuResult = await callMenu({ request });
-                const menuData = menuResult.data?.menu;
-
-                if (!menuData?.items?.length) throw new Error('Menü verisi alınamadı');
-
+            const resolveMeal = (menuData: MenuDecision) => {
                 setState((prev) => {
                     const isFirstMeal = !prev.firstMealReady;
                     if (isFirstMeal) {
@@ -307,6 +364,33 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
                         firstMealReady: true,
                     };
                 });
+            };
+
+            const cachedMenu = await loadSampleMenuCache(userId, dateKey, mealType, onboardingHash);
+            if (cachedMenu?.menu?.items?.length) {
+                resolveMeal(cachedMenu.menu);
+                return;
+            }
+
+            try {
+                const firestoreMenu = await fetchMenuDecision(userId, dateKey, mealType, onboardingHash);
+                if (firestoreMenu?.items?.length) {
+                    await persistSampleMenuCache(userId, dateKey, mealType, firestoreMenu, onboardingHash);
+                    resolveMeal(firestoreMenu);
+                    return;
+                }
+            } catch (firestoreError) {
+                console.warn('Firestore sample menu read error:', firestoreError);
+            }
+
+            try {
+                const menuResult = await callMenu({ request });
+                const menuData = menuResult.data?.menu;
+
+                if (!menuData?.items?.length) throw new Error('Menü verisi alınamadı');
+
+                await persistSampleMenuCache(userId, dateKey, mealType, menuData, onboardingHash);
+                resolveMeal(menuData);
                 return;
             } catch (err) {
                 console.error(`[SampleMenuContext] Meal ${mealType} generation error:`, err);
@@ -326,28 +410,6 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
                         });
                     }
                 }
-            }
-
-            // Fallback: try Firestore
-            try {
-                const firestoreMenu = await fetchMenuDecision(userId, dateKey, mealType, onboardingHash);
-                if (firestoreMenu) {
-                    setState((prev) => {
-                        const isFirstMeal = !prev.firstMealReady;
-                        if (isFirstMeal) {
-                            firstMealPromiseRef.current?.resolve(true);
-                        }
-                        return {
-                            ...prev,
-                            menuDecisions: { ...prev.menuDecisions, [mealType]: firestoreMenu },
-                            loadingStates: { ...prev.loadingStates, [mealType]: false },
-                            firstMealReady: true,
-                        };
-                    });
-                    return;
-                }
-            } catch (firestoreError) {
-                console.warn('Firestore fallback error:', firestoreError);
             }
 
             // Mark as done (failed)

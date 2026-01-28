@@ -226,6 +226,43 @@ const buildExistingRecipeMap = (existing?: DocumentData): Map<string, string> =>
   return map;
 };
 
+const hasMenuItems = (items: unknown): boolean => {
+  if (Array.isArray(items)) {
+    return items.some((item) => Boolean(item?.course) && Boolean(item?.name));
+  }
+
+  if (!items || typeof items !== "object") {
+    return false;
+  }
+
+  const legacy = items as {
+    main?: { name?: string | null };
+    side?: { name?: string | null };
+    extra?: { name?: string | null };
+  };
+
+  return Boolean(legacy.main?.name || legacy.side?.name || legacy.extra?.name);
+};
+
+const isMenuDocValid = (
+  data: DocumentData | undefined,
+  expectedOnboardingHash?: string | null
+): boolean => {
+  if (!data || !hasMenuItems(data.items)) {
+    return false;
+  }
+
+  if (typeof expectedOnboardingHash === "string") {
+    const storedHash =
+      typeof data.onboardingHash === "string" ? data.onboardingHash : null;
+    if (storedHash !== expectedOnboardingHash) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
 const buildMenuDocument = ({
   menu,
   params,
@@ -1065,9 +1102,50 @@ export const generateWeeklyMenu = onCall(async (request) => {
 
     const usedDishNames = new Set<string>();
 
+    const dinnerSlots = Array.from(uniqueSlots.entries())
+      .filter(([, assignment]) => assignment.mealType === "dinner")
+      .sort(([, first], [, second]) => first.dayIndex - second.dayIndex);
+
+    const totalDinnerDays = dinnerSlots.length;
+    const expectedOnboardingHash =
+      typeof payload.onboardingHash === "string" ? payload.onboardingHash : null;
+    const menusRef = db.collection("menus");
+
+    const menuRefs = assignments.map((assignment) =>
+      menusRef.doc(buildMenuDocId(userId, assignment.date, assignment.mealType))
+    );
+    const menuSnaps = await db.getAll(...menuRefs);
+    const allMenusExist = menuSnaps.every((snap) =>
+      snap.exists ? isMenuDocValid(snap.data(), expectedOnboardingHash) : false
+    );
+
+    if (allMenusExist) {
+      try {
+        await updateMenuGenerationStatus(
+          userId,
+          weekStart,
+          "completed",
+          totalDinnerDays,
+          totalDinnerDays
+        );
+      } catch (statusError) {
+        console.warn("Failed to update status for cached weekly menu:", statusError);
+      }
+
+      return {
+        success: true,
+        weekStart,
+        singleDay: singleDay ?? null,
+        totalMenus: assignments.length,
+        uniqueMenus: uniqueSlots.size,
+        recipesCreated: 0,
+        model: "cache",
+        timestamp: new Date().toISOString(),
+      };
+    }
+
     const openai = new OpenAIProvider();
     const provider = openai.getName();
-    const menusRef = db.collection("menus");
     const batch = db.batch();
 
     const slotResults = new Map<
@@ -1161,12 +1239,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
       });
     };
 
-    const dinnerSlots = Array.from(uniqueSlots.entries())
-      .filter(([, assignment]) => assignment.mealType === "dinner")
-      .sort(([, first], [, second]) => first.dayIndex - second.dayIndex);
-
     // Update status to in_progress before generating
-    const totalDinnerDays = dinnerSlots.length;
     let completedDinnerDays = 0;
     await updateMenuGenerationStatus(userId, weekStart, "in_progress", 0, totalDinnerDays);
 

@@ -557,6 +557,7 @@ export default function TodayScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const [changeSheetVisible, setChangeSheetVisible] = useState(false);
+    const [changeSheetMode, setChangeSheetMode] = useState<'change' | 'create'>('change');
     const [changeReason, setChangeReason] = useState<ChangeReason | null>(null);
     const [requiredIngredients, setRequiredIngredients] = useState('');
     const [dislikedIngredients, setDislikedIngredients] = useState('');
@@ -578,6 +579,24 @@ export default function TodayScreen() {
     const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
 
     const mealPlan = useMemo(() => buildMealPlan(selectedRoutine), [selectedRoutine]);
+    const hasMenuByType = useMemo(
+        () => ({
+            breakfast: Boolean(menuBundles.breakfast?.items?.length),
+            lunch: Boolean(menuBundles.lunch?.items?.length),
+            dinner: Boolean(menuBundles.dinner?.items?.length),
+        }),
+        [menuBundles]
+    );
+    const hasAnyMenuForDay = hasMenuByType.breakfast || hasMenuByType.lunch || hasMenuByType.dinner;
+    const showHolidayCta = isHoliday && !hasAnyMenuForDay;
+    const displayMealPlan = useMemo(
+        () => ({
+            breakfast: mealPlan.breakfast || hasMenuByType.breakfast,
+            lunch: mealPlan.lunch || hasMenuByType.lunch,
+            dinner: mealPlan.dinner || hasMenuByType.dinner,
+        }),
+        [hasMenuByType.breakfast, hasMenuByType.dinner, hasMenuByType.lunch, mealPlan.breakfast, mealPlan.dinner, mealPlan.lunch]
+    );
     const menuTitle = selectedDay.isToday ? 'Bugünün menüsü' : 'Günün menüsü';
     const mealItemsByType = useMemo(() => {
         const buildItems = (mealType: MealSectionKey) => {
@@ -598,7 +617,7 @@ export default function TodayScreen() {
     const mealSections = useMemo(() => {
         const sections: MealSection[] = [];
 
-        if (mealPlan.breakfast) {
+        if (displayMealPlan.breakfast) {
             const items = mealItemsByType.breakfast;
             sections.push({
                 id: 'breakfast',
@@ -608,7 +627,7 @@ export default function TodayScreen() {
             });
         }
 
-        if (mealPlan.lunch) {
+        if (displayMealPlan.lunch) {
             const items = mealItemsByType.lunch;
             sections.push({
                 id: 'lunch',
@@ -618,7 +637,7 @@ export default function TodayScreen() {
             });
         }
 
-        if (mealPlan.dinner) {
+        if (displayMealPlan.dinner) {
             const items = mealItemsByType.dinner;
             sections.push({
                 id: 'dinner',
@@ -630,7 +649,15 @@ export default function TodayScreen() {
         }
 
         return sections;
-    }, [error, loading, mealItemsByType, mealPlan.breakfast, mealPlan.dinner, mealPlan.lunch, menuTitle]);
+    }, [
+        displayMealPlan.breakfast,
+        displayMealPlan.dinner,
+        displayMealPlan.lunch,
+        error,
+        loading,
+        mealItemsByType,
+        menuTitle,
+    ]);
 
     const reasoningText = useMemo(() => {
         const order: MealSectionKey[] = ['dinner'];
@@ -663,6 +690,11 @@ export default function TodayScreen() {
             .filter((name) => name.length > 0);
         return new Set(values);
     }, [pantryItems]);
+
+    const changeOptions =
+        changeSheetMode === 'create'
+            ? CHANGE_REASONS.filter((option) => option.key !== 'disliked')
+            : CHANGE_REASONS;
 
     const availableCuisines = useMemo(() => {
         const selected = new Set(resolvedSnapshot?.cuisine?.selected ?? []);
@@ -1022,7 +1054,13 @@ export default function TodayScreen() {
         ]).start();
     }, [changeSheetVisible, sheetOpacity, sheetTranslateY, windowHeight]);
 
-    const handleOpenChangeSheet = () => {
+    const handleOpenChangeSheet = (mode: 'change' | 'create' = 'change') => {
+        setChangeSheetMode(mode);
+        setChangeReason(null);
+        setRequiredIngredients('');
+        setDislikedIngredients('');
+        setSelectedCuisine(null);
+        setUsePantryOnly(false);
         setChangeMenuError(null);
         setChangeSheetVisible(true);
     };
@@ -1119,7 +1157,7 @@ export default function TodayScreen() {
         try {
             const userId = userState.user.uid;
             const weekStart = resolveWeekStartKey(selectedDay.date);
-            const onboardingOverride = buildOverrideSnapshot(resolvedSnapshot, {
+            let onboardingOverride = buildOverrideSnapshot(resolvedSnapshot, {
                 cuisineKey: changeReason === 'cuisine' ? selectedCuisine : null,
                 quick: changeReason === 'quick',
             });
@@ -1127,6 +1165,23 @@ export default function TodayScreen() {
             if (!onboardingOverride) {
                 setChangeMenuError('Menü oluşturma verisi bulunamadı.');
                 return;
+            }
+
+            if (changeSheetMode === 'create' && isHoliday) {
+                const dayKey = getDayKey(selectedDay.date);
+                const fallbackRoutine = DEFAULT_ROUTINES[dayKey];
+                const currentRoutine = onboardingOverride.routines?.[dayKey] ?? fallbackRoutine;
+                onboardingOverride = {
+                    ...onboardingOverride,
+                    routines: {
+                        ...onboardingOverride.routines,
+                        [dayKey]: {
+                            ...currentRoutine,
+                            type: currentRoutine?.type === 'off' ? 'remote' : currentRoutine?.type ?? 'remote',
+                            excludeFromPlan: false,
+                        },
+                    },
+                };
             }
 
             const callWeeklyMenu = functions.httpsCallable<
@@ -1154,7 +1209,9 @@ export default function TodayScreen() {
             });
 
             const mealTypesToClear = (['breakfast', 'lunch', 'dinner'] as MenuMealType[]).filter(
-                (mealType) => mealPlan[mealType]
+                (mealType) =>
+                    displayMealPlan[mealType] ||
+                    (changeSheetMode === 'create' && mealType === 'dinner')
             );
             const keysToRemove: string[] = [];
             for (const mealType of mealTypesToClear) {
@@ -1273,31 +1330,64 @@ export default function TodayScreen() {
                         <Text style={styles.dayTitle}>{selectedDayLabel}</Text>
                         <Text style={styles.daySubtitle}>{selectedDaySubtitle}</Text>
                     </View>
-                    <TouchableOpacity
-                        style={[
-                            styles.changeMenuButton,
-                            (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
-                                styles.changeMenuButtonDisabled,
-                        ]}
-                        onPress={handleOpenChangeSheet}
-                        disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
-                        hitSlop={hitSlop}
-                        activeOpacity={0.85}
-                    >
-                        <MaterialCommunityIcons
-                            name="swap-horizontal"
-                            size={18}
-                            color={colors.textPrimary}
-                        />
-                        <Text style={styles.changeMenuText}>Menüyü değiştir</Text>
-                    </TouchableOpacity>
+                    {!showHolidayCta ? (
+                        <TouchableOpacity
+                            style={[
+                                styles.changeMenuButton,
+                                (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
+                                    styles.changeMenuButtonDisabled,
+                            ]}
+                            onPress={() => handleOpenChangeSheet('change')}
+                            disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
+                            hitSlop={hitSlop}
+                            activeOpacity={0.85}
+                        >
+                            <MaterialCommunityIcons
+                                name="swap-horizontal"
+                                size={18}
+                                color={colors.textPrimary}
+                            />
+                            <Text style={styles.changeMenuText}>Menüyü değiştir</Text>
+                        </TouchableOpacity>
+                    ) : null}
                 </View>
 
                 {isHoliday ? (
-                    <View style={styles.holidayCard}>
-                        <MaterialCommunityIcons name="calendar-star" size={18} color={colors.accent} />
-                        <Text style={styles.holidayText}>Bu günü tatil olarak işaretledin.</Text>
-                    </View>
+                    showHolidayCta ? (
+                        <View style={styles.holidayEmpty}>
+                            <Image
+                                source={require('../../../assets/vacation.png')}
+                                style={styles.holidayEmptyImage}
+                                resizeMode="contain"
+                            />
+                            <Text style={styles.holidayEmptyTitle}>Omnoo tatilde</Text>
+                            <Text style={styles.holidayEmptySubtitle}>
+                                Bu günü tatil olarak işaretlediğin için Omnoo menü oluşturmadı.
+                            </Text>
+                            <TouchableOpacity
+                                style={[
+                                    styles.holidayCta,
+                                    (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
+                                        styles.changeMenuButtonDisabled,
+                                ]}
+                                onPress={() => handleOpenChangeSheet('create')}
+                                disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
+                                activeOpacity={0.85}
+                            >
+                                <Image
+                                    source={require('../../../assets/pw-chef.png')}
+                                    style={styles.holidayCtaIcon}
+                                    resizeMode="contain"
+                                />
+                                <Text style={styles.holidayCtaText}>Menü oluştur</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <View style={styles.holidayCard}>
+                            <MaterialCommunityIcons name="calendar-star" size={18} color={colors.accent} />
+                            <Text style={styles.holidayText}>Bu günü tatil olarak işaretledin.</Text>
+                        </View>
+                    )
                 ) : null}
 
                 {showReasoning ? (
@@ -1424,7 +1514,9 @@ export default function TodayScreen() {
                         >
                             <View style={styles.sheetHandle} />
                             <View style={styles.sheetHeader}>
-                                <Text style={styles.sheetTitle}>Menüyü değiştir</Text>
+                                <Text style={styles.sheetTitle}>
+                                    {changeSheetMode === 'create' ? 'Menü oluştur' : 'Menüyü değiştir'}
+                                </Text>
                                 <TouchableOpacity
                                     onPress={handleCloseChangeSheet}
                                     hitSlop={hitSlop}
@@ -1439,7 +1531,25 @@ export default function TodayScreen() {
                                 showsVerticalScrollIndicator={false}
                             >
                                 <View style={styles.sheetSection}>
-                                    {CHANGE_REASONS.map((option) => {
+                                    {changeOptions.map((option) => {
+                                        const resolvedOption =
+                                            changeSheetMode === 'create'
+                                                ? {
+                                                      ...option,
+                                                      ...(option.key === 'cuisine'
+                                                          ? {
+                                                                title: 'Mutfak seçimi yap',
+                                                                description: 'İstediğin mutfağı seç.',
+                                                            }
+                                                          : {}),
+                                                      ...(option.key === 'quick'
+                                                          ? {
+                                                                title: 'Hızlı/pratik olsun',
+                                                                description: 'Hazırlık süresi kısa olsun.',
+                                                            }
+                                                          : {}),
+                                                  }
+                                                : option;
                                         const isSelected = changeReason === option.key;
                                         return (
                                             <TouchableOpacity
@@ -1463,10 +1573,10 @@ export default function TodayScreen() {
                                                 </View>
                                                 <View style={styles.reasonBody}>
                                                     <Text style={styles.reasonTitle} numberOfLines={1}>
-                                                        {option.title}
+                                                        {resolvedOption.title}
                                                     </Text>
                                                     <Text style={styles.reasonDescription} numberOfLines={1}>
-                                                        {option.description}
+                                                        {resolvedOption.description}
                                                     </Text>
                                                 </View>
                                                 <View
@@ -1599,7 +1709,7 @@ export default function TodayScreen() {
 
                             <View style={styles.sheetFooter}>
                                 <Button
-                                    title="Yeniden Oluştur"
+                                    title={changeSheetMode === 'create' ? 'Menü Oluştur' : 'Yeniden Oluştur'}
                                     onPress={handleRegenerateMenu}
                                     loading={isRegeneratingMenu}
                                     fullWidth
@@ -1754,6 +1864,47 @@ const styles = StyleSheet.create({
         ...typography.bodySmall,
         color: colors.textSecondary,
         flex: 1,
+    },
+    holidayEmpty: {
+        alignItems: 'center',
+        gap: spacing.sm,
+        paddingTop: spacing.xs,
+        paddingBottom: spacing.sm,
+    },
+    holidayEmptyImage: {
+        width: 170,
+        height: 170,
+    },
+    holidayEmptyTitle: {
+        ...typography.h3,
+        color: colors.textPrimary,
+        textAlign: 'center',
+    },
+    holidayEmptySubtitle: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        textAlign: 'center',
+        lineHeight: 20,
+        paddingHorizontal: spacing.lg,
+    },
+    holidayCta: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        marginTop: spacing.sm,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        borderRadius: radius.full,
+        backgroundColor: colors.primary,
+        ...shadows.sm,
+    },
+    holidayCtaIcon: {
+        width: 60,
+        height: 60,
+    },
+    holidayCtaText: {
+        ...typography.button,
+        color: colors.surface,
     },
     dayTitle: {
         ...typography.h3,

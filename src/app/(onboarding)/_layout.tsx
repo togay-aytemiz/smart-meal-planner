@@ -1,4 +1,4 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { View, StyleSheet, TouchableOpacity, Text, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useRef } from 'react';
@@ -12,8 +12,12 @@ import { typography } from '../../theme/typography';
 function OnboardingHeader() {
     const { state, prevStep, nextStep } = useOnboarding();
     const router = useRouter();
+    const segments = useSegments();
+    const { source } = useGlobalSearchParams<{ source?: string }>();
     const insets = useSafeAreaInsets();
     const progressOpacity = useRef(new Animated.Value(1)).current;
+    const isPaywallScreen = segments[segments.length - 1] === 'paywall';
+    const isSettingsPaywall = isPaywallScreen && source === 'settings';
 
     useEffect(() => {
         if (state.currentStep === TOTAL_STEPS) {
@@ -32,17 +36,24 @@ function OnboardingHeader() {
     }, [state.currentStep]);
 
     // Hide header on welcome screen (1), scan screen (15), and processing (10)
-    if (state.currentStep === 1 || state.currentStep === 15 || state.currentStep === 10) {
+    if (!isSettingsPaywall && (state.currentStep === 1 || state.currentStep === 15 || state.currentStep === 10)) {
         return null;
     }
 
-    // Hide back button only on welcome screen
-    const showBackButton = state.currentStep > 1;
+    // Hide back button only on welcome screen (override for settings paywall)
+    const showBackButton = isSettingsPaywall ? true : state.currentStep > 1;
 
     const handleBack = () => {
+        if (isSettingsPaywall) {
+            router.back();
+            return;
+        }
         prevStep();
         router.back();
     };
+
+    const showProgress = !isSettingsPaywall;
+    const showSkip = !isSettingsPaywall && state.currentStep === 13;
 
     return (
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
@@ -54,12 +65,12 @@ function OnboardingHeader() {
                 ) : (
                     <View style={styles.backPlaceholder} />
                 )}
-                <Animated.View style={[styles.progressContainer, { opacity: progressOpacity }]}>
-                    {state.currentStep !== 10 && (
+                <Animated.View style={[styles.progressContainer, { opacity: showProgress ? progressOpacity : 0 }]}>
+                    {showProgress && state.currentStep !== 10 && (
                         <ProgressBar current={state.currentStep - 1} total={TOTAL_STEPS - 2} />
                     )}
                 </Animated.View>
-                {state.currentStep === 13 ? (
+                {showSkip ? (
                     <TouchableOpacity
                         style={styles.skipButton}
                         onPress={() => {

@@ -154,7 +154,7 @@ const EQUIPMENT: LabeledEmojiItem[] = [
 export default function ProfileScreen() {
     const router = useRouter();
     const { state: userState } = useUser();
-    const { isPremium, presentPaywall, restorePurchases } = usePremium();
+    const { isPremium, openCustomerCenter } = usePremium();
     const [onboardingData, setOnboardingData] = useState<Partial<OnboardingData> | null>(null);
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
     const [isEditingName, setIsEditingName] = useState(false);
@@ -541,10 +541,10 @@ export default function ProfileScreen() {
                             style={styles.menuItem}
                             onPress={() => {
                                 if (isPremium) {
-                                    restorePurchases();
-                                } else {
-                                    presentPaywall();
+                                    openCustomerCenter();
+                                    return;
                                 }
+                                router.push({ pathname: '/(onboarding)/paywall', params: { source: 'settings' } });
                             }}
                             activeOpacity={0.9}
                         >

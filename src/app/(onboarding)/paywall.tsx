@@ -1,20 +1,23 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image, ImageSourcePropType, Linking } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useRef, useEffect } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Purchases, { type PurchasesOffering, type PurchasesPackage } from 'react-native-purchases';
+import Purchases, { type PurchasesOffering, type PurchasesPackage, PURCHASES_ERROR_CODE } from 'react-native-purchases';
 import { Button } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 import { useOnboarding } from '../../contexts/onboarding-context';
 import { usePremium } from '../../contexts/premium-context';
+import { revenueCatConfig } from '../../config/revenuecat';
 
 export default function PaywallScreen() {
     const router = useRouter();
+    const { source } = useLocalSearchParams<{ source?: string }>();
+    const isSettingsEntry = source === 'settings';
     const { dispatch } = useOnboarding();
-    const { presentPaywall, restorePurchases, openCustomerCenter, isPremium } = usePremium();
+    const { restorePurchases, openCustomerCenter, isPremium } = usePremium();
     const [selectedPlan, setSelectedPlan] = useState<'weekly' | 'monthly'>('monthly');
     const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(null);
     const [pricingError, setPricingError] = useState<string | null>(null);
@@ -64,15 +67,36 @@ export default function PaywallScreen() {
             handleContinue();
             return;
         }
+        const selectedPackage = selectedPlan === 'weekly' ? weeklyPackage : monthlyPackage;
+        if (!selectedPackage) {
+            setPricingError('Seçilen paket bulunamadı.');
+            return;
+        }
         setIsPurchasing(true);
-        await presentPaywall();
-        setIsPurchasing(false);
-        if (isPremium) {
-            handleContinue();
+        try {
+            const { customerInfo } = await Purchases.purchasePackage(selectedPackage);
+            const hasEntitlement = Boolean(
+                customerInfo?.entitlements?.active?.[revenueCatConfig.entitlementId]
+            );
+            if (hasEntitlement) {
+                handleContinue();
+            }
+        } catch (error) {
+            const purchasesError = error as { code?: PURCHASES_ERROR_CODE };
+            if (purchasesError?.code !== PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) {
+                console.warn('RevenueCat purchase error:', error);
+                setPricingError('Satın alma başarısız oldu. Lütfen tekrar deneyin.');
+            }
+        } finally {
+            setIsPurchasing(false);
         }
     };
 
     const handleContinue = () => {
+        if (isSettingsEntry) {
+            router.back();
+            return;
+        }
         dispatch({ type: 'SET_STEP', payload: 13 });
         router.push('/(onboarding)/auth');
     };
@@ -90,7 +114,9 @@ export default function PaywallScreen() {
                         style={styles.headerImage}
                         resizeMode="contain"
                     />
-                    <Text style={styles.title}>En iyi haline{'\n'}merhaba de.</Text>
+                    <Text style={styles.title}>
+                        Omnoo{'\n'}Premium&apos;a geç
+                    </Text>
                     <Text style={styles.subtitle}>
                     </Text>
                 </View>
@@ -110,11 +136,16 @@ export default function PaywallScreen() {
                     <BenefitRow
                         image={require('../../../assets/pw-groc.png')}
                         title="Alışveriş Listesi"
-                        desc="Saniyeler içinde hazır, eksiksiz alışveriş listesi."
+                        desc="Saniyeler içinde hazır alışveriş listesi."
+                    />
+                    <BenefitRow
+                        image={require('../../../assets/adplan.png')}
+                        title="Reklamsız kullanım"
+                        desc="Dikkat dağıtmadan akıcı deneyim."
                     />
                 </View>
 
-                <Text style={styles.planLabel}>Deneme süresi için plan seçin:</Text>
+                <Text style={styles.planLabel}>Plan seçin:</Text>
                 {pricingError ? <Text style={styles.priceError}>{pricingError}</Text> : null}
 
                 {/* Plans Row */}
@@ -142,7 +173,6 @@ export default function PaywallScreen() {
                             {resolvePriceLabel(weeklyPackage)}
                             <Text style={styles.pricePeriod}>/hafta</Text>
                         </Text>
-                        <Text style={styles.billingText}>İstediğin zaman iptal edebilirsin</Text>
                     </TouchableOpacity>
 
                     {/* Monthly Plan */}
@@ -164,7 +194,6 @@ export default function PaywallScreen() {
                             {resolvePriceLabel(monthlyPackage)}
                             <Text style={styles.pricePeriod}>/ay</Text>
                         </Text>
-                        <Text style={styles.billingText}>İstediğin zaman iptal edebilirsin</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -183,22 +212,24 @@ export default function PaywallScreen() {
                 />
                 <View style={styles.footerLinks}>
                     <TouchableOpacity onPress={restorePurchases} activeOpacity={0.8}>
-                        <Text style={styles.footerLinkText}>Restore Purchases</Text>
+                        <Text style={styles.footerLinkText}>Satın alımı geri yükle</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => Linking.openURL('https://omnoo.app/terms')} activeOpacity={0.8}>
-                        <Text style={styles.footerLinkText}>Terms</Text>
+                        <Text style={styles.footerLinkText}>Kullanım Şartları</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => Linking.openURL('https://omnoo.app/privacy')} activeOpacity={0.8}>
-                        <Text style={styles.footerLinkText}>Privacy</Text>
+                        <Text style={styles.footerLinkText}>Gizlilik</Text>
                     </TouchableOpacity>
                 </View>
-                <Button
-                    title="Şimdilik Geç"
-                    onPress={handleContinue}
-                    variant="ghost"
-                    size="small"
-                    style={{ marginTop: spacing.xs }}
-                />
+                {!isSettingsEntry ? (
+                    <Button
+                        title="Şimdilik Geç"
+                        onPress={handleContinue}
+                        variant="ghost"
+                        size="small"
+                        style={{ marginTop: spacing.xs }}
+                    />
+                ) : null}
             </View>
         </SafeAreaView>
     );
@@ -306,12 +337,14 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.surface,
         borderRadius: radius.lg,
-        padding: spacing.md,
+        paddingTop: spacing.md,
+        paddingHorizontal: spacing.md,
+        paddingBottom: spacing.sm,
         borderWidth: 2,
         borderColor: colors.border,
         // justifyContent: 'space-between', // Removed to foster top alignment
         justifyContent: 'flex-start',
-        minHeight: 160,
+        minHeight: 112,
     },
     selectedCard: {
         borderColor: colors.primary,
@@ -338,8 +371,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: spacing.sm,
-        marginTop: spacing.xs,
+        marginBottom: spacing.xs,
+        marginTop: 0,
     },
     cardTitle: {
         ...typography.caption,
@@ -351,7 +384,7 @@ const styles = StyleSheet.create({
         ...typography.h3,
         fontSize: 20,
         color: colors.textPrimary,
-        marginBottom: 4, // Add spacing for alignment
+        marginBottom: 0, // Add spacing for alignment
     },
     pricePeriod: {
         ...typography.caption,

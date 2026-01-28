@@ -432,6 +432,21 @@ const updateMenuGenerationStatus = async (
 
   await statusRef.set(updateData, { merge: true });
 };
+
+const safeUpdateMenuGenerationStatus = async (
+  userId: string,
+  weekStart: string,
+  status: MenuGenerationState,
+  completedDays: number,
+  totalDays: number,
+  error?: string
+) => {
+  try {
+    await updateMenuGenerationStatus(userId, weekStart, status, completedDays, totalDays, error);
+  } catch (statusError) {
+    console.warn("Failed to update menu generation status:", statusError);
+  }
+};
 const WEEKEND_KEYS = new Set<WeekdayKey>(["saturday", "sunday"]);
 
 const DEFAULT_ROUTINES: WeeklyRoutine = {
@@ -622,6 +637,14 @@ const buildWeeklyContext = ({
   seasonalityHint,
 });
 
+const toHttpsError = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof functions.HttpsError) {
+    return error;
+  }
+  const message =
+    error instanceof Error ? error.message : typeof error === "string" ? error : fallbackMessage;
+  return new functions.HttpsError("internal", message, { message });
+};
 
 // Test Gemini LLM endpoint
 export const testGemini = onCall(async (request) => {
@@ -646,12 +669,7 @@ export const testGemini = onCall(async (request) => {
     };
   } catch (error: unknown) {
     console.error("testGemini error:", error);
-    const message = error instanceof Error ? error.message : "Failed to generate response";
-    throw new functions.HttpsError(
-      "internal",
-      message,
-      { message }
-    );
+    throw toHttpsError(error, "Failed to generate response");
   }
 });
 
@@ -678,12 +696,7 @@ export const testOpenAI = onCall(async (request) => {
     };
   } catch (error: unknown) {
     console.error("testOpenAI error:", error);
-    const message = error instanceof Error ? error.message : "Failed to generate response";
-    throw new functions.HttpsError(
-      "internal",
-      message,
-      { message }
-    );
+    throw toHttpsError(error, "Failed to generate response");
   }
 });
 
@@ -814,9 +827,7 @@ export const normalizePantryItems = onCall(async (request) => {
     };
   } catch (error: unknown) {
     console.error("normalizePantryItems error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to normalize pantry items";
-    throw new functions.HttpsError("internal", message, { message });
+    throw toHttpsError(error, "Failed to normalize pantry items");
   }
 });
 
@@ -876,9 +887,7 @@ export const categorizeGroceryItems = onCall(async (request) => {
     };
   } catch (error: unknown) {
     console.error("categorizeGroceryItems error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to categorize grocery items";
-    throw new functions.HttpsError("internal", message, { message });
+    throw toHttpsError(error, "Failed to categorize grocery items");
   }
 });
 
@@ -905,8 +914,7 @@ export const generateOpenAIMenu = onCall(async (request) => {
     };
   } catch (error: unknown) {
     console.error("generateOpenAIMenu error:", error);
-    const message = error instanceof Error ? error.message : "Failed to generate menu";
-    throw new functions.HttpsError("internal", message, { message });
+    throw toHttpsError(error, "Failed to generate menu");
   }
 });
 
@@ -1006,8 +1014,7 @@ export const generateOpenAIRecipe = onCall(async (request) => {
     };
   } catch (error: unknown) {
     console.error("generateOpenAIRecipe error:", error);
-    const message = error instanceof Error ? error.message : "Failed to generate recipe";
-    throw new functions.HttpsError("internal", message, { message });
+    throw toHttpsError(error, "Failed to generate recipe");
   }
 });
 
@@ -1241,7 +1248,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
 
     // Update status to in_progress before generating
     let completedDinnerDays = 0;
-    await updateMenuGenerationStatus(userId, weekStart, "in_progress", 0, totalDinnerDays);
+    await safeUpdateMenuGenerationStatus(userId, weekStart, "in_progress", 0, totalDinnerDays);
 
     for (const [slotKey, assignment] of dinnerSlots) {
       let leftoverMainDish: string | undefined;
@@ -1260,7 +1267,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
 
       // Update progress after each dinner slot
       completedDinnerDays += 1;
-      await updateMenuGenerationStatus(userId, weekStart, "in_progress", completedDinnerDays, totalDinnerDays);
+      await safeUpdateMenuGenerationStatus(userId, weekStart, "in_progress", completedDinnerDays, totalDinnerDays);
     }
 
     for (const assignment of assignments) {
@@ -1309,7 +1316,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
     await batch.commit();
 
     // Update status to completed
-    await updateMenuGenerationStatus(userId, weekStart, "completed", totalDinnerDays, totalDinnerDays);
+    await safeUpdateMenuGenerationStatus(userId, weekStart, "completed", totalDinnerDays, totalDinnerDays);
 
     return {
       success: true,
@@ -1323,8 +1330,8 @@ export const generateWeeklyMenu = onCall(async (request) => {
     };
   } catch (error: unknown) {
     console.error("generateWeeklyMenu error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to generate weekly menu";
+    const resolvedError = toHttpsError(error, "Failed to generate weekly menu");
+    const message = resolvedError.message;
 
     // Try to update status to failed (best effort)
     try {
@@ -1333,13 +1340,13 @@ export const generateWeeklyMenu = onCall(async (request) => {
       const weekStartDate = resolveWeekStart(payload?.weekStart);
       const weekStart = formatISODate(weekStartDate);
       if (userId) {
-        await updateMenuGenerationStatus(userId, weekStart, "failed", 0, 0, message);
+        await safeUpdateMenuGenerationStatus(userId, weekStart, "failed", 0, 0, message);
       }
     } catch (statusError) {
       console.error("Failed to update status on error:", statusError);
     }
 
-    throw new functions.HttpsError("internal", message, { message });
+    throw resolvedError;
   }
 });
 

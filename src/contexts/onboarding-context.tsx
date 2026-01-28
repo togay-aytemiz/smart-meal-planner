@@ -221,10 +221,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     const finishOnboarding = async () => {
         try {
             await completeOnboarding(state.data);
+            dispatch({ type: 'COMPLETE_ONBOARDING' });
         } catch (error) {
             console.error('Failed to save onboarding data:', error);
         }
-        dispatch({ type: 'COMPLETE_ONBOARDING' });
     };
 
     return (

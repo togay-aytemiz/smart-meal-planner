@@ -51,8 +51,12 @@ export default function PaywallScreen() {
 
     const handleSuccessContinue = useCallback(() => {
         setIsSuccessModalVisible(false);
-        router.replace('/(tabs)');
-    }, [router]);
+        if (isSettingsEntry) {
+            router.back();
+            return;
+        }
+        handleContinue();
+    }, [handleContinue, isSettingsEntry, router]);
 
     const loadOfferings = useCallback(async () => {
         try {
@@ -301,7 +305,7 @@ export default function PaywallScreen() {
                         </Text>
                         <View style={styles.modalActions}>
                             <Button
-                                title="Anasayfaya Git"
+                                title={isSettingsEntry ? 'Anasayfaya Git' : 'İlerle'}
                                 onPress={handleSuccessContinue}
                                 fullWidth
                             />

@@ -30,6 +30,7 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
     const configuredRef = useRef(false);
     const configuredUserRef = useRef<string | null>(null);
     const listenerAddedRef = useRef(false);
+    const logHandlerConfiguredRef = useRef(false);
 
     const applyCustomerInfo = useCallback(async (info: CustomerInfo | null) => {
         setCustomerInfo(info);
@@ -58,6 +59,32 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
 
         const configure = async () => {
             try {
+                if (__DEV__ && !logHandlerConfiguredRef.current) {
+                    Purchases.setLogHandler((logLevel, message) => {
+                        if (message?.includes('Purchase failure simulated successfully in Test Store.')) {
+                            // Avoid LogBox red screen for expected Test Store failures in dev.
+                            console.debug(`[RevenueCat] ${message}`);
+                            return;
+                        }
+                        switch (logLevel) {
+                            case LOG_LEVEL.DEBUG:
+                                console.debug(`[RevenueCat] ${message}`);
+                                break;
+                            case LOG_LEVEL.INFO:
+                                console.info(`[RevenueCat] ${message}`);
+                                break;
+                            case LOG_LEVEL.WARN:
+                                console.warn(`[RevenueCat] ${message}`);
+                                break;
+                            case LOG_LEVEL.ERROR:
+                                console.error(`[RevenueCat] ${message}`);
+                                break;
+                            default:
+                                console.log(`[RevenueCat] ${message}`);
+                        }
+                    });
+                    logHandlerConfiguredRef.current = true;
+                }
                 Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.WARN);
                 if (!configuredRef.current) {
                     Purchases.configure({ apiKey: revenueCatConfig.getApiKey(), appUserID: userId });

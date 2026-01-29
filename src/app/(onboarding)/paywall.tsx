@@ -1,27 +1,31 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image, ImageSourcePropType, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image, ImageSourcePropType, Linking, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Purchases, { type PurchasesOffering, type PurchasesPackage, PURCHASES_ERROR_CODE } from 'react-native-purchases';
 import { Button } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { spacing, radius } from '../../theme/spacing';
+import { spacing, radius, shadows } from '../../theme/spacing';
 import { useOnboarding } from '../../contexts/onboarding-context';
 import { usePremium } from '../../contexts/premium-context';
 import { revenueCatConfig } from '../../config/revenuecat';
+
+type ErrorContext = 'pricing' | 'purchase';
 
 export default function PaywallScreen() {
     const router = useRouter();
     const { source } = useLocalSearchParams<{ source?: string }>();
     const isSettingsEntry = source === 'settings';
     const { dispatch } = useOnboarding();
-    const { restorePurchases, openCustomerCenter, isPremium } = usePremium();
+    const { restorePurchases, isPremium } = usePremium();
     const [selectedPlan, setSelectedPlan] = useState<'weekly' | 'monthly'>('monthly');
     const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(null);
-    const [pricingError, setPricingError] = useState<string | null>(null);
     const [isPurchasing, setIsPurchasing] = useState(false);
+    const [errorContext, setErrorContext] = useState<ErrorContext | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
 
     // Simple pulse animation for the badge
     const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -35,19 +39,34 @@ export default function PaywallScreen() {
         ).start();
     }, []);
 
-    useEffect(() => {
-        const loadOfferings = async () => {
-            try {
-                const offerings = await Purchases.getOfferings();
-                setCurrentOffering(offerings.current ?? null);
-            } catch (error) {
-                console.warn('RevenueCat offerings error:', error);
-                setPricingError('Fiyatlar yüklenemedi.');
-            }
-        };
-
-        loadOfferings();
+    const showErrorModal = useCallback((context: ErrorContext, message: string) => {
+        setErrorContext(context);
+        setErrorMessage(message);
     }, []);
+
+    const clearErrorModal = useCallback(() => {
+        setErrorContext(null);
+        setErrorMessage(null);
+    }, []);
+
+    const handleSuccessContinue = useCallback(() => {
+        setIsSuccessModalVisible(false);
+        router.replace('/(tabs)');
+    }, [router]);
+
+    const loadOfferings = useCallback(async () => {
+        try {
+            const offerings = await Purchases.getOfferings();
+            setCurrentOffering(offerings.current ?? null);
+        } catch (error) {
+            console.warn('RevenueCat offerings error:', error);
+            showErrorModal('pricing', 'Fiyatlar yüklenemedi. Lütfen tekrar deneyin.');
+        }
+    }, [showErrorModal]);
+
+    useEffect(() => {
+        loadOfferings();
+    }, [loadOfferings]);
 
     const weeklyPackage = currentOffering?.availablePackages.find(
         (pkg) => pkg.packageType === Purchases.PACKAGE_TYPE.WEEKLY
@@ -69,7 +88,7 @@ export default function PaywallScreen() {
         }
         const selectedPackage = selectedPlan === 'weekly' ? weeklyPackage : monthlyPackage;
         if (!selectedPackage) {
-            setPricingError('Seçilen paket bulunamadı.');
+            showErrorModal('pricing', 'Seçilen paket bulunamadı. Lütfen tekrar deneyin.');
             return;
         }
         setIsPurchasing(true);
@@ -79,13 +98,13 @@ export default function PaywallScreen() {
                 customerInfo?.entitlements?.active?.[revenueCatConfig.entitlementId]
             );
             if (hasEntitlement) {
-                handleContinue();
+                setIsSuccessModalVisible(true);
             }
         } catch (error) {
             const purchasesError = error as { code?: PURCHASES_ERROR_CODE };
             if (purchasesError?.code !== PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) {
                 console.warn('RevenueCat purchase error:', error);
-                setPricingError('Satın alma başarısız oldu. Lütfen tekrar deneyin.');
+                showErrorModal('purchase', 'Satın alma başarısız oldu. Lütfen tekrar deneyin.');
             }
         } finally {
             setIsPurchasing(false);
@@ -146,7 +165,6 @@ export default function PaywallScreen() {
                 </View>
 
                 <Text style={styles.planLabel}>Plan seçin:</Text>
-                {pricingError ? <Text style={styles.priceError}>{pricingError}</Text> : null}
 
                 {/* Plans Row */}
                 <View style={styles.plansRow}>
@@ -221,16 +239,76 @@ export default function PaywallScreen() {
                         <Text style={styles.footerLinkText}>Gizlilik</Text>
                     </TouchableOpacity>
                 </View>
-                {!isSettingsEntry ? (
-                    <Button
-                        title="Şimdilik Geç"
-                        onPress={handleContinue}
-                        variant="ghost"
+            {!isSettingsEntry ? (
+                <Button
+                    title="Şimdilik Geç"
+                    onPress={handleContinue}
+                    variant="ghost"
                         size="small"
                         style={{ marginTop: spacing.xs }}
                     />
                 ) : null}
             </View>
+
+            <Modal
+                visible={Boolean(errorMessage)}
+                transparent
+                animationType="fade"
+                onRequestClose={clearErrorModal}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.modalIconBadge}>
+                                <MaterialCommunityIcons name="alert-circle-outline" size={28} color={colors.error} />
+                            </View>
+                            <Text style={styles.modalTitle}>
+                                {errorContext === 'pricing' ? 'Planlar yüklenemedi' : 'Satın alma başarısız'}
+                            </Text>
+                        </View>
+                        <Text style={styles.modalMessage}>{errorMessage}</Text>
+                        <View style={styles.modalActions}>
+                            <Button
+                                title="Tamam"
+                                onPress={clearErrorModal}
+                                fullWidth
+                            />
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={isSuccessModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={handleSuccessContinue}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.successIconBadge}>
+                                <MaterialCommunityIcons
+                                    name="check-circle-outline"
+                                    size={30}
+                                    color={colors.success}
+                                />
+                            </View>
+                            <Text style={styles.modalTitle}>Başarılı!</Text>
+                        </View>
+                        <Text style={styles.modalMessage}>
+                            Premium aktif edildi. Artık tüm özelliklere erişebilirsin.
+                        </Text>
+                        <View style={styles.modalActions}>
+                            <Button
+                                title="Anasayfaya Git"
+                                onPress={handleSuccessContinue}
+                                fullWidth
+                            />
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -310,12 +388,6 @@ const styles = StyleSheet.create({
         ...typography.h3,
         textAlign: 'center',
         marginBottom: spacing.md,
-    },
-    priceError: {
-        ...typography.caption,
-        color: colors.textMuted,
-        textAlign: 'center',
-        marginBottom: spacing.sm,
     },
     footerLinks: {
         flexDirection: 'row',
@@ -422,5 +494,60 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background,
         borderTopWidth: 1,
         borderTopColor: colors.border,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: colors.overlay,
+        paddingHorizontal: spacing.lg,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalCard: {
+        width: '100%',
+        maxWidth: 420,
+        backgroundColor: colors.surface,
+        borderRadius: radius.xl,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        padding: spacing.lg,
+        gap: spacing.md,
+        ...shadows.md,
+    },
+    modalHeader: {
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    modalIconBadge: {
+        width: 56,
+        height: 56,
+        borderRadius: radius.full,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.errorLight,
+        borderWidth: 1,
+        borderColor: colors.error + '22',
+    },
+    successIconBadge: {
+        width: 56,
+        height: 56,
+        borderRadius: radius.full,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.successLight,
+        borderWidth: 1,
+        borderColor: colors.success + '22',
+    },
+    modalTitle: {
+        ...typography.h3,
+        color: colors.textPrimary,
+        textAlign: 'center',
+    },
+    modalMessage: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        textAlign: 'center',
+    },
+    modalActions: {
+        gap: spacing.sm,
     },
 });

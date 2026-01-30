@@ -306,7 +306,7 @@ Inspired by Ollie.ai's calm, modern aesthetic:
   - **Future:** Expand to breakfast, lunch, full daily menu
 - [x] Daily dinner menu generation (1 meal)
 - [x] Recipe detail page (ingredients/instructions/nutrition)
-- [ ] AI recipe generation with image generation (1 recipe per dinner)
+- [x] AI recipe generation (1 recipe per dinner)
 - [x] Grocery list from dinner menu + pantry + manual add
 - [x] Pantry-only toggle (My Menu sheet) + prompt conditioning
 - [ ] **Future (Post-MVP):** User feedback loop (like/dislike, swap meals)
@@ -326,6 +326,7 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 - [ ] Notification system
 - [ ] Recipe library
 - [ ] Advanced AI learning
+- [ ] (Parked - cost) AI recipe image generation (1 image per dinner)
 
 ---
 
@@ -409,7 +410,11 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 
 ### Store & Legal
 - [ ] App Store / Play Store listing (başlık, açıklama, keyword, screenshot, preview video)
+- [x] Store listing draft hazır (docs/STORE_LISTING_DRAFT.md)
 - [ ] Privacy Policy + Terms linkleri canlı ve uygulamada erişilebilir
+- [x] Settings/Paywall içinde Terms & Privacy linkleri eklendi
+- [x] Privacy Policy draft hazır (docs/PRIVACY_POLICY.md)
+- [x] Terms draft hazır (docs/TERMS_OF_USE.md)
 - [ ] App Store Privacy “Data Types” + Play Data Safety formu tamamlandı
 - [ ] Minimum iOS/Android sürümleri net ve test edildi
 
@@ -417,7 +422,7 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 - [x] Release akışı net: EAS Build (production) + EAS Submit
 - [x] EAS prod build profile + env (eas.json) doğrulandı
 - [x] iOS build number ve Android versionCode belirlendi (1)
-- [ ] Prod release channel / OTA stratejisi netleştirildi
+- [x] Prod release channel / OTA stratejisi net (production channel, preview internal)
 - [ ] Crash/analytics (Crashlytics/Sentry) prod key ile doğrulandı
 
 ### Firebase / Backend

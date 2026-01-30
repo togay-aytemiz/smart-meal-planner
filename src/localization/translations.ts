@@ -33,6 +33,8 @@ export const translations: Record<LanguageCode, TranslationDictionary> = {
             resetTitle: 'Onboarding Sıfırla',
             resetMessage: 'Onboarding verileriniz silinecek. Devam etmek istiyor musunuz?',
             resetConfirm: 'Sıfırla',
+            terms: 'Kullanım Şartları',
+            privacy: 'Gizlilik Politikası',
         },
         onboarding: {
             common: {
@@ -717,6 +719,8 @@ export const translations: Record<LanguageCode, TranslationDictionary> = {
             resetTitle: 'Reset onboarding',
             resetMessage: 'Your onboarding data will be deleted. Do you want to continue?',
             resetConfirm: 'Reset',
+            terms: 'Terms of Use',
+            privacy: 'Privacy Policy',
         },
         onboarding: {
             common: {

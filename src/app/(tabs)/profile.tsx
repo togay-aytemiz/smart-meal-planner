@@ -1,9 +1,8 @@
 import { type ComponentProps, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, ActivityIndicator, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Modal, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import auth from '@react-native-firebase/auth';
 import firestore, { doc, getDoc, updateDoc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { useRouter } from 'expo-router';
 import { Button, TabScreenHeader } from '../../components/ui';
@@ -16,10 +15,8 @@ import { typography } from '../../theme/typography';
 import { spacing, radius, shadows } from '../../theme/spacing';
 
 const STORAGE_KEY = '@smart_meal_planner:onboarding';
-const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
-const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
-const WEEKLY_MENU_CACHE_KEY = '@smart_meal_planner:weekly_menu_generation';
-const LEGACY_ONBOARDING_KEY = '@onboarding_data';
+const TERMS_URL = 'https://omnoo.app/terms';
+const PRIVACY_URL = 'https://omnoo.app/privacy';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -178,40 +175,6 @@ export default function ProfileScreen() {
         [t]
     );
     const languageLabel = languageOptions.find((option) => option.key === language)?.label ?? language;
-
-    const handleResetOnboarding = async () => {
-        Alert.alert(
-            t('settings.resetTitle'),
-            t('settings.resetMessage'),
-            [
-                { text: t('common.cancel'), style: 'cancel' },
-                {
-                    text: t('settings.resetConfirm'),
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            const keys = await AsyncStorage.getAllKeys();
-                            const keysToRemove = keys.filter(
-                                (key) =>
-                                    key === STORAGE_KEY ||
-                                    key === LEGACY_ONBOARDING_KEY ||
-                                    key.startsWith(MENU_RECIPES_STORAGE_KEY) ||
-                                    key.startsWith(MENU_CACHE_STORAGE_KEY) ||
-                                    key.startsWith(WEEKLY_MENU_CACHE_KEY)
-                            );
-                            if (keysToRemove.length) {
-                                await AsyncStorage.multiRemove(keysToRemove);
-                            }
-                            await auth().signOut();
-                        } catch (error) {
-                            console.warn('Onboarding reset failed:', error);
-                        }
-                        router.replace('/(onboarding)/welcome');
-                    },
-                },
-            ]
-        );
-    };
 
     const handleOpenPreferencesEdit = () => {
         router.push('/preferences-edit');
@@ -623,15 +586,34 @@ export default function ProfileScreen() {
                             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.menuItem} onPress={handleResetOnboarding} activeOpacity={0.9}>
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => Linking.openURL(TERMS_URL)}
+                            activeOpacity={0.9}
+                        >
                             <View style={styles.menuItemContent}>
                                 <View style={styles.menuIconBadge}>
-                                    <MaterialCommunityIcons name="restart" size={18} color={colors.primary} />
+                                    <MaterialCommunityIcons name="file-document-outline" size={18} color={colors.primary} />
                                 </View>
-                                <Text style={styles.menuItemText}>{t('settings.resetOnboarding')}</Text>
+                                <Text style={styles.menuItemText}>{t('settings.terms')}</Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
                         </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => Linking.openURL(PRIVACY_URL)}
+                            activeOpacity={0.9}
+                        >
+                            <View style={styles.menuItemContent}>
+                                <View style={styles.menuIconBadge}>
+                                    <MaterialCommunityIcons name="shield-check-outline" size={18} color={colors.primary} />
+                                </View>
+                                <Text style={styles.menuItemText}>{t('settings.privacy')}</Text>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+
                     </View>
                 </ScrollView>
             )}

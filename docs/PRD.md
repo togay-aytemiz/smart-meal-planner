@@ -296,19 +296,19 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 ## MVP Scope
 
 ### Phase 1: Foundation (MVP - Single User)
-- [ ] Single-user onboarding (name → weekly routine)
-- [ ] Tab navigation shell (My Menu, Groceries, Cookbook, Settings)
-- [ ] My Menu daily view (today - dinner meal) - **MVP Scope: Single meal per day**
-- [ ] AI meal planning based on onboarding + daily routine context
+- [x] Single-user onboarding (name → weekly routine)
+- [x] Tab navigation shell (My Menu, Groceries, Cookbook, Settings)
+- [x] My Menu daily view (today - dinner meal) - **MVP Scope: Single meal per day**
+- [x] AI meal planning based on onboarding + daily routine context
   - **MVP:** Generate 1 dinner meal per day
   - Uses onboarding data: dietary restrictions, allergies, cuisine preferences, cooking skill, equipment
   - Routine-aware: gym days, office days, remote days
   - **Future:** Expand to breakfast, lunch, full daily menu
-- [ ] Daily dinner menu generation (1 meal)
-- [ ] Recipe detail page (ingredients/instructions/nutrition)
+- [x] Daily dinner menu generation (1 meal)
+- [x] Recipe detail page (ingredients/instructions/nutrition)
 - [ ] AI recipe generation with image generation (1 recipe per dinner)
-- [ ] Grocery list from dinner menu + pantry + manual add
-- [ ] Pantry-only toggle in settings and prompt conditioning
+- [x] Grocery list from dinner menu + pantry + manual add
+- [x] Pantry-only toggle (My Menu sheet) + prompt conditioning
 - [ ] **Future (Post-MVP):** User feedback loop (like/dislike, swap meals)
 
 ### Phase 2: AI Integration (Post-MVP)
@@ -407,6 +407,40 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 
 ## Prod Öncesi Checklist
 
+### Store & Legal
+- [ ] App Store / Play Store listing (başlık, açıklama, keyword, screenshot, preview video)
+- [ ] Privacy Policy + Terms linkleri canlı ve uygulamada erişilebilir
+- [ ] App Store Privacy “Data Types” + Play Data Safety formu tamamlandı
+- [ ] Minimum iOS/Android sürümleri net ve test edildi
+
+### Release / Build
+- [x] Release akışı net: EAS Build (production) + EAS Submit
+- [x] EAS prod build profile + env (eas.json) doğrulandı
+- [x] iOS build number ve Android versionCode belirlendi (1)
+- [ ] Prod release channel / OTA stratejisi netleştirildi
+- [ ] Crash/analytics (Crashlytics/Sentry) prod key ile doğrulandı
+
+### Firebase / Backend
+- [ ] Firestore rules prod güvenlik kontrolü (auth + role)
+- [ ] Functions error log + rate limit/abuse kontrolü
+- [ ] Secrets/env prod’a taşındı (OpenAI/Claude/Firebase)
+- [ ] Gerekli data migration planlandı (varsa)
+
+### UX & QA
+- [x] TR/EN metinleri tamamlandı (onboarding, navbar, profile, preferences, cookbook, groceries)
+- [x] LLM prompt dili TR/EN doğru çalışıyor (menu/recipe/pantry/grocery)
+- [x] Paywall success/failure akışları doğru
+- [ ] Offline/slow network fallback (skeleton/empty state) test edildi
+- [ ] Edge case testleri: empty onboarding, holiday, regen, pantry empty
+
+### Compliance / Permissions
+- [ ] iOS ATT izin metni + Info.plist açıklamaları tamam
+- [ ] Android izin açıklamaları net (kamera, bildirim, vs.)
+
+### Monitoring
+- [ ] Crash/ANR alerting
+- [ ] Temel metrikler: DAU, conversion, menu generation success
+
 ### AdMob
 - [ ] `app-ads.txt` yayınla (domain root; AdMob doğrulaması için)
 - [ ] Play Console → “Contains ads” ayarını **Yes** yap
@@ -416,6 +450,55 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 - [ ] Store ürünlerini (App Store Connect / Play Console) **prod** olarak oluştur ve RevenueCat’te import et
 - [ ] Offering + entitlement mapping’i doğrula (production)
 - [ ] Paywall / restore akışlarını prod ortamında test et
+
+---
+
+## Publish Roadmap (Step‑by‑Step)
+
+Bu bölüm, **hiç bilmeyen biri** için “en baştan yayına çıkış” akışını anlatır.  
+Her adımı tek tek bitirerek ilerle.
+
+### 1) Gerekli hesapları aç
+- **Apple Developer hesabı** aç (App Store’a çıkmak için şart).
+- **Google Play Console hesabı** aç (Android’e çıkmak için şart).
+
+### 2) Ödeme alabilmek için mağaza ayarlarını yap
+- **Apple tarafı:** App Store Connect’te “Paid Apps Agreement” kabul et, **banka + vergi** bilgilerini gir.
+- **Google tarafı:** Play Console’da **Payments profile** oluştur ve bağla.
+
+### 3) Mağazalarda uygulamayı oluştur
+- **App Store Connect’te yeni app oluştur**  
+  - Uygulama adı, bundle id, dil, kategori, vs. gir.
+- **Play Console’da yeni app oluştur**  
+  - Uygulama adı, dil, kategori, vs. gir.
+
+### 4) Ürünleri (subscription) mağazada oluştur
+- **Apple:** App Store Connect’te subscription ürünü oluştur, fiyatı belirle.
+- **Google:** Play Console’da subscription/base plan oluştur, fiyatı belirle.
+
+### 5) RevenueCat’i mağazalara bağla
+- RevenueCat’te **New app configuration** ile **iOS** ve **Android** app oluştur.
+- Mağaza bağlantılarını kur (Apple/Google credentials).
+- Mağazada oluşturduğun ürünleri **RevenueCat’e import et**.
+- **Offering + Entitlement** eşleştir.
+
+### 6) Uygulamada prod anahtarları ayarla
+- RevenueCat’in **prod public SDK key**’lerini al.
+- EAS prod env’e yaz:  
+  `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`  
+  `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`
+
+### 7) Build al ve mağazaya gönder
+- **EAS build (production)** al.
+- **EAS submit** ile mağazalara gönder.
+
+### 8) Store içeriklerini tamamla
+- App açıklaması, ekran görüntüleri, ikon, gizlilik linkleri.
+- “Contains ads”, Data Safety, Privacy Form gibi zorunlu formlar.
+
+### 9) Review ve yayın
+- Apple Review’den geçince App Store’da yayınlanır.
+- Google Play’de “Production” yayına alınır.
 
 ---
 

@@ -62,6 +62,12 @@ type MealItem = {
 };
 
 type MealSectionKey = 'breakfast' | 'lunch' | 'dinner';
+
+const SKELETON_COUNTS: Record<MealSectionKey, number> = {
+    breakfast: 1,
+    lunch: 1,
+    dinner: 2,
+};
 type MenuMealType = MenuDecision['menuType'];
 
 type MealSection = {
@@ -426,6 +432,23 @@ const buildMealItems = (menu: MenuDecisionWithLinks): MealItem[] => {
             };
         });
 };
+
+const renderSkeletonCards = (sectionId: MealSectionKey) =>
+    Array.from({ length: SKELETON_COUNTS[sectionId] }, (_, index) => (
+        <View key={`${sectionId}-skeleton-${index}`} style={styles.skeletonCard}>
+            <View style={styles.skeletonHeader}>
+                <View style={styles.skeletonBadge} />
+                <View style={styles.skeletonMetaRow}>
+                    <View style={[styles.skeletonChip, styles.skeletonChipWide]} />
+                    <View style={styles.skeletonChip} />
+                </View>
+            </View>
+            <View style={styles.skeletonBody}>
+                <View style={[styles.skeletonLine, styles.skeletonLineLarge]} />
+                <View style={[styles.skeletonLine, styles.skeletonLineMedium]} />
+            </View>
+        </View>
+    ));
 
 const buildEmptyMessage = (meal: MealSectionKey, isLoading: boolean, error?: string | null) => {
     if (error) {
@@ -1584,6 +1607,8 @@ export default function TodayScreen() {
                                             </View>
                                         </TouchableOpacity>
                                     ))
+                                ) : loading ? (
+                                    renderSkeletonCards(section.id)
                                 ) : (
                                     <View style={styles.emptyMealCard}>
                                         <MaterialCommunityIcons
@@ -2034,6 +2059,56 @@ const styles = StyleSheet.create({
     },
     sectionCards: {
         gap: spacing.md,
+    },
+    skeletonCard: {
+        minHeight: 160,
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        padding: spacing.md,
+        gap: spacing.md,
+        ...shadows.sm,
+    },
+    skeletonHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    skeletonBadge: {
+        width: 44,
+        height: 44,
+        borderRadius: radius.full,
+        backgroundColor: colors.surfaceMuted,
+    },
+    skeletonMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        marginLeft: 'auto',
+    },
+    skeletonChip: {
+        height: 18,
+        borderRadius: radius.full,
+        backgroundColor: colors.surfaceMuted,
+        width: 56,
+    },
+    skeletonChipWide: {
+        width: 88,
+    },
+    skeletonBody: {
+        gap: spacing.xs,
+    },
+    skeletonLine: {
+        height: 14,
+        borderRadius: radius.full,
+        backgroundColor: colors.surfaceMuted,
+    },
+    skeletonLineLarge: {
+        width: '75%',
+    },
+    skeletonLineMedium: {
+        width: '55%',
     },
     mealCard: {
         minHeight: 160,

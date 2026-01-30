@@ -103,6 +103,7 @@ type WeeklyMenuRequest = {
     maxPrepTime?: number;
     maxCookTime?: number;
     cuisinePriority?: 'normal' | 'high';
+    language?: 'tr' | 'en';
     generateImage?: boolean;
     forceRegenerate?: boolean;
 };
@@ -138,7 +139,15 @@ const MENU_RECIPES_STORAGE_KEY = '@smart_meal_planner:menu_recipes';
 const MENU_CACHE_STORAGE_KEY = '@smart_meal_planner:menu_cache';
 const WEEKLY_MENU_CACHE_KEY = '@smart_meal_planner:weekly_menu_generation';
 
-const DAY_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const DAY_KEYS: Array<keyof WeeklyRoutine> = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
+];
 
 const DEFAULT_ROUTINES: WeeklyRoutine = {
     monday: { type: 'office', gymTime: 'none' },
@@ -152,59 +161,59 @@ const DEFAULT_ROUTINES: WeeklyRoutine = {
 
 const COURSE_ORDER: MenuRecipeCourse[] = ['soup', 'main', 'side', 'pastry', 'salad', 'meze', 'dessert'];
 
-const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; mediaTone: string }> = {
+const COURSE_META_BASE: Record<MenuRecipeCourse, { labelKey: string; icon: IconName; mediaTone: string }> = {
     main: {
-        label: 'Ana Yemek',
+        labelKey: 'cookbook.categories.main',
         icon: 'silverware-fork-knife',
         mediaTone: colors.surfaceAlt,
     },
     side: {
-        label: 'Yan Yemek',
+        labelKey: 'cookbook.categories.side',
         icon: 'pot-steam-outline',
         mediaTone: colors.borderLight,
     },
     soup: {
-        label: 'Çorba',
+        labelKey: 'cookbook.categories.soup',
         icon: 'pot-steam-outline',
         mediaTone: colors.accentSoft,
     },
     salad: {
-        label: 'Salata',
+        labelKey: 'cookbook.categories.salad',
         icon: 'leaf',
         mediaTone: colors.successLight,
     },
     meze: {
-        label: 'Meze',
+        labelKey: 'cookbook.categories.meze',
         icon: 'food',
         mediaTone: colors.surfaceMuted,
     },
     dessert: {
-        label: 'Tatlı',
+        labelKey: 'cookbook.categories.dessert',
         icon: 'cupcake',
         mediaTone: colors.errorLight,
     },
     pastry: {
-        label: 'Hamur İşi',
+        labelKey: 'cookbook.categories.pastry',
         icon: 'bread-slice-outline',
         mediaTone: colors.surfaceAlt,
     },
 };
 
-const SECTION_META: Record<MealSectionKey, { title: string; icon: IconName; tint: string; iconColor: string }> = {
+const SECTION_META_BASE: Record<MealSectionKey, { titleKey: string; icon: IconName; tint: string; iconColor: string }> = {
     breakfast: {
-        title: 'Kahvaltı',
+        titleKey: 'home.mealTypes.breakfast',
         icon: 'coffee-outline',
         tint: colors.accentSoft,
         iconColor: colors.primaryDark,
     },
     lunch: {
-        title: 'Öğle',
+        titleKey: 'home.mealTypes.lunch',
         icon: 'weather-sunny',
         tint: colors.warningLight,
         iconColor: colors.warning,
     },
     dinner: {
-        title: 'Akşam',
+        titleKey: 'home.mealTypes.dinner',
         icon: 'silverware-fork-knife',
         tint: colors.surfaceMuted,
         iconColor: colors.textPrimary,
@@ -213,51 +222,51 @@ const SECTION_META: Record<MealSectionKey, { title: string; icon: IconName; tint
 
 type ChangeReason = 'mustUse' | 'disliked' | 'cuisine' | 'quick';
 
-const CHANGE_REASONS: Array<{
+const CHANGE_REASONS_BASE: Array<{
     key: ChangeReason;
-    title: string;
-    description: string;
+    titleKey: string;
+    descriptionKey: string;
     icon: IconName;
 }> = [
     {
         key: 'mustUse',
-        title: 'Özel malzeme isteğim var',
-        description: 'Malzemeyi yaz, menüde kullanalım.',
+        titleKey: 'home.changeReasons.mustUse.title',
+        descriptionKey: 'home.changeReasons.mustUse.description',
         icon: 'star-outline',
     },
     {
         key: 'disliked',
-        title: 'Sevmediğim malzeme var',
-        description: 'İstemediğin malzemeyi yaz.',
+        titleKey: 'home.changeReasons.disliked.title',
+        descriptionKey: 'home.changeReasons.disliked.description',
         icon: 'food-off-outline',
     },
     {
         key: 'cuisine',
-        title: 'Canım başka mutfak çekiyor',
-        description: 'Başka bir mutfak seç.',
+        titleKey: 'home.changeReasons.cuisine.title',
+        descriptionKey: 'home.changeReasons.cuisine.description',
         icon: 'silverware-variant',
     },
     {
         key: 'quick',
-        title: 'Daha hızlı/pratik olsun',
-        description: 'Daha kısa hazırlık süresi.',
+        titleKey: 'home.changeReasons.quick.title',
+        descriptionKey: 'home.changeReasons.quick.description',
         icon: 'timer-outline',
     },
 ];
 
-const CUISINE_OPTIONS: Array<{ key: string; label: string }> = [
-    { key: 'turkish', label: 'Türk' },
-    { key: 'mediterranean', label: 'Akdeniz' },
-    { key: 'italian', label: 'İtalyan' },
-    { key: 'asian', label: 'Asya' },
-    { key: 'middle-eastern', label: 'Ortadoğu' },
-    { key: 'mexican', label: 'Meksika' },
-    { key: 'indian', label: 'Hint' },
-    { key: 'french', label: 'Fransız' },
-    { key: 'japanese', label: 'Japon' },
-    { key: 'chinese', label: 'Çin' },
-    { key: 'thai', label: 'Tayland' },
-    { key: 'american', label: 'Amerikan' },
+const CUISINE_OPTIONS_BASE: Array<{ key: string; labelKey: string }> = [
+    { key: 'turkish', labelKey: 'preferences.cuisines.turkish' },
+    { key: 'mediterranean', labelKey: 'preferences.cuisines.mediterranean' },
+    { key: 'italian', labelKey: 'preferences.cuisines.italian' },
+    { key: 'asian', labelKey: 'preferences.cuisines.asian' },
+    { key: 'middle-eastern', labelKey: 'preferences.cuisines.middleEastern' },
+    { key: 'mexican', labelKey: 'preferences.cuisines.mexican' },
+    { key: 'indian', labelKey: 'preferences.cuisines.indian' },
+    { key: 'french', labelKey: 'preferences.cuisines.french' },
+    { key: 'japanese', labelKey: 'preferences.cuisines.japanese' },
+    { key: 'chinese', labelKey: 'preferences.cuisines.chinese' },
+    { key: 'thai', labelKey: 'preferences.cuisines.thai' },
+    { key: 'american', labelKey: 'preferences.cuisines.american' },
 ];
 
 const QUICK_PREP_MAX = 15;
@@ -277,7 +286,10 @@ const resolveWeekStartKey = (date: Date) => {
     return buildDateKey(weekStart);
 };
 
-const buildWeekDays = (baseDate: Date): CalendarDay[] => {
+const buildWeekDays = (
+    baseDate: Date,
+    t: (key: string, params?: Record<string, string | number>) => string
+): CalendarDay[] => {
     const today = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
     const dayOfWeekIndex = (today.getDay() + 6) % 7;
     const weekStart = new Date(today);
@@ -289,10 +301,11 @@ const buildWeekDays = (baseDate: Date): CalendarDay[] => {
         const isToday = date.getTime() === today.getTime();
         const isPast = date.getTime() < today.getTime();
         const isFuture = date.getTime() > today.getTime();
+        const dayKey = DAY_KEYS[index] ?? 'monday';
 
         return {
             key: buildDateKey(date),
-            label: DAY_LABELS[index],
+            label: t(`home.daysShort.${dayKey}`),
             dayNumber: date.getDate(),
             date,
             isToday,
@@ -410,16 +423,19 @@ const buildMealPlan = (routine: RoutineDay | null | undefined): MealPlan => {
     return { breakfast: false, lunch: false, dinner: true };
 };
 
-const buildMealItems = (menu: MenuDecisionWithLinks): MealItem[] => {
+const buildMealItems = (
+    menu: MenuDecisionWithLinks,
+    courseMetaMap: Record<MenuRecipeCourse, { label: string; icon: IconName; mediaTone: string }>
+): MealItem[] => {
     const itemCount = menu.items.length || 1;
     const perItemTime =
         menu.totalTimeMinutes > 0 ? Math.max(5, Math.round(menu.totalTimeMinutes / itemCount)) : undefined;
 
     return menu.items
-        .filter((item) => COURSE_META[item.course])
+        .filter((item) => courseMetaMap[item.course])
         .sort((first, second) => COURSE_ORDER.indexOf(first.course) - COURSE_ORDER.indexOf(second.course))
         .map((item) => {
-            const courseMeta = COURSE_META[item.course];
+            const courseMeta = courseMetaMap[item.course];
             return {
                 id: `${item.course}-${item.name}`,
                 title: item.name,
@@ -470,7 +486,10 @@ const buildEmptyMessage = (
     return t('home.menuEmpty');
 };
 
-const getFunctionsErrorMessage = (error: unknown) => {
+const getFunctionsErrorMessage = (
+    error: unknown,
+    t: (key: string, params?: Record<string, string | number>) => string
+) => {
     if (error && typeof error === 'object') {
         const maybeError = error as FunctionsError;
         if (typeof maybeError.details === 'string') {
@@ -483,7 +502,7 @@ const getFunctionsErrorMessage = (error: unknown) => {
             return maybeError.message;
         }
     }
-    return 'Bir hata oluştu.';
+    return t('home.errors.generic');
 };
 
 const normalizeIngredient = (value: string) => value.trim().toLocaleLowerCase('tr-TR');
@@ -520,12 +539,16 @@ const ensureWeeklyMenu = async ({
     onboarding,
     onboardingHash,
     force = false,
+    language,
+    t,
 }: {
     userId: string;
     weekStart: string;
     onboarding: OnboardingSnapshot | null;
     onboardingHash?: string | null;
     force?: boolean;
+    language?: 'tr' | 'en';
+    t: (key: string, params?: Record<string, string | number>) => string;
 }): Promise<{ cache: WeeklyMenuCache | null; error: string | null }> => {
     if (!force) {
         const cached = await loadWeeklyMenuCache(userId, onboardingHash);
@@ -546,6 +569,7 @@ const ensureWeeklyMenu = async ({
                 weekStart,
                 startDate: todayKey,
                 generateImage: false,
+                language,
                 ...(onboarding ? { onboarding } : {}),
                 ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
             },
@@ -561,18 +585,18 @@ const ensureWeeklyMenu = async ({
         return { cache, error: null };
     } catch (error) {
         console.warn('Weekly menu generation failed:', error);
-        return { cache: null, error: getFunctionsErrorMessage(error) };
+        return { cache: null, error: getFunctionsErrorMessage(error, t) };
     }
 };
 
 export default function TodayScreen() {
     const router = useRouter();
     const { state: userState } = useUser();
-    const { t, locale } = useLanguage();
+    const { t, locale, language } = useLanguage();
     const now = new Date();
     const timeOfDay = getTimeOfDay(now);
     const greeting = t(`home.greeting.${timeOfDay}`);
-    const weekDays = buildWeekDays(now);
+    const weekDays = buildWeekDays(now, t);
     const todayKey = weekDays.find((day) => day.isToday)?.key ?? weekDays[0].key;
     const [selectedDayKey, setSelectedDayKey] = useState(todayKey);
     const selectedDay = weekDays.find((day) => day.key === selectedDayKey) ?? weekDays[0];
@@ -620,6 +644,53 @@ export default function TodayScreen() {
     const selectedRoutine = weeklyRoutine[getDayKey(selectedDay.date)];
     const isHoliday = Boolean(selectedRoutine?.type === 'off' || selectedRoutine?.excludeFromPlan);
 
+    const courseMeta = useMemo(
+        () =>
+            Object.fromEntries(
+                Object.entries(COURSE_META_BASE).map(([key, meta]) => [
+                    key,
+                    {
+                        label: t(meta.labelKey),
+                        icon: meta.icon,
+                        mediaTone: meta.mediaTone,
+                    },
+                ])
+            ) as Record<MenuRecipeCourse, { label: string; icon: IconName; mediaTone: string }>,
+        [t]
+    );
+
+    const sectionMeta = useMemo(
+        () =>
+            Object.fromEntries(
+                Object.entries(SECTION_META_BASE).map(([key, meta]) => [
+                    key,
+                    {
+                        title: t(meta.titleKey),
+                        icon: meta.icon,
+                        tint: meta.tint,
+                        iconColor: meta.iconColor,
+                    },
+                ])
+            ) as Record<MealSectionKey, { title: string; icon: IconName; tint: string; iconColor: string }>,
+        [t]
+    );
+
+    const changeReasons = useMemo(
+        () =>
+            CHANGE_REASONS_BASE.map((option) => ({
+                key: option.key,
+                title: t(option.titleKey),
+                description: t(option.descriptionKey),
+                icon: option.icon,
+            })),
+        [t]
+    );
+
+    const cuisineOptions = useMemo(
+        () => CUISINE_OPTIONS_BASE.map((option) => ({ key: option.key, label: t(option.labelKey) })),
+        [t]
+    );
+
     const mealPlan = useMemo(() => buildMealPlan(selectedRoutine), [selectedRoutine]);
     const hasMenuByType = useMemo(
         () => ({
@@ -655,7 +726,7 @@ export default function TodayScreen() {
             if (!bundle?.items?.length) {
                 return [] as MealItem[];
             }
-            return buildMealItems(bundle);
+            return buildMealItems(bundle, courseMeta);
         };
 
         return {
@@ -663,7 +734,7 @@ export default function TodayScreen() {
             lunch: buildItems('lunch'),
             dinner: buildItems('dinner'),
         };
-    }, [menuBundles]);
+    }, [courseMeta, menuBundles]);
 
     const mealSections = useMemo(() => {
         const sections: MealSection[] = [];
@@ -672,7 +743,7 @@ export default function TodayScreen() {
             const items = mealItemsByType.breakfast;
             sections.push({
                 id: 'breakfast',
-                ...SECTION_META.breakfast,
+                ...sectionMeta.breakfast,
                 items,
                 emptyMessage: items.length ? undefined : buildEmptyMessage('breakfast', loading, error, t),
             });
@@ -682,7 +753,7 @@ export default function TodayScreen() {
             const items = mealItemsByType.lunch;
             sections.push({
                 id: 'lunch',
-                ...SECTION_META.lunch,
+                ...sectionMeta.lunch,
                 items,
                 emptyMessage: items.length ? undefined : buildEmptyMessage('lunch', loading, error, t),
             });
@@ -692,7 +763,7 @@ export default function TodayScreen() {
             const items = mealItemsByType.dinner;
             sections.push({
                 id: 'dinner',
-                ...SECTION_META.dinner,
+                ...sectionMeta.dinner,
                 title: menuTitle,
                 items,
                 emptyMessage: items.length ? undefined : buildEmptyMessage('dinner', loading, error, t),
@@ -708,6 +779,9 @@ export default function TodayScreen() {
         loading,
         mealItemsByType,
         menuTitle,
+        sectionMeta.breakfast,
+        sectionMeta.dinner,
+        sectionMeta.lunch,
         t,
     ]);
 
@@ -726,8 +800,8 @@ export default function TodayScreen() {
     const pantryCount = pantryItems.length;
     const pantryOnlyDisabled = pantryCount < 5;
     const pantryOnlyHint = pantryOnlyDisabled
-        ? 'Bu seçeneği kullanmak için en az 5 malzeme kayıtlı olmalı.'
-        : 'Sadece kayıtlı malzemelere öncelik verilir.';
+        ? t('home.changeSheet.pantryHintDisabled')
+        : t('home.changeSheet.pantryHintEnabled');
 
     const pantryList = useMemo(() => {
         const names = pantryItems
@@ -745,14 +819,14 @@ export default function TodayScreen() {
 
     const changeOptions =
         changeSheetMode === 'create'
-            ? CHANGE_REASONS.filter((option) => option.key !== 'disliked')
-            : CHANGE_REASONS;
+            ? changeReasons.filter((option) => option.key !== 'disliked')
+            : changeReasons;
 
     const availableCuisines = useMemo(() => {
         const selected = new Set(resolvedSnapshot?.cuisine?.selected ?? []);
-        const filtered = CUISINE_OPTIONS.filter((option) => !selected.has(option.key));
-        return filtered.length ? filtered : CUISINE_OPTIONS;
-    }, [resolvedSnapshot]);
+        const filtered = cuisineOptions.filter((option) => !selected.has(option.key));
+        return filtered.length ? filtered : cuisineOptions;
+    }, [cuisineOptions, resolvedSnapshot]);
 
     useFocusEffect(
         useCallback(() => {
@@ -901,6 +975,8 @@ export default function TodayScreen() {
                         onboarding: resolvedSnapshot,
                         onboardingHash,
                         force: true,
+                        language,
+                        t,
                     });
                     regenerationError = regenerationResult.error;
                     hasWeeklyCache = Boolean(regenerationResult.cache?.weekStart === weekStart && !regenerationError);
@@ -974,7 +1050,7 @@ export default function TodayScreen() {
                         } catch (firestoreError) {
                             console.warn('❌ Menu Firestore read error:', firestoreError);
                             if (!lastError) {
-                                lastError = 'Menü yüklenemedi.';
+                                lastError = t('home.errors.menuLoadFailed');
                             }
                         }
                     }
@@ -1003,6 +1079,8 @@ export default function TodayScreen() {
                         onboarding: resolvedSnapshot,
                         onboardingHash,
                         force: true,
+                        language,
+                        t,
                     });
                     weeklyGenerationKeyRef.current = null;
 
@@ -1049,6 +1127,8 @@ export default function TodayScreen() {
                             weekStart,
                             onboarding: resolvedSnapshot,
                             onboardingHash,
+                            language,
+                            t,
                         })
                             .catch((backgroundError) => {
                                 console.warn('Background weekly generation failed:', backgroundError);
@@ -1071,7 +1151,7 @@ export default function TodayScreen() {
             } catch (err: unknown) {
                 console.error('Menu fetch error:', err);
                 if (isMounted) {
-                    setError(getFunctionsErrorMessage(err));
+                    setError(getFunctionsErrorMessage(err, t));
                 }
             } finally {
                 if (isMounted) {
@@ -1086,7 +1166,7 @@ export default function TodayScreen() {
         return () => {
             isMounted = false;
         };
-    }, [selectedDayKey, userState.isLoading, userState.user?.uid, refreshKey]);
+    }, [refreshKey, selectedDayKey, t, userState.isLoading, userState.user?.uid, weekDays]);
 
     useEffect(() => {
         if (!hasMountedRef.current) {
@@ -1226,7 +1306,7 @@ export default function TodayScreen() {
         }
 
         if (!changeReason) {
-            setChangeMenuError('Lütfen bir neden seç.');
+            setChangeMenuError(t('home.errors.reasonRequired'));
             return;
         }
 
@@ -1236,26 +1316,26 @@ export default function TodayScreen() {
             changeReason === 'disliked' ? parseIngredientList(dislikedIngredients) : [];
 
         if (changeReason === 'mustUse' && requiredList.length === 0) {
-            setChangeMenuError('Lütfen kullanmak istediğin malzemeleri yaz.');
+            setChangeMenuError(t('home.errors.requiredIngredients'));
             return;
         }
         if (changeReason === 'disliked' && dislikedList.length === 0) {
-            setChangeMenuError('Lütfen istemediğin malzemeleri yaz.');
+            setChangeMenuError(t('home.errors.dislikedIngredients'));
             return;
         }
 
         if (changeReason === 'cuisine' && !selectedCuisine) {
-            setChangeMenuError('Lütfen bir mutfak seç.');
+            setChangeMenuError(t('home.errors.cuisineRequired'));
             return;
         }
 
         if (usePantryOnly && pantryOnlyDisabled) {
-            setChangeMenuError('Bu seçenek için yeterli malzeme yok.');
+            setChangeMenuError(t('home.errors.pantryNotEnough'));
             return;
         }
 
         if (!resolvedSnapshot || !userState.user?.uid) {
-            setChangeMenuError('Menü oluşturmak için kullanıcı verisi gerekli.');
+            setChangeMenuError(t('home.errors.userMissing'));
             return;
         }
 
@@ -1263,11 +1343,15 @@ export default function TodayScreen() {
         const isPremium = await loadPremiumStatus(userId);
         if (!isPremium) {
             const allowed = await requestRewardedAd({
-                title: 'Menüyü değiştirmek için reklam izle',
-                message: 'Devam etmek için kısa bir reklam izleyebilirsin.',
+                title: t('ads.rewarded.menuChangeTitle'),
+                message: t('ads.rewarded.menuChangeMessage'),
+                confirmText: t('ads.rewarded.confirm'),
+                cancelText: t('ads.rewarded.cancel'),
+                errorTitle: t('ads.rewarded.errorTitle'),
+                errorMessage: t('ads.rewarded.errorMessage'),
             });
             if (!allowed) {
-                setChangeMenuError('Reklam izlenmeden devam edilemez.');
+                setChangeMenuError(t('home.errors.adRequired'));
                 return;
             }
         }
@@ -1289,7 +1373,7 @@ export default function TodayScreen() {
             });
 
             if (!onboardingOverride) {
-                setChangeMenuError('Menü oluşturma verisi bulunamadı.');
+                setChangeMenuError(t('home.errors.menuDataMissing'));
                 return;
             }
 
@@ -1321,6 +1405,7 @@ export default function TodayScreen() {
                     weekStart,
                     singleDay: selectedDay.key,
                     onboarding: onboardingOverride,
+                    language,
                     ...(resolvedOnboardingHash ? { onboardingHash: resolvedOnboardingHash } : {}),
                     ...(usePantryOnly && pantryList.length ? { existingPantry: pantryList } : {}),
                     ...(usePantryOnly && requiredList.length === 0 ? { pantryOnly: true } : {}),
@@ -1357,7 +1442,7 @@ export default function TodayScreen() {
 
             setRefreshKey((prev) => prev + 1);
         } catch (err) {
-            setError(getFunctionsErrorMessage(err));
+            setError(getFunctionsErrorMessage(err, t));
             setIsInitialLoading(false);
         } finally {
             setIsRegeneratingMenu(false);
@@ -1374,8 +1459,12 @@ export default function TodayScreen() {
             const usedCount = await getWeeklyRecipeViews(userId, date);
             if (usedCount >= monetizationConfig.limits.freeWeeklyRecipeViews) {
                 const allowed = await requestRewardedAd({
-                    title: 'Tarif için reklam izle',
-                    message: 'Haftalık ücretsiz tarif hakkın doldu. İzleyip devam edebilirsin.',
+                    title: t('ads.rewarded.recipeUnlockTitle'),
+                    message: t('ads.rewarded.recipeUnlockMessage'),
+                    confirmText: t('ads.rewarded.confirm'),
+                    cancelText: t('ads.rewarded.cancel'),
+                    errorTitle: t('ads.rewarded.errorTitle'),
+                    errorMessage: t('ads.rewarded.errorMessage'),
                 });
                 if (!allowed) {
                     return;
@@ -1662,7 +1751,9 @@ export default function TodayScreen() {
                             <View style={styles.sheetHandle} />
                             <View style={styles.sheetHeader}>
                                 <Text style={styles.sheetTitle}>
-                                    {changeSheetMode === 'create' ? 'Menü oluştur' : 'Menüyü değiştir'}
+                                    {changeSheetMode === 'create'
+                                        ? t('home.changeSheet.titleCreate')
+                                        : t('home.changeSheet.titleChange')}
                                 </Text>
                                 <TouchableOpacity
                                     onPress={handleCloseChangeSheet}
@@ -1685,14 +1776,14 @@ export default function TodayScreen() {
                                                       ...option,
                                                       ...(option.key === 'cuisine'
                                                           ? {
-                                                                title: 'Mutfak seçimi yap',
-                                                                description: 'İstediğin mutfağı seç.',
+                                                                title: t('home.changeSheet.cuisineTitle'),
+                                                                description: t('home.changeSheet.cuisineDescription'),
                                                             }
                                                           : {}),
                                                       ...(option.key === 'quick'
                                                           ? {
-                                                                title: 'Hızlı/pratik olsun',
-                                                                description: 'Hazırlık süresi kısa olsun.',
+                                                                title: t('home.changeSheet.quickTitle'),
+                                                                description: t('home.changeSheet.quickDescription'),
                                                             }
                                                           : {}),
                                                   }
@@ -1744,8 +1835,8 @@ export default function TodayScreen() {
                                 {changeReason === 'mustUse' ? (
                                     <View style={styles.sheetSection}>
                                         <Input
-                                            label="Kullanmak istediğin malzemeler"
-                                            placeholder="Örn: tavuk, kıyma"
+                                            label={t('home.changeSheet.mustUseLabel')}
+                                            placeholder={t('home.changeSheet.mustUsePlaceholder')}
                                             value={requiredIngredients}
                                             onChangeText={(value) => {
                                                 setRequiredIngredients(value);
@@ -1761,8 +1852,8 @@ export default function TodayScreen() {
                                 {changeReason === 'disliked' ? (
                                     <View style={styles.sheetSection}>
                                         <Input
-                                            label="İstemediğin malzemeler"
-                                            placeholder="Örn: soğan, sarımsak"
+                                            label={t('home.changeSheet.dislikedLabel')}
+                                            placeholder={t('home.changeSheet.dislikedPlaceholder')}
                                             value={dislikedIngredients}
                                             onChangeText={(value) => {
                                                 setDislikedIngredients(value);
@@ -1777,7 +1868,7 @@ export default function TodayScreen() {
 
                                 {changeReason === 'cuisine' ? (
                                     <View style={styles.sheetSection}>
-                                        <Text style={styles.sheetLabel}>Mutfak seç</Text>
+                                        <Text style={styles.sheetLabel}>{t('home.changeSheet.cuisineSelectLabel')}</Text>
                                         <View style={styles.cuisineGrid}>
                                             {availableCuisines.map((option) => {
                                                 const isSelected = selectedCuisine === option.key;
@@ -1818,7 +1909,7 @@ export default function TodayScreen() {
                                                 color={colors.textSecondary}
                                             />
                                             <Text style={styles.quickInfoText}>
-                                                Hazırlık süresi {QUICK_PREP_MAX} dakikanın altında hedeflenir.
+                                                {t('home.changeSheet.quickInfo', { minutes: QUICK_PREP_MAX })}
                                             </Text>
                                         </View>
                                     </View>
@@ -1844,7 +1935,7 @@ export default function TodayScreen() {
                                         ) : null}
                                     </View>
                                     <View style={styles.pantryText}>
-                                        <Text style={styles.pantryTitle}>Sadece evdeki malzemeler</Text>
+                                        <Text style={styles.pantryTitle}>{t('home.changeSheet.pantryOnlyTitle')}</Text>
                                         <Text style={styles.pantrySubtitle}>{pantryOnlyHint}</Text>
                                     </View>
                                 </TouchableOpacity>
@@ -1856,7 +1947,9 @@ export default function TodayScreen() {
 
                             <View style={styles.sheetFooter}>
                                 <Button
-                                    title={changeSheetMode === 'create' ? 'Menü Oluştur' : 'Yeniden Oluştur'}
+                                    title={changeSheetMode === 'create'
+                                        ? t('home.changeSheet.ctaCreate')
+                                        : t('home.changeSheet.ctaRegenerate')}
                                     onPress={handleRegenerateMenu}
                                     loading={isRegeneratingMenu}
                                     fullWidth

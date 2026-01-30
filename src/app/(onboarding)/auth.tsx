@@ -8,10 +8,12 @@ import { spacing, radius } from '../../theme/spacing';
 import { useOnboarding } from '../../contexts/onboarding-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback } from 'react';
+import { useLanguage } from '../../contexts/language-context';
 
 export default function AuthScreen() {
     const router = useRouter();
     const { dispatch } = useOnboarding();
+    const { t } = useLanguage();
 
     useFocusEffect(
         useCallback(() => {
@@ -31,21 +33,21 @@ export default function AuthScreen() {
                 contentContainerStyle={styles.scrollContent}
             >
                 <View style={styles.header}>
-                    <Text style={styles.title}>Profilinizi Oluşturun</Text>
+                    <Text style={styles.title}>{t('onboarding.auth.title')}</Text>
                     <Text style={styles.subtitle}>
-                        Planlarınızı kaydetmek ve tüm cihazlardan erişmek için hesap oluşturun.
+                        {t('onboarding.auth.subtitle')}
                     </Text>
                 </View>
 
                 <View style={styles.form}>
                     <Input
-                        label="E-posta"
-                        placeholder="ornek@email.com"
+                        label={t('onboarding.auth.emailLabel')}
+                        placeholder={t('onboarding.auth.emailPlaceholder')}
                         value=""
                         onChangeText={() => { }}
                     />
                     <Button
-                        title="E-posta ile Devam Et"
+                        title={t('onboarding.auth.emailContinue')}
                         onPress={handleContinue}
                         fullWidth
                         size="large"
@@ -54,17 +56,21 @@ export default function AuthScreen() {
 
                 <View style={styles.divider}>
                     <View style={styles.line} />
-                    <Text style={styles.dividerText}>veya</Text>
+                    <Text style={styles.dividerText}>{t('onboarding.auth.or')}</Text>
                     <View style={styles.line} />
                 </View>
 
                 <View style={styles.socialButtons}>
-                    <SocialButton icon="apple" label="Apple ile Devam Et" onPress={handleContinue} />
-                    <SocialButton icon="google" label="Google ile Devam Et" onPress={handleContinue} />
+                    <SocialButton icon="apple" label={t('onboarding.auth.appleContinue')} onPress={handleContinue} />
+                    <SocialButton icon="google" label={t('onboarding.auth.googleContinue')} onPress={handleContinue} />
                 </View>
 
                 <Text style={styles.terms}>
-                    Devam ederek, <Text style={styles.link}>Kullanım Koşulları</Text> ve <Text style={styles.link}>Gizlilik Politikası</Text>'nı kabul etmiş olursunuz.
+                    {t('onboarding.auth.termsPrefix')}
+                    <Text style={styles.link}>{t('onboarding.auth.terms')}</Text>
+                    {t('onboarding.auth.termsAnd')}
+                    <Text style={styles.link}>{t('onboarding.auth.privacy')}</Text>
+                    {t('onboarding.auth.termsSuffix')}
                 </Text>
 
             </ScrollView>

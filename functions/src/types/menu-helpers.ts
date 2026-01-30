@@ -4,7 +4,7 @@
  */
 
 import { OnboardingData } from "./onboarding";
-import { MenuGenerationRequest, MealType } from "./menu";
+import { MenuGenerationRequest, MealType, LanguageCode } from "./menu";
 
 /**
  * Convert onboarding data to menu generation request
@@ -28,6 +28,7 @@ export function onboardingToMenuRequest(
     cuisinePriority?: "normal" | "high";
     mealType?: MealType;
     onboardingHash?: string;
+    language?: LanguageCode;
     previousPreferences?: {
       likedRecipes?: string[];
       dislikedRecipes?: string[];
@@ -75,6 +76,7 @@ export function onboardingToMenuRequest(
     dayOfWeek,
     onboardingHash: options?.onboardingHash,
     cuisinePriority: options?.cuisinePriority,
+    language: options?.language,
 
     // User preferences from onboarding
     dietaryRestrictions: onboarding.dietary.restrictions || [],

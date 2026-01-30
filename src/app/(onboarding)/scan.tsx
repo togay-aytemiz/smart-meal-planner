@@ -5,6 +5,7 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
@@ -15,6 +16,7 @@ export default function ScanScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { nextStep } = useOnboarding();
+    const { t } = useLanguage();
 
     // State
     const [capturedCount, setCapturedCount] = useState(0);
@@ -76,7 +78,7 @@ export default function ScanScreen() {
             {isAnalyzing && (
                 <View style={[StyleSheet.absoluteFill, styles.analysisOverlay]}>
                     <MaterialCommunityIcons name="brain" size={64} color="#FFF" style={styles.breathingIcon} />
-                    <Text style={styles.analyzingText}>Fotoğraflar İnceleniyor...</Text>
+                    <Text style={styles.analyzingText}>{t('onboarding.scan.analyzing')}</Text>
                 </View>
             )}
 

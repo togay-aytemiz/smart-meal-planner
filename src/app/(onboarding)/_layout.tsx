@@ -8,6 +8,7 @@ import { ProgressBar } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { useLanguage } from '../../contexts/language-context';
 
 function OnboardingHeader() {
     const { state, prevStep, nextStep } = useOnboarding();
@@ -15,6 +16,7 @@ function OnboardingHeader() {
     const segments = useSegments();
     const { source } = useGlobalSearchParams<{ source?: string }>();
     const insets = useSafeAreaInsets();
+    const { t } = useLanguage();
     const progressOpacity = useRef(new Animated.Value(1)).current;
     const isPaywallScreen = segments[segments.length - 1] === 'paywall';
     const isSettingsPaywall = isPaywallScreen && source === 'settings';
@@ -78,7 +80,7 @@ function OnboardingHeader() {
                             router.replace('/(onboarding)/kickstart');
                         }}
                     >
-                        <Text style={styles.skipText}>Geç</Text>
+                        <Text style={styles.skipText}>{t('onboarding.common.skip')}</Text>
                     </TouchableOpacity>
                 ) : (
                     <View style={styles.backPlaceholder} />

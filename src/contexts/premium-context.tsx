@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import Purchases, { type CustomerInfo, LOG_LEVEL } from 'react-native-purchases';
 import PurchasesUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useUser } from './user-context';
+import { useLanguage } from './language-context';
 import { revenueCatConfig } from '../config/revenuecat';
 import { persistPremiumStatus } from '../utils/premium-status';
 
@@ -24,6 +25,7 @@ const resolvePremium = (info: CustomerInfo | null) =>
 
 export function PremiumProvider({ children }: { children: ReactNode }) {
     const { state: userState } = useUser();
+    const { t } = useLanguage();
     const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
     const [isPremium, setIsPremium] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -123,9 +125,9 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
             }
         } catch (error) {
             console.warn('RevenueCat paywall error:', error);
-            Alert.alert('Satın alma başarısız', 'Lütfen tekrar dene.');
+            Alert.alert(t('paywall.errorTitlePurchase'), t('paywall.errorPurchase'));
         }
-    }, [refresh]);
+    }, [refresh, t]);
 
     const presentPaywallIfNeeded = useCallback(async () => {
         try {
@@ -138,9 +140,9 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
             }
         } catch (error) {
             console.warn('RevenueCat paywall-if-needed error:', error);
-            Alert.alert('Satın alma başarısız', 'Lütfen tekrar dene.');
+            Alert.alert(t('paywall.errorTitlePurchase'), t('paywall.errorPurchase'));
         }
-    }, [refresh]);
+    }, [refresh, t]);
 
     const restorePurchases = useCallback(async () => {
         try {
@@ -148,9 +150,9 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
             await applyCustomerInfo(info);
         } catch (error) {
             console.warn('RevenueCat restore error:', error);
-            Alert.alert('Geri yükleme başarısız', 'Daha sonra tekrar deneyin.');
+            Alert.alert(t('paywall.restoreErrorTitle'), t('paywall.restoreErrorMessage'));
         }
-    }, [applyCustomerInfo]);
+    }, [applyCustomerInfo, t]);
 
     const openCustomerCenter = useCallback(async () => {
         try {

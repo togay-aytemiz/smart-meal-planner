@@ -16,6 +16,7 @@ import {
   MenuGenerationRequest,
   WeeklyContext,
   WeeklyMenuGenerationRequest,
+  LanguageCode,
 } from "./types/menu";
 import { MenuRecipeGenerationParams } from "./types/generation-params";
 import { onboardingToMenuRequest } from "./types/menu-helpers";
@@ -55,21 +56,33 @@ type RecipeLink = {
 };
 
 const normalizeText = (value: string) => value.trim().toLowerCase();
-const normalizePantryValue = (value: string) =>
+const normalizePantryValue = (value: string, locale: string = "tr-TR") =>
   value
     .trim()
     .replace(/\s+/g, " ")
-    .toLocaleLowerCase("tr-TR");
+    .toLocaleLowerCase(locale);
 const buildPantryCacheId = (normalizedKey: string) =>
   createHash("sha256").update(`v2:${normalizedKey}`).digest("hex");
 
-const toTitleCase = (str: string) => {
-  return str.toLocaleLowerCase('tr-TR').replace(/(?:^|\s|["'([{])+\S/g, match => match.toLocaleUpperCase('tr-TR'));
+const toTitleCase = (str: string, locale: string = "tr-TR") =>
+  str
+    .toLocaleLowerCase(locale)
+    .replace(/(?:^|\s|["'([{])+\S/g, (match) => match.toLocaleUpperCase(locale));
+
+const resolveLocale = (language?: LanguageCode, fallbackLocale?: string) => {
+  if (language === "en") {
+    return "en-US";
+  }
+  if (language === "tr") {
+    return "tr-TR";
+  }
+  return fallbackLocale ?? "tr-TR";
 };
 
 type PantryNormalizationRequest = {
   items: string[];
   locale?: string;
+  language?: LanguageCode;
 };
 
 type PantryNormalizedItem = {
@@ -554,18 +567,27 @@ const resolveMealPlan = (routine: RoutineDay | undefined): MealPlan => {
   return { breakfast: false, lunch: false, dinner: true };
 };
 
-const getSeasonalityHint = (date: Date) => {
+const getSeasonalityHint = (date: Date, language: LanguageCode = "tr") => {
+  const isEnglish = language === "en";
   const month = date.getUTCMonth();
   if (month === 11 || month <= 1) {
-    return "Kış mevsimi: kök sebzeler (kereviz, havuç), bakliyat ve kış yeşillikleri.";
+    return isEnglish
+      ? "Winter: root vegetables (celery, carrot), legumes, and winter greens."
+      : "Kış mevsimi: kök sebzeler (kereviz, havuç), bakliyat ve kış yeşillikleri.";
   }
   if (month >= 2 && month <= 4) {
-    return "İlkbahar: enginar, taze bezelye, kuşkonmaz ve yeşil otlar.";
+    return isEnglish
+      ? "Spring: artichoke, fresh peas, asparagus, and fresh herbs."
+      : "İlkbahar: enginar, taze bezelye, kuşkonmaz ve yeşil otlar.";
   }
   if (month >= 5 && month <= 7) {
-    return "Yaz: domates, biber, kabak, patlıcan ve taze meyveler.";
+    return isEnglish
+      ? "Summer: tomato, pepper, zucchini, eggplant, and fresh fruits."
+      : "Yaz: domates, biber, kabak, patlıcan ve taze meyveler.";
   }
-  return "Sonbahar: kabak, mantar, kök sebzeler ve bakliyat.";
+  return isEnglish
+    ? "Autumn: squash, mushrooms, root vegetables, and legumes."
+    : "Sonbahar: kabak, mantar, kök sebzeler ve bakliyat.";
 };
 
 const buildWeekDays = (weekStart: Date, routines: WeeklyRoutine): WeekDayContext[] => {
@@ -714,6 +736,8 @@ export const normalizePantryItems = onCall(async (request) => {
   try {
     const payload = request.data as PantryNormalizationRequest | undefined;
     const rawItems = payload?.items;
+    const language = payload?.language ?? "tr";
+    const locale = resolveLocale(language, payload?.locale);
 
     if (!Array.isArray(rawItems) || rawItems.length === 0) {
       throw new functions.HttpsError(
@@ -735,7 +759,7 @@ export const normalizePantryItems = onCall(async (request) => {
 
     const uniqueByKey = new Map<string, string>();
     for (const item of cleanedItems) {
-      const key = normalizePantryValue(item);
+      const key = normalizePantryValue(item, locale);
       if (!key || uniqueByKey.has(key)) {
         continue;
       }
@@ -772,7 +796,7 @@ export const normalizePantryItems = onCall(async (request) => {
       const openai = new OpenAIProvider();
       modelName = openai.getName();
 
-      const response = await openai.normalizePantryItems(inputs);
+      const response = await openai.normalizePantryItems(inputs, language);
       const responseItems = (response as { items?: Array<{ input?: string; canonical?: string; categoryId?: string }> })
         ?.items;
 
@@ -782,7 +806,7 @@ export const normalizePantryItems = onCall(async (request) => {
           const canonical = typeof item.canonical === "string" ? item.canonical.trim() : "";
           const categoryId = typeof item.categoryId === "string" ? item.categoryId : "other";
           if (!input || !canonical) return;
-          const key = normalizePantryValue(input);
+          const key = normalizePantryValue(input, locale);
           if (!key) return;
           llmByKey.set(key, { canonical, categoryId });
         });
@@ -811,7 +835,7 @@ export const normalizePantryItems = onCall(async (request) => {
     }
 
     const results: PantryNormalizedItem[] = cleanedItems.map((input) => {
-      const key = normalizePantryValue(input);
+      const key = normalizePantryValue(input, locale);
       const cached = cachedByKey.get(key);
       const llmResult = llmByKey.get(key);
 
@@ -819,12 +843,12 @@ export const normalizePantryItems = onCall(async (request) => {
       let categoryId = cached?.categoryId || llmResult?.categoryId || "other";
 
       // Enforce Title Case
-      canonical = toTitleCase(canonical);
+      canonical = toTitleCase(canonical, locale);
 
       return {
         input,
         canonical,
-        normalized: normalizePantryValue(canonical),
+        normalized: normalizePantryValue(canonical, locale),
         categoryId,
       };
     });
@@ -849,12 +873,16 @@ type GroceryCategorizationRequest = {
     unit?: string;
     meals: string[];
   }>;
+  language?: LanguageCode;
+  locale?: string;
 };
 
 export const categorizeGroceryItems = onCall(async (request) => {
   try {
     const payload = request.data as GroceryCategorizationRequest | undefined;
     const rawItems = payload?.items;
+    const language = payload?.language ?? "tr";
+    const locale = resolveLocale(language, payload?.locale);
 
     if (!Array.isArray(rawItems) || rawItems.length === 0) {
       throw new functions.HttpsError(
@@ -864,7 +892,7 @@ export const categorizeGroceryItems = onCall(async (request) => {
     }
 
     const openai = new OpenAIProvider();
-    const response = await openai.categorizeGroceryItems(rawItems);
+    const response = await openai.categorizeGroceryItems(rawItems, language);
 
     const responseItems = (response as {
       items?: Array<{
@@ -886,7 +914,7 @@ export const categorizeGroceryItems = onCall(async (request) => {
     // Apply Title Case to all item names
     const categorizedItems = responseItems.map((item) => ({
       ...item,
-      name: toTitleCase(item.name),
+      name: toTitleCase(item.name, locale),
     }));
 
     return {
@@ -1071,6 +1099,8 @@ export const generateWeeklyMenu = onCall(async (request) => {
         "User id is required"
       );
     }
+    const language = payload.language ?? "tr";
+    const locale = resolveLocale(language);
 
     const db = getDb();
     let onboardingSource = payload.onboarding as Partial<OnboardingData> | undefined;
@@ -1200,7 +1230,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
     let menuCount = 0;
 
     const normalizeDishName = (value: string) =>
-      value.trim().toLocaleLowerCase("tr-TR");
+      value.trim().toLocaleLowerCase(locale);
 
     const buildMenuRequest = (
       assignment: MealAssignment,
@@ -1226,6 +1256,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
         cuisinePriority: payload.cuisinePriority,
         generateImage: payload.generateImage,
         onboardingHash: payload.onboardingHash,
+        language,
       });
       const weeklyContext = buildWeeklyContext({
         weekStart,
@@ -1233,7 +1264,7 @@ export const generateWeeklyMenu = onCall(async (request) => {
         repeatMode,
         slotId: assignment.slotId,
         ingredientSynergyFrom,
-        seasonalityHint: getSeasonalityHint(parseISODate(assignment.date)),
+        seasonalityHint: getSeasonalityHint(parseISODate(assignment.date), language),
       });
 
       if (leftoverMainDish) {

@@ -3,6 +3,8 @@
  * Used by both Pantry and Grocery categorization
  */
 
+import { LanguageCode } from "../../types/menu";
+
 export type CategoryId =
     | 'produce'
     | 'proteins'
@@ -85,6 +87,72 @@ export const GROCERY_CATEGORIES: CategoryConfig[] = [
     },
 ];
 
+export const GROCERY_CATEGORIES_EN: CategoryConfig[] = [
+    {
+        id: 'produce',
+        title: 'Produce',
+        description: 'Fresh fruits and vegetables',
+        examples: ['tomato', 'cucumber', 'apple', 'banana', 'broccoli', 'carrot', 'pepper', 'onion', 'potato', 'lemon'],
+    },
+    {
+        id: 'proteins',
+        title: 'Meat & Protein',
+        description: 'Meat, fish, eggs, and protein sources',
+        examples: ['chicken breast', 'ground beef', 'beef', 'salmon', 'eggs', 'turkey', 'lamb'],
+    },
+    {
+        id: 'dairy',
+        title: 'Dairy',
+        description: 'Milk, cheese, yogurt, and dairy products',
+        examples: ['milk', 'yogurt', 'feta', 'cheddar', 'butter', 'cream', 'ricotta'],
+    },
+    {
+        id: 'grains',
+        title: 'Grains & Legumes',
+        description: 'Rice, pasta, legumes, and grains',
+        examples: ['rice', 'bulgur', 'pasta', 'lentils', 'chickpeas', 'beans', 'flour', 'oats'],
+    },
+    {
+        id: 'spices',
+        title: 'Spices',
+        description: 'Spices, herbs, and dried seasonings',
+        examples: ['salt', 'black pepper', 'chili flakes', 'cumin', 'oregano', 'mint', 'cinnamon', 'turmeric', 'bay leaf'],
+    },
+    {
+        id: 'sauces',
+        title: 'Sauces & Condiments',
+        description: 'Sauces, oils, and condiments',
+        examples: ['olive oil', 'soy sauce', 'ketchup', 'mayonnaise', 'vinegar', 'tomato paste', 'mustard'],
+    },
+    {
+        id: 'bakery',
+        title: 'Bakery & Bread',
+        description: 'Bread and bakery items',
+        examples: ['bread', 'wraps', 'bagel', 'pita', 'flatbread'],
+    },
+    {
+        id: 'frozen',
+        title: 'Frozen',
+        description: 'Frozen foods',
+        examples: ['frozen peas', 'frozen mixed vegetables', 'frozen berries'],
+    },
+    {
+        id: 'beverages',
+        title: 'Beverages',
+        description: 'Water, juice, and drinks',
+        examples: ['water', 'sparkling water', 'orange juice', 'tea', 'coffee'],
+    },
+    {
+        id: 'other',
+        title: 'Other',
+        description: 'Items that do not fit other categories',
+        examples: [],
+    },
+];
+
+export const getGroceryCategories = (language: LanguageCode = "tr"): CategoryConfig[] =>
+    language === "en" ? GROCERY_CATEGORIES_EN : GROCERY_CATEGORIES;
+
 export const getCategoryById = (id: CategoryId): CategoryConfig | undefined =>
     GROCERY_CATEGORIES.find((cat) => cat.id === id);
 
@@ -94,7 +162,9 @@ export const getCategoryTitles = (): Record<CategoryId, string> =>
         {} as Record<CategoryId, string>
     );
 
-export const buildCategoryListForPrompt = (): string =>
-    GROCERY_CATEGORIES.map(
-        (cat) => `- ${cat.id}: ${cat.title} (${cat.description}). Örnekler: ${cat.examples.join(', ')}`
-    ).join('\n');
+export const buildCategoryListForPrompt = (language: LanguageCode = "tr"): string => {
+    const exampleLabel = language === "en" ? "Examples" : "Örnekler";
+    return getGroceryCategories(language)
+        .map((cat) => `- ${cat.id}: ${cat.title} (${cat.description}). ${exampleLabel}: ${cat.examples.join(', ')}`)
+        .join('\n');
+};

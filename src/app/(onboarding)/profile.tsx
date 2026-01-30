@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { Button, Input } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
@@ -13,6 +14,7 @@ const AVATARS = ['👤', '👩', '👨', '👧', '👦', '🧑‍🍳', '👩‍
 export default function ProfileScreen() {
     const router = useRouter();
     const { dispatch } = useOnboarding();
+    const { t } = useLanguage();
     const [name, setName] = useState('');
     const [selectedAvatar, setSelectedAvatar] = useState('👤');
 
@@ -33,8 +35,8 @@ export default function ProfileScreen() {
         <View style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>Sizi tanıyalım</Text>
-                    <Text style={styles.subtitle}>İsminiz ve avatarınızı seçin</Text>
+                    <Text style={styles.title}>{t('onboarding.profile.title')}</Text>
+                    <Text style={styles.subtitle}>{t('onboarding.profile.subtitle')}</Text>
                 </View>
 
                 {/* Avatar Selection */}
@@ -60,8 +62,8 @@ export default function ProfileScreen() {
 
                 {/* Name Input */}
                 <Input
-                    label="İsminiz"
-                    placeholder="Adınızı girin"
+                    label={t('onboarding.profile.nameLabel')}
+                    placeholder={t('onboarding.profile.namePlaceholder')}
                     value={name}
                     onChangeText={setName}
                     autoCapitalize="words"
@@ -71,7 +73,7 @@ export default function ProfileScreen() {
 
             <View style={styles.footer}>
                 <Button
-                    title="Devam"
+                    title={t('onboarding.common.continue')}
                     onPress={handleContinue}
                     fullWidth
                     size="large"

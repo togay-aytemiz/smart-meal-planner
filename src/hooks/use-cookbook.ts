@@ -56,7 +56,7 @@ export function useCookbook() {
             } catch (error) {
                 console.error('Favorites fetch error:', error);
                 if (!isMounted) return;
-                setState({ favorites: [], isLoading: false, error: 'Favoriler yüklenemedi' });
+                setState({ favorites: [], isLoading: false, error: 'cookbook.errors.loadFavorites' });
             }
         };
 
@@ -77,7 +77,7 @@ export function useCookbook() {
                 setState((prev) => ({
                     ...prev,
                     isLoading: false,
-                    error: 'Favoriler yüklenemedi',
+                    error: 'cookbook.errors.loadFavorites',
                 }));
             }
         );

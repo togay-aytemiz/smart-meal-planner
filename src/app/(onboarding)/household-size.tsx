@@ -5,6 +5,7 @@ import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { Button } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
@@ -12,6 +13,7 @@ import { spacing, radius } from '../../theme/spacing';
 export default function HouseholdSizeScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
+    const { t } = useLanguage();
     const [count, setCount] = useState(state.data.householdSize || 1);
 
     const handleIncrement = () => {
@@ -36,7 +38,7 @@ export default function HouseholdSizeScreen() {
             // Create default member for single person
             const defaultMember = {
                 id: '1',
-                name: state.data.profile?.name || 'Ben',
+                name: state.data.profile?.name || t('onboarding.household.defaultSelfName'),
                 role: 'self',
                 routines: undefined // Will be init by Routines screen
             };
@@ -77,10 +79,8 @@ export default function HouseholdSizeScreen() {
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <View style={styles.content}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>Kaç kişilik ev?</Text>
-                    <Text style={styles.subtitle}>
-                        Yemek planlaması yapılacak kişi sayısını belirtin
-                    </Text>
+                    <Text style={styles.title}>{t('onboarding.household.title')}</Text>
+                    <Text style={styles.subtitle}>{t('onboarding.household.subtitle')}</Text>
                 </View>
 
                 {/* People visualization */}
@@ -104,7 +104,7 @@ export default function HouseholdSizeScreen() {
 
                     <View style={styles.countDisplay}>
                         <Text style={styles.countNumber}>{count}</Text>
-                        <Text style={styles.countLabel}>kişi</Text>
+                        <Text style={styles.countLabel}>{t('onboarding.household.countLabel')}</Text>
                     </View>
 
                     <TouchableOpacity
@@ -121,7 +121,7 @@ export default function HouseholdSizeScreen() {
 
             <View style={styles.footer}>
                 <Button
-                    title="Devam"
+                    title={t('onboarding.common.continue')}
                     onPress={handleContinue}
                     fullWidth
                     size="large"

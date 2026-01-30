@@ -13,12 +13,18 @@ type RewardedAdOptions = {
     message?: string;
     confirmText?: string;
     cancelText?: string;
+    errorTitle?: string;
+    errorMessage?: string;
     requestOptions?: RequestOptions;
 };
 
 let rewardedInProgress = false;
 
-const showRewardedAd = async (requestOptions?: RequestOptions): Promise<boolean> =>
+const showRewardedAd = async (
+    requestOptions?: RequestOptions,
+    errorTitle = 'Reklam yüklenemedi',
+    errorMessage = 'Lütfen daha sonra tekrar deneyin.'
+): Promise<boolean> =>
     new Promise((resolve) => {
         if (rewardedInProgress) {
             resolve(false);
@@ -65,7 +71,7 @@ const showRewardedAd = async (requestOptions?: RequestOptions): Promise<boolean>
 
         const unsubscribeError = rewarded.addAdEventListener(AdEventType.ERROR, (error) => {
             console.warn('Rewarded ad error:', error);
-            Alert.alert('Reklam yüklenemedi', 'Lütfen daha sonra tekrar deneyin.');
+            Alert.alert(errorTitle, errorMessage);
             finalize(false);
         });
 
@@ -77,6 +83,8 @@ export const requestRewardedAd = ({
     message = 'Bu işlemi yapmak için kısa bir reklam izlemen gerekiyor.',
     confirmText = 'Reklamı izle',
     cancelText = 'Vazgeç',
+    errorTitle = 'Reklam yüklenemedi',
+    errorMessage = 'Lütfen daha sonra tekrar deneyin.',
     requestOptions,
 }: RewardedAdOptions = {}): Promise<boolean> =>
     new Promise((resolve) => {
@@ -85,11 +93,11 @@ export const requestRewardedAd = ({
             {
                 text: confirmText,
                 onPress: () => {
-                    showRewardedAd(requestOptions)
+                    showRewardedAd(requestOptions, errorTitle, errorMessage)
                         .then(resolve)
                         .catch((error) => {
                             console.warn('Rewarded ad flow error:', error);
-                            Alert.alert('Reklam yüklenemedi', 'Lütfen daha sonra tekrar deneyin.');
+                            Alert.alert(errorTitle, errorMessage);
                             resolve(false);
                         });
                 },

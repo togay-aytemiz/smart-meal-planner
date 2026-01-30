@@ -1,37 +1,30 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, Platform, UIManager, Animated, Easing, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import * as Haptics from 'expo-haptics';
 import { Button, SelectableTag } from '../../components/ui';
 import { useOnboarding, WeeklyRoutine, RoutineDay, HouseholdMember } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 
-const DAYS = [
-    { key: 'monday', label: 'Pzt' },
-    { key: 'tuesday', label: 'Sal' },
-    { key: 'wednesday', label: 'Çar' },
-    { key: 'thursday', label: 'Per' },
-    { key: 'friday', label: 'Cum' },
-    { key: 'saturday', label: 'Cmt' },
-    { key: 'sunday', label: 'Paz' },
-] as const;
+const DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
 const { width } = Dimensions.get('window');
 const ROUTINE_CARD_SIZE = Math.floor((width - (spacing.lg * 2) - (spacing.sm * 2)) / 3) - spacing.md;
 const DETAIL_SECTION_GAP = spacing.md;
 
 const ROUTINE_TYPES = [
-    { key: 'office', label: 'Ofis', emoji: '🏢' },
-    { key: 'remote', label: 'Ev', emoji: '🏠' },
-    { key: 'gym', label: 'Spor', emoji: '💪' },
-    { key: 'school', label: 'Okul', emoji: '📚' },
-    { key: 'off', label: 'Tatil', emoji: '🌴' },
+    { key: 'office', labelKey: 'onboarding.routines.routineTypes.office', emoji: '🏢' },
+    { key: 'remote', labelKey: 'onboarding.routines.routineTypes.remote', emoji: '🏠' },
+    { key: 'gym', labelKey: 'onboarding.routines.routineTypes.gym', emoji: '💪' },
+    { key: 'school', labelKey: 'onboarding.routines.routineTypes.school', emoji: '📚' },
+    { key: 'off', labelKey: 'onboarding.routines.routineTypes.off', emoji: '🌴' },
 ] as const;
 
-type DayKey = typeof DAYS[number]['key'];
+type DayKey = typeof DAY_KEYS[number];
 
 const DEFAULT_ROUTINE: WeeklyRoutine = {
     monday: { type: 'office', gymTime: 'none' },
@@ -46,6 +39,7 @@ const DEFAULT_ROUTINE: WeeklyRoutine = {
 export default function RoutinesScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
+    const { t } = useLanguage();
     const [activeMemberIndex, setActiveMemberIndex] = useState(0);
     const [selectedDay, setSelectedDay] = useState<DayKey>('monday');
     const [isOptionsVisible, setIsOptionsVisible] = useState(false);
@@ -57,6 +51,10 @@ export default function RoutinesScreen() {
     const members = state.data.members || [];
 
     const activeMember = members[activeMemberIndex];
+    const days = useMemo(
+        () => DAY_KEYS.map((key) => ({ key, label: t(`preferences.daysShort.${key}`) })),
+        [t]
+    );
 
     // Initialize routines for current member if not exist
     const currentRoutine = activeMember?.routines || DEFAULT_ROUTINE;
@@ -164,11 +162,11 @@ export default function RoutinesScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <View style={styles.header}>
-                <Text style={styles.title}>Haftalık Rutinler</Text>
+                <Text style={styles.title}>{t('onboarding.routines.title')}</Text>
                 <Text style={styles.subtitle}>
                     {members.length > 1
-                        ? `${activeMember.name} için değişiklik yapmak istediğiniz günlere dokunun`
-                        : 'Değişiklik yapmak istediğiniz günlere dokunun'}
+                        ? t('onboarding.routines.subtitleWithName', { name: activeMember.name })
+                        : t('onboarding.routines.subtitle')}
                 </Text>
             </View>
 
@@ -215,7 +213,7 @@ export default function RoutinesScreen() {
                 {/* Day Selector */}
                 <View style={styles.daySelectorWrapper}>
                     <View style={styles.daySelector}>
-                        {DAYS.map((day) => (
+                        {days.map((day) => (
                             <TouchableOpacity
                                 key={day.key}
                                 style={[
@@ -256,7 +254,7 @@ export default function RoutinesScreen() {
                             pointerEvents="none"
                         >
                             <Text style={styles.hintEmoji}>👆</Text>
-                            <Text style={styles.hintText}>Değiştirmek için dokun</Text>
+                            <Text style={styles.hintText}>{t('onboarding.routines.hint')}</Text>
                         </Animated.View>
                     )}
                 </View>
@@ -265,7 +263,9 @@ export default function RoutinesScreen() {
                 {isOptionsVisible && (
                     <View style={styles.routineSection}>
                         <Text style={styles.sectionLabel}>
-                            {DAYS.find(d => d.key === selectedDay)?.label} günü için seçin:
+                            {t('onboarding.routines.daySelect', {
+                                day: days.find(d => d.key === selectedDay)?.label || '',
+                            })}
                         </Text>
                         <View style={styles.routineGrid}>
                             {ROUTINE_TYPES.map((routine) => (
@@ -283,7 +283,7 @@ export default function RoutinesScreen() {
                                             styles.routineLabel,
                                             currentRoutine[selectedDay].type === routine.key && styles.routineLabelSelected,
                                         ]}>
-                                            {routine.label}
+                                            {t(routine.labelKey)}
                                         </Text>
                                     </View>
                                 </TouchableOpacity>
@@ -292,25 +292,25 @@ export default function RoutinesScreen() {
                         {currentRoutine[selectedDay].type === 'gym' && (
                             <View style={styles.detailSection}>
                                 <View style={styles.detailItemLast}>
-                                    <Text style={styles.detailTitle}>Ne zaman spora gidiyorsun?</Text>
+                                    <Text style={styles.detailTitle}>{t('onboarding.routines.gymQuestion')}</Text>
                                     <View style={styles.tagRow}>
                                         <View style={styles.tagItem}>
                                             <SelectableTag
-                                                label="Sabah"
+                                                label={t('onboarding.routines.gymTimes.morning')}
                                                 selected={currentRoutine[selectedDay].gymTime === 'morning'}
                                                 onPress={() => updateDayDetails({ gymTime: 'morning' })}
                                             />
                                         </View>
                                         <View style={styles.tagItem}>
                                             <SelectableTag
-                                                label="Öğleden sonra"
+                                                label={t('onboarding.routines.gymTimes.afternoon')}
                                                 selected={currentRoutine[selectedDay].gymTime === 'afternoon'}
                                                 onPress={() => updateDayDetails({ gymTime: 'afternoon' })}
                                             />
                                         </View>
                                         <View style={styles.tagItem}>
                                             <SelectableTag
-                                                label="Akşam"
+                                                label={t('onboarding.routines.gymTimes.evening')}
                                                 selected={currentRoutine[selectedDay].gymTime === 'evening'}
                                                 onPress={() => updateDayDetails({ gymTime: 'evening' })}
                                             />
@@ -325,7 +325,7 @@ export default function RoutinesScreen() {
                                     <View style={styles.infoBanner}>
                                         <Text style={styles.infoEmoji}>ℹ️</Text>
                                         <Text style={styles.infoText}>
-                                            Bu gün evde yemek yapılmayacak olarak işaretlendi. Planlama bu günü hariç tutacak.
+                                            {t('onboarding.routines.offInfo')}
                                         </Text>
                                     </View>
                                 </View>
@@ -337,7 +337,9 @@ export default function RoutinesScreen() {
 
             <View style={styles.footer}>
                 <Button
-                    title={activeMemberIndex < members.length - 1 ? "Sonraki Kişi" : "Devam"}
+                    title={activeMemberIndex < members.length - 1
+                        ? t('onboarding.routines.ctaNext')
+                        : t('onboarding.routines.ctaContinue')}
                     onPress={handleContinue}
                     fullWidth
                     size="large"

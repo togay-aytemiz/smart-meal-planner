@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, ReasoningBubble } from '../../components/ui';
 import { useOnboarding, type RoutineDay, type WeeklyRoutine } from '../../contexts/onboarding-context';
 import { useSampleMenu } from '../../contexts/sample-menu-context';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows } from '../../theme/spacing';
@@ -134,16 +135,6 @@ const DEFAULT_ROUTINES: WeeklyRoutine = {
     sunday: { type: 'remote', gymTime: 'none' },
 };
 
-const DAY_LABELS: Record<WeekdayKey, string> = {
-    monday: 'Pazartesi',
-    tuesday: 'Salı',
-    wednesday: 'Çarşamba',
-    thursday: 'Perşembe',
-    friday: 'Cuma',
-    saturday: 'Cumartesi',
-    sunday: 'Pazar',
-};
-
 const WEEKDAY_INDEX: Record<WeekdayKey, number> = {
     monday: 0,
     tuesday: 1,
@@ -154,45 +145,38 @@ const WEEKDAY_INDEX: Record<WeekdayKey, number> = {
     sunday: 6,
 };
 
-const MEAL_META: Record<MenuMealType, { label: string; icon: IconName; tint: string; iconColor: string }> = {
-    breakfast: { label: 'Kahvaltı', icon: 'coffee-outline', tint: colors.accentSoft, iconColor: colors.primaryDark },
-    lunch: { label: 'Öğle', icon: 'weather-sunny', tint: colors.warningLight, iconColor: colors.warning },
-    dinner: { label: 'Bugünün menüsü', icon: 'silverware-fork-knife', tint: colors.surfaceMuted, iconColor: colors.textPrimary },
+const MEAL_META_BASE: Record<MenuMealType, { icon: IconName; tint: string; iconColor: string }> = {
+    breakfast: { icon: 'coffee-outline', tint: colors.accentSoft, iconColor: colors.primaryDark },
+    lunch: { icon: 'weather-sunny', tint: colors.warningLight, iconColor: colors.warning },
+    dinner: { icon: 'silverware-fork-knife', tint: colors.surfaceMuted, iconColor: colors.textPrimary },
 };
 
-const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; mediaTone: string }> = {
+const COURSE_META_BASE: Record<MenuRecipeCourse, { icon: IconName; mediaTone: string }> = {
     main: {
-        label: 'Ana Yemek',
         icon: 'silverware-fork-knife',
         mediaTone: colors.surfaceAlt,
     },
     side: {
-        label: 'Yan Yemek',
         icon: 'pot-steam-outline',
         mediaTone: colors.borderLight,
     },
     soup: {
-        label: 'Çorba',
         icon: 'pot-steam-outline',
         mediaTone: colors.accentSoft,
     },
     salad: {
-        label: 'Salata',
         icon: 'leaf',
         mediaTone: colors.successLight,
     },
     meze: {
-        label: 'Meze',
         icon: 'food',
         mediaTone: colors.surfaceMuted,
     },
     dessert: {
-        label: 'Tatlı',
         icon: 'cupcake',
         mediaTone: colors.errorLight,
     },
     pastry: {
-        label: 'Hamur İşi',
         icon: 'bread-slice-outline',
         mediaTone: colors.surfaceAlt,
     },
@@ -207,8 +191,6 @@ const MEAL_ORDER: MenuMealType[] = ['dinner'];
 const DEFAULT_SAMPLE_DAY: WeekdayKey = 'tuesday';
 const WEEKDAY_PRIORITY: WeekdayKey[] = ['tuesday', 'monday', 'wednesday', 'thursday', 'friday'];
 const WEEKEND_PRIORITY: WeekdayKey[] = ['saturday', 'sunday'];
-const WOW_REASONING_HINT =
-    'Sana daha wow ve modern tabaklar seçtim; klasik ev yemeği ve sokak lezzeti kombinasyonlarından uzak durdum.';
 
 const buildDateKey = (date: Date) => {
     const year = date.getFullYear();
@@ -290,7 +272,8 @@ const buildMenuRequest = (
     userId: string,
     date: string,
     dayKey: WeekdayKey,
-    mealType: MenuMealType
+    mealType: MenuMealType,
+    reasoningHint?: string
 ): MenuRequestPayload => {
     const routines = snapshot?.routines ?? DEFAULT_ROUTINES;
     const routine = routines?.[dayKey];
@@ -318,61 +301,37 @@ const buildMenuRequest = (
             }
             : undefined,
         mealType,
-        weeklyContext: {
-            reasoningHint: WOW_REASONING_HINT,
-        },
+        weeklyContext: reasoningHint ? { reasoningHint } : undefined,
     };
 };
 
-const getFunctionsErrorMessage = (error: unknown) => {
-    if (error && typeof error === 'object') {
-        const maybeError = error as FunctionsError;
-        if (typeof maybeError.details === 'string') {
-            return maybeError.details;
-        }
-        if (maybeError.details && typeof maybeError.details === 'object' && maybeError.details.message) {
-            return maybeError.details.message;
-        }
-        if (maybeError.message) {
-            return maybeError.message;
-        }
-    }
-    return 'Bir hata oluştu.';
-};
-
-const buildMealItems = (items: MenuDecision['items'] | undefined): MealItem[] => {
+const buildMealItems = (
+    items: MenuDecision['items'] | undefined,
+    courseMeta: Record<MenuRecipeCourse, { label: string; icon: IconName; mediaTone: string }>
+): MealItem[] => {
     if (!items?.length) return [];
 
     return items
-        .filter((item) => COURSE_META[item.course])
+        .filter((item) => courseMeta[item.course])
         .sort((first, second) => COURSE_ORDER.indexOf(first.course) - COURSE_ORDER.indexOf(second.course))
         .map((item) => {
-            const courseMeta = COURSE_META[item.course];
+            const meta = courseMeta[item.course];
             return {
                 id: `${item.course}-${item.name}`,
                 title: item.name,
-                category: courseMeta.label,
-                categoryIcon: courseMeta.icon,
-                icon: courseMeta.icon,
-                mediaTone: courseMeta.mediaTone,
+                category: meta.label,
+                categoryIcon: meta.icon,
+                icon: meta.icon,
+                mediaTone: meta.mediaTone,
                 course: item.course,
             };
         });
 };
 
-const buildEmptyMessage = (isLoading: boolean, errorText: string | null) => {
-    if (isLoading) {
-        return 'Menü hazırlanıyor.';
-    }
-    if (errorText) {
-        return 'Menü hazırlanamadı.';
-    }
-    return 'Menü hazırlanıyor.';
-};
-
 export default function AnalysisScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
+    const { t } = useLanguage();
     const {
         menuDecisions,
         loadingStates,
@@ -382,14 +341,53 @@ export default function AnalysisScreen() {
     } = useSampleMenu();
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
+    const dayLabels = useMemo(
+        () => ({
+            monday: t('preferences.days.monday'),
+            tuesday: t('preferences.days.tuesday'),
+            wednesday: t('preferences.days.wednesday'),
+            thursday: t('preferences.days.thursday'),
+            friday: t('preferences.days.friday'),
+            saturday: t('preferences.days.saturday'),
+            sunday: t('preferences.days.sunday'),
+        }),
+        [t]
+    );
+    const mealMeta = useMemo(
+        () => ({
+            breakfast: { label: t('onboarding.analysis.mealTypes.breakfast'), ...MEAL_META_BASE.breakfast },
+            lunch: { label: t('onboarding.analysis.mealTypes.lunch'), ...MEAL_META_BASE.lunch },
+            dinner: { label: t('onboarding.analysis.mealTypes.dinner'), ...MEAL_META_BASE.dinner },
+        }),
+        [t]
+    );
+    const courseMeta = useMemo(
+        () => ({
+            main: { label: t('onboarding.analysis.courses.main'), ...COURSE_META_BASE.main },
+            side: { label: t('onboarding.analysis.courses.side'), ...COURSE_META_BASE.side },
+            soup: { label: t('onboarding.analysis.courses.soup'), ...COURSE_META_BASE.soup },
+            salad: { label: t('onboarding.analysis.courses.salad'), ...COURSE_META_BASE.salad },
+            meze: { label: t('onboarding.analysis.courses.meze'), ...COURSE_META_BASE.meze },
+            dessert: { label: t('onboarding.analysis.courses.dessert'), ...COURSE_META_BASE.dessert },
+            pastry: { label: t('onboarding.analysis.courses.pastry'), ...COURSE_META_BASE.pastry },
+        }),
+        [t]
+    );
 
     // Fallback sample day if context hasn't loaded yet
-    const sampleDay = contextSampleDay ?? {
+    const sampleDayBase = contextSampleDay ?? {
         key: DEFAULT_SAMPLE_DAY as WeekdayKey,
-        label: DAY_LABELS[DEFAULT_SAMPLE_DAY],
+        label: dayLabels[DEFAULT_SAMPLE_DAY],
         dateKey: buildDateKey(getNextWeekdayDate(DEFAULT_SAMPLE_DAY)),
         mealPlan: buildMealPlan(DEFAULT_ROUTINES[DEFAULT_SAMPLE_DAY]),
     };
+    const sampleDay = useMemo(
+        () => ({
+            ...sampleDayBase,
+            label: dayLabels[sampleDayBase.key] || sampleDayBase.label,
+        }),
+        [dayLabels, sampleDayBase]
+    );
 
     useEffect(() => {
         dispatch({ type: 'SET_STEP', payload: 11 });
@@ -399,7 +397,7 @@ export default function AnalysisScreen() {
         ]).start();
     }, [dispatch, fadeAnim, slideAnim]);
 
-    const userName = contextSnapshot?.profile?.name || state.data.profile?.name || 'Size';
+    const userName = contextSnapshot?.profile?.name || state.data.profile?.name || t('profile.defaultName');
     const plannedMealCount = useMemo(() => {
         const plan = sampleDay?.mealPlan;
         return plan ? getMealCount(plan) : 0;
@@ -414,8 +412,8 @@ export default function AnalysisScreen() {
                 continue;
             }
 
-            const meta = MEAL_META[mealType];
-            const items = buildMealItems(menuDecisions[mealType]?.items);
+            const meta = mealMeta[mealType];
+            const items = buildMealItems(menuDecisions[mealType]?.items, courseMeta);
             const isLoading = loadingStates[mealType];
             sections.push({
                 id: mealType,
@@ -424,26 +422,28 @@ export default function AnalysisScreen() {
                 tint: meta.tint,
                 iconColor: meta.iconColor,
                 items,
-                emptyMessage: isLoading ? '' : (error ? 'Menü hazırlanamadı.' : 'Menü hazırlanıyor.'),
+                emptyMessage: isLoading
+                    ? ''
+                    : (error ? t('onboarding.analysis.errorEmpty') : t('onboarding.analysis.loadingEmpty')),
                 isLoading,
             });
         }
 
         return sections;
-    }, [error, loadingStates, menuDecisions, sampleDay]);
+    }, [courseMeta, error, loadingStates, mealMeta, menuDecisions, sampleDay, t]);
 
     const [displayedText, setDisplayedText] = useState('');
     const [messageIndex, setMessageIndex] = useState(0);
     const [isDeleting, setIsDeleting] = useState(false);
 
     const LOADING_REASONING_MESSAGES = useMemo(() => [
-        'Haftalık rutinini inceliyorum...',
-        'Akşam menüsü için öncelikleri netleştiriyorum...',
-        'Hazırlık süresini optimize ediyorum...',
-        'Mevsime uygun malzemeleri seçiyorum...',
-        'Lezzet dengesini kuruyorum...',
-        'Son dokunuşları yapıyorum...',
-    ], []);
+        t('onboarding.analysis.loadingReasons.routine'),
+        t('onboarding.analysis.loadingReasons.dinner'),
+        t('onboarding.analysis.loadingReasons.prep'),
+        t('onboarding.analysis.loadingReasons.seasonal'),
+        t('onboarding.analysis.loadingReasons.balance'),
+        t('onboarding.analysis.loadingReasons.final'),
+    ], [t]);
 
     useEffect(() => {
         const allLoaded = !loadingStates.breakfast && !loadingStates.lunch && !loadingStates.dinner;
@@ -494,8 +494,8 @@ export default function AnalysisScreen() {
     };
 
     const subtitleText = plannedMealCount > 0
-        ? 'Alışkanlıklarınıza ve hedeflerinize göre oluşturduğumuz örnek bir akşam menüsü:'
-        : 'Alışkanlıklarınıza ve hedeflerinize göre oluşturduğumuz örnek bir gün menüsü:';
+        ? t('onboarding.analysis.subtitleEvening')
+        : t('onboarding.analysis.subtitleDay');
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -512,12 +512,14 @@ export default function AnalysisScreen() {
                                 resizeMode="contain"
                             />
                         </View>
-                        <Text style={styles.title}>İşte {userName} özel planın!</Text>
+                        <Text style={styles.title}>{t('onboarding.analysis.title', { name: userName })}</Text>
                         <Text style={styles.subtitle}>{subtitleText}</Text>
                     </View>
 
                     <View style={styles.dayHeader}>
-                        <Text style={styles.dayTitle}>Örnek {sampleDay.label} Günü</Text>
+                        <Text style={styles.dayTitle}>
+                            {t('onboarding.analysis.sampleDayTitle', { day: sampleDay.label })}
+                        </Text>
                     </View>
 
                     {showReasoning ? (
@@ -583,7 +585,9 @@ export default function AnalysisScreen() {
                                                 />
                                             )}
                                             <Text style={styles.emptyMealText}>
-                                                {section.isLoading ? 'Menü hazırlanıyor...' : section.emptyMessage}
+                                                {section.isLoading
+                                                    ? t('onboarding.analysis.loadingInline')
+                                                    : section.emptyMessage}
                                             </Text>
                                         </View>
                                     )}
@@ -597,7 +601,7 @@ export default function AnalysisScreen() {
                                 size={18}
                                 color={colors.textMuted}
                             />
-                            <Text style={styles.emptyText}>Bu gün için menü planlanmadı.</Text>
+                            <Text style={styles.emptyText}>{t('onboarding.analysis.emptyDay')}</Text>
                         </View>
                     )}
                 </Animated.View>
@@ -605,7 +609,7 @@ export default function AnalysisScreen() {
 
             <View style={styles.footer}>
                 <Button
-                    title="Haftalık Planı Göster"
+                    title={t('onboarding.analysis.button')}
                     onPress={handleContinue}
                     fullWidth
                     size="large"

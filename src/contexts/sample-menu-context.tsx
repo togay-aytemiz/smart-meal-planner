@@ -3,13 +3,14 @@
  * Shared state for sample menu generation between processing and analysis screens
  */
 
-import React, { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useMemo, type ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { functions } from '../config/firebase';
 import { fetchMenuDecision } from '../utils/menu-storage';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../utils/onboarding-hash';
 import type { MenuDecision } from '../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from './onboarding-context';
+import { useLanguage } from './language-context';
 
 type MenuMealType = 'breakfast' | 'lunch' | 'dinner';
 type WeekdayKey = keyof WeeklyRoutine;
@@ -27,10 +28,26 @@ type SampleDay = {
     mealPlan: MealPlan;
 };
 
+const CUISINE_LABEL_KEYS: Record<string, string> = {
+    turkish: 'preferences.cuisines.turkish',
+    mediterranean: 'preferences.cuisines.mediterranean',
+    italian: 'preferences.cuisines.italian',
+    asian: 'preferences.cuisines.asian',
+    'middle-eastern': 'preferences.cuisines.middleEastern',
+    mexican: 'preferences.cuisines.mexican',
+    indian: 'preferences.cuisines.indian',
+    french: 'preferences.cuisines.french',
+    japanese: 'preferences.cuisines.japanese',
+    chinese: 'preferences.cuisines.chinese',
+    thai: 'preferences.cuisines.thai',
+    american: 'preferences.cuisines.american',
+};
+
 type MenuRequestPayload = {
     userId: string;
     date: string;
     dayOfWeek: string;
+    language?: 'tr' | 'en';
     dietaryRestrictions: string[];
     allergies: string[];
     cuisinePreferences: string[];
@@ -91,15 +108,6 @@ const DEFAULT_ROUTINES: WeeklyRoutine = {
     sunday: { type: 'remote', gymTime: 'none' },
 };
 
-const DAY_LABELS: Record<WeekdayKey, string> = {
-    monday: 'Pazartesi',
-    tuesday: 'Salı',
-    wednesday: 'Çarşamba',
-    thursday: 'Perşembe',
-    friday: 'Cuma',
-    saturday: 'Cumartesi',
-    sunday: 'Pazar',
-};
 
 const WEEKDAY_INDEX: Record<WeekdayKey, number> = {
     monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6,
@@ -225,8 +233,6 @@ const pickSampleDayKey = (routines: WeeklyRoutine): WeekdayKey => {
     return DEFAULT_SAMPLE_DAY;
 };
 
-const WOW_REASONING_HINT =
-    'Modern, restoran kalitesinde tabaklar seç; klasik ev yemeklerinden kaçın. Roka salatası/çoban salata gibi düz salataları önermeme.';
 
 const buildMenuRequest = (
     snapshot: OnboardingSnapshot | null,
@@ -234,25 +240,13 @@ const buildMenuRequest = (
     date: string,
     dayKey: WeekdayKey,
     mealType: MenuMealType,
-    onboardingHash?: string | null
+    onboardingHash: string | null | undefined,
+    reasoningHint: string,
+    language: 'tr' | 'en'
 ): MenuRequestPayload => {
     const routines = snapshot?.routines ?? DEFAULT_ROUTINES;
     const routine = routines?.[dayKey];
-
-    // Check if user specifically excluded Turkish or selected other cuisines
     const selectedCuisines = snapshot?.cuisine?.selected ?? [];
-    const hasTurkish = selectedCuisines.some(c => c.toLowerCase().includes('türk') || c.toLowerCase().includes('turkish'));
-    const hasDigitalCuisines = selectedCuisines.length > 0;
-
-    let reasoningContext = WOW_REASONING_HINT;
-
-    if (hasDigitalCuisines && !hasTurkish) {
-        reasoningContext += ' Seçilen mutfaklara sadık kal: ' + selectedCuisines.join(', ') + '.';
-    } else if (hasTurkish) {
-        reasoningContext += ' Türk mutfağında modern ve rafine yorumları tercih et.';
-    } else if (!hasDigitalCuisines) {
-        reasoningContext += ' Dünya mutfağından modern füzyon tabaklar seç.';
-    }
 
     return {
         userId,
@@ -265,6 +259,7 @@ const buildMenuRequest = (
         skillLevel: snapshot?.cooking?.skillLevel ?? 'intermediate',
         equipment: snapshot?.cooking?.equipment ?? [],
         householdSize: snapshot?.householdSize ?? 1,
+        language,
         routine: routine ? {
             type: routine.type,
             gymTime: routine.gymTime,
@@ -275,20 +270,20 @@ const buildMenuRequest = (
             excludeFromPlan: routine.excludeFromPlan,
         } : undefined,
         mealType,
-        weeklyContext: { reasoningHint: reasoningContext },
+        weeklyContext: reasoningHint ? { reasoningHint } : undefined,
         generateImage: false,
         ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
     };
 };
 
-const getFunctionsErrorMessage = (error: unknown) => {
+const getFunctionsErrorMessage = (error: unknown, fallback: string) => {
     if (error && typeof error === 'object') {
         const maybeError = error as { details?: { message?: string } | string; message?: string };
         if (typeof maybeError.details === 'string') return maybeError.details;
         if (maybeError.details?.message) return maybeError.details.message;
         if (maybeError.message) return maybeError.message;
     }
-    return 'Bir hata oluştu.';
+    return fallback;
 };
 
 const initialState: SampleMenuState = {
@@ -306,6 +301,19 @@ const SampleMenuContext = createContext<SampleMenuContextType | null>(null);
 export function SampleMenuProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<SampleMenuState>(initialState);
     const firstMealPromiseRef = useRef<{ resolve: (value: boolean) => void } | null>(null);
+    const { t, language } = useLanguage();
+    const dayLabels = useMemo(
+        () => ({
+            monday: t('preferences.days.monday'),
+            tuesday: t('preferences.days.tuesday'),
+            wednesday: t('preferences.days.wednesday'),
+            thursday: t('preferences.days.thursday'),
+            friday: t('preferences.days.friday'),
+            saturday: t('preferences.days.saturday'),
+            sunday: t('preferences.days.sunday'),
+        }),
+        [t]
+    );
 
     const reset = useCallback(() => {
         setState(initialState);
@@ -322,10 +330,25 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
         const planForDay = buildMealPlan(routines[dayKey]);
         const dateKey = buildDateKey(getNextWeekdayDate(dayKey));
         const onboardingHash = buildOnboardingHash(onboardingData);
+        const selectedCuisines = onboardingData?.cuisine?.selected ?? [];
+        const selectedCuisineLabels = selectedCuisines.map((key) => t(CUISINE_LABEL_KEYS[key] ?? key));
+        const hasTurkish = selectedCuisines.includes('turkish');
+        const hasSelectedCuisines = selectedCuisines.length > 0;
+        let reasoningHint = t('onboarding.analysis.reasoningHint');
+
+        if (hasSelectedCuisines && !hasTurkish) {
+            reasoningHint = `${reasoningHint} ${t('onboarding.analysis.reasoningExtras.preferSelected', {
+                cuisines: selectedCuisineLabels.join(', '),
+            })}`;
+        } else if (hasTurkish) {
+            reasoningHint = `${reasoningHint} ${t('onboarding.analysis.reasoningExtras.preferTurkish')}`;
+        } else {
+            reasoningHint = `${reasoningHint} ${t('onboarding.analysis.reasoningExtras.preferGlobal')}`;
+        }
 
         const sampleDay: SampleDay = {
             key: dayKey,
-            label: DAY_LABELS[dayKey],
+            label: dayLabels[dayKey],
             dateKey,
             mealPlan: planForDay,
         };
@@ -349,7 +372,16 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
         const callMenu = functions.httpsCallable<{ request: MenuRequestPayload }, MenuCallResponse>('generateOpenAIMenu');
         // Parallel meal generation
         const fetchMeal = async (mealType: MenuMealType) => {
-            const request = buildMenuRequest(onboardingData, userId, dateKey, dayKey, mealType, onboardingHash);
+            const request = buildMenuRequest(
+                onboardingData,
+                userId,
+                dateKey,
+                dayKey,
+                mealType,
+                onboardingHash,
+                reasoningHint,
+                language
+            );
 
             const resolveMeal = (menuData: MenuDecision) => {
                 setState((prev) => {
@@ -387,7 +419,7 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
                 const menuResult = await callMenu({ request });
                 const menuData = menuResult.data?.menu;
 
-                if (!menuData?.items?.length) throw new Error('Menü verisi alınamadı');
+                if (!menuData?.items?.length) throw new Error(t('onboarding.analysis.errorEmpty'));
 
                 await persistSampleMenuCache(userId, dateKey, mealType, menuData, onboardingHash);
                 resolveMeal(menuData);
@@ -423,14 +455,20 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
                 console.error(`[SampleMenuContext] Meal ${mealType} generation failed completely.`);
                 if (!prev.error) {
                     // Only log the first error to avoid spam
-                    const errMessage = getFunctionsErrorMessage(new Error('Öğün yüklenemedi'));
+                    const errMessage = getFunctionsErrorMessage(
+                        new Error(t('onboarding.analysis.errorEmpty')),
+                        t('onboarding.analysis.errorGeneric')
+                    );
                     console.error(`[SampleMenuContext] Error detail:`, errMessage);
                 }
 
                 return {
                     ...prev,
                     loadingStates: { ...prev.loadingStates, [mealType]: false },
-                    error: prev.error || getFunctionsErrorMessage(new Error('Öğün yüklenemedi')),
+                    error: prev.error || getFunctionsErrorMessage(
+                        new Error(t('onboarding.analysis.errorEmpty')),
+                        t('onboarding.analysis.errorGeneric')
+                    ),
                     firstMealReady: true,
                 };
             });
@@ -438,7 +476,7 @@ export function SampleMenuProvider({ children }: { children: ReactNode }) {
 
         // Start all meals in parallel
         Promise.all(mealTypes.map(fetchMeal)).catch(console.error);
-    }, [state.hasStarted]);
+    }, [dayLabels, language, state.hasStarted, t]);
 
     const waitForFirstMeal = useCallback((): Promise<boolean> => {
         if (state.firstMealReady) return Promise.resolve(true);

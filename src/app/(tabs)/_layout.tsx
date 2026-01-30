@@ -4,9 +4,11 @@ import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { commonStyles } from '../../theme/common-styles';
 import { colors } from '../../theme/colors';
+import { useLanguage } from '../../contexts/language-context';
 
 export default function TabsLayout() {
     const insets = useSafeAreaInsets();
+    const { t } = useLanguage();
 
     return (
         <Tabs
@@ -29,7 +31,7 @@ export default function TabsLayout() {
             <Tabs.Screen
                 name="index"
                 options={{
-                    title: 'Menü',
+                    title: t('tabs.menu'),
                     tabBarIcon: ({ color, focused }) => (
                         <MaterialCommunityIcons
                             name={focused ? 'home' : 'home-outline'}
@@ -42,7 +44,7 @@ export default function TabsLayout() {
             <Tabs.Screen
                 name="groceries"
                 options={{
-                    title: 'Alışveriş',
+                    title: t('tabs.groceries'),
                     tabBarIcon: ({ color, focused }) => (
                         <MaterialCommunityIcons
                             name={focused ? 'basket' : 'basket-outline'}
@@ -55,7 +57,7 @@ export default function TabsLayout() {
             <Tabs.Screen
                 name="cookbook"
                 options={{
-                    title: 'Tarifler',
+                    title: t('tabs.cookbook'),
                     tabBarIcon: ({ color, focused }) => (
                         <MaterialCommunityIcons
                             name={focused ? 'heart' : 'heart-outline'}
@@ -68,7 +70,7 @@ export default function TabsLayout() {
             <Tabs.Screen
                 name="profile"
                 options={{
-                    title: 'Profil',
+                    title: t('tabs.profile'),
                     tabBarIcon: ({ color, focused }) => (
                         <MaterialCommunityIcons
                             name={focused ? 'account-circle' : 'account-circle-outline'}

@@ -4,19 +4,20 @@ import { TabScreenHeader } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
+import { useLanguage } from '../../contexts/language-context';
 
 export default function DiscoverScreen() {
+    const { t } = useLanguage();
+
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <TabScreenHeader title="Keşfet" />
+            <TabScreenHeader title={t('discover.title')} />
 
             <View style={styles.content}>
                 <View style={styles.placeholder}>
                     <Text style={styles.placeholderEmoji}>🔍</Text>
-                    <Text style={styles.placeholderTitle}>Tarifleri Keşfet</Text>
-                    <Text style={styles.placeholderText}>
-                        Yeni tarifler ve öneriler yakında burada
-                    </Text>
+                    <Text style={styles.placeholderTitle}>{t('discover.placeholderTitle')}</Text>
+                    <Text style={styles.placeholderText}>{t('discover.placeholderText')}</Text>
                 </View>
             </View>
         </SafeAreaView>

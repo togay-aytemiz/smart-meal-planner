@@ -7,20 +7,11 @@ import { spacing, radius } from '../../theme/spacing';
 import { Button, Input } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
 import { useUser } from '../../contexts/user-context';
+import { useLanguage } from '../../contexts/language-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import firestore, { doc, serverTimestamp, setDoc } from '@react-native-firebase/firestore';
 import { functions } from '../../config/firebase';
-
-// Mock detected items (simplified)
-const DETECTED_ITEMS = [
-    { id: '1', name: 'Yumurta' },
-    { id: '2', name: 'Süt' },
-    { id: '3', name: 'Beyaz Peynir' },
-    { id: '4', name: 'Domates' },
-    { id: '5', name: 'Salatalık' },
-    { id: '6', name: 'Tavuk Göğsü' },
-];
 
 export default function InventoryScreen() {
     const router = useRouter();
@@ -30,8 +21,20 @@ export default function InventoryScreen() {
     const insets = useSafeAreaInsets();
     const { finishOnboarding } = useOnboarding();
     const { state: userState } = useUser();
+    const { t, locale, language } = useLanguage();
 
-    const initialItems = isManualMode ? [] : DETECTED_ITEMS;
+    const detectedItems = useMemo(
+        () => ([
+            { id: '1', name: t('onboarding.inventory.samples.egg') },
+            { id: '2', name: t('onboarding.inventory.samples.milk') },
+            { id: '3', name: t('onboarding.inventory.samples.whiteCheese') },
+            { id: '4', name: t('onboarding.inventory.samples.tomato') },
+            { id: '5', name: t('onboarding.inventory.samples.cucumber') },
+            { id: '6', name: t('onboarding.inventory.samples.chicken') },
+        ]),
+        [t]
+    );
+    const initialItems = isManualMode ? [] : detectedItems;
     const [items, setItems] = useState<{ id: string; name: string }[]>(initialItems);
     const [rawInput, setRawInput] = useState('');
     const [step, setStep] = useState<'input' | 'loading' | 'review'>(isManualMode ? 'input' : 'review');
@@ -60,12 +63,12 @@ export default function InventoryScreen() {
         value
             .trim()
             .replace(/\s+/g, ' ')
-            .toLocaleLowerCase('tr-TR');
+            .toLocaleLowerCase(locale);
 
     const formatDisplayName = (value: string) => {
         const normalized = normalizeToken(value);
         if (!normalized) return '';
-        return normalized.charAt(0).toLocaleUpperCase('tr-TR') + normalized.slice(1);
+        return normalized.charAt(0).toLocaleUpperCase(locale) + normalized.slice(1);
     };
 
     const buildItemsFromInput = (value: string) => {
@@ -88,12 +91,12 @@ export default function InventoryScreen() {
     const handleFinish = async () => {
         const validItems = items.filter(i => i.name.trim().length > 0);
         if (!validItems.length) {
-            setInputError('En az bir malzeme eklemelisin.');
+            setInputError(t('onboarding.inventory.errorMinItems'));
             return;
         }
         const userId = userState.user?.uid;
         if (!userId) {
-            setInputError('Kullanıcı doğrulanamadı. Lütfen tekrar dene.');
+            setInputError(t('onboarding.inventory.errorUser'));
             return;
         }
 
@@ -150,7 +153,7 @@ export default function InventoryScreen() {
 
         const parsedItems = buildItemsFromInput(rawInput);
         if (!parsedItems.length) {
-            setInputError('Lütfen en az bir malzeme yaz.');
+            setInputError(t('onboarding.inventory.errorMinInput'));
             return;
         }
 
@@ -164,6 +167,8 @@ export default function InventoryScreen() {
             >('normalizePantryItems');
             const response = await normalizePantry({
                 items: parsedItems.map((item) => item.name),
+                language,
+                locale,
             });
             const normalizedItems = response.data?.items?.length
                 ? response.data.items
@@ -214,12 +219,12 @@ export default function InventoryScreen() {
                     )}
                 </View>
                 <Text style={styles.title}>
-                    {isManualMode ? "Dolabını Oluştur" : "İşte Bulduklarımız!"}
+                    {isManualMode ? t('onboarding.inventory.manualTitle') : t('onboarding.inventory.autoTitle')}
                 </Text>
                 <Text style={styles.subtitle} numberOfLines={2}>
                     {isManualMode
-                        ? "Malzemeleri alt alta veya virgülle yaz. Biz düzenleyip sana sunacağız."
-                        : `Buzdolabında ${items.length} farklı malzeme tespit ettik.`
+                        ? t('onboarding.inventory.manualSubtitle')
+                        : t('onboarding.inventory.autoSubtitle', { count: items.length })
                     }
                 </Text>
             </View>
@@ -227,7 +232,7 @@ export default function InventoryScreen() {
             {step === 'review' ? (
                 <View style={styles.actionButtons}>
                     <Button
-                        title="Satır Ekle"
+                        title={t('onboarding.inventory.addRow')}
                         variant="ghost"
                         onPress={handleManualAdd}
                         size="medium"
@@ -247,11 +252,11 @@ export default function InventoryScreen() {
                     <Animated.View style={{ opacity: fadeAnim }}>
                         {step === 'input' ? (
                             <View style={styles.textAreaCard}>
-                                <Text style={styles.textAreaLabel}>Malzemelerin</Text>
+                                <Text style={styles.textAreaLabel}>{t('onboarding.inventory.listTitle')}</Text>
                                 <TextInput
                                     value={rawInput}
                                     onChangeText={setRawInput}
-                                    placeholder="Örn: mercimek, roka, tavuk göğsü"
+                                    placeholder={t('onboarding.inventory.inputPlaceholder')}
                                     placeholderTextColor={colors.textMuted}
                                     multiline
                                     textAlignVertical="top"
@@ -260,7 +265,7 @@ export default function InventoryScreen() {
                                 {inputError ? (
                                     <Text style={styles.errorText}>{inputError}</Text>
                                 ) : (
-                                    <Text style={styles.helperText}>Virgül veya satır ile ayırabilirsin.</Text>
+                                    <Text style={styles.helperText}>{t('onboarding.inventory.helper')}</Text>
                                 )}
                             </View>
                         ) : null}
@@ -268,8 +273,8 @@ export default function InventoryScreen() {
                         {step === 'loading' ? (
                             <View style={styles.loadingState}>
                                 <ActivityIndicator size="small" color={colors.textMuted} />
-                                <Text style={styles.loadingTitle}>Malzemeleri düzenliyoruz</Text>
-                                <Text style={styles.loadingSubtitle}>Yazım hatalarını düzeltiyor, tekrarları ayıklıyoruz.</Text>
+                                <Text style={styles.loadingTitle}>{t('onboarding.inventory.loadingTitle')}</Text>
+                                <Text style={styles.loadingSubtitle}>{t('onboarding.inventory.loadingSubtitle')}</Text>
                             </View>
                         ) : null}
 
@@ -281,7 +286,7 @@ export default function InventoryScreen() {
                                             ref={(ref: TextInput | null) => { inputRefs.current[item.id] = ref; }}
                                             value={item.name}
                                             onChangeText={(text: string) => handleUpdate(item.id, text)}
-                                            placeholder="Malzeme adı..."
+                                            placeholder={t('onboarding.inventory.itemPlaceholder')}
                                             blurOnSubmit={false}
                                             onSubmitEditing={handleManualAdd}
                                             returnKeyType="next"
@@ -302,7 +307,7 @@ export default function InventoryScreen() {
 
             <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
                 <Button
-                    title={step === 'review' ? 'Planımı Oluştur' : 'Devam'}
+                    title={step === 'review' ? t('onboarding.inventory.finish') : t('onboarding.inventory.continue')}
                     onPress={handleContinue}
                     fullWidth
                     size="large"
@@ -311,7 +316,7 @@ export default function InventoryScreen() {
                 />
                 {step === 'review' && isManualMode ? (
                     <Button
-                        title="Metni Düzenle"
+                        title={t('onboarding.inventory.editText')}
                         variant="ghost"
                         onPress={handleBackToInput}
                         fullWidth

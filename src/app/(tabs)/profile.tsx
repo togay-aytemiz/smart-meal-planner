@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ComponentProps, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, ActivityIndicator, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -31,25 +31,25 @@ type OnboardingStoredState = {
 
 type LabeledEmojiItem = {
     key: string;
-    label: string;
+    labelKey: string;
     emoji?: string;
 };
 
 type RoutineTypeMeta = {
-    label: string;
+    labelKey: string;
     emoji: string;
     tint: string;
     textColor: string;
 };
 
-const DAY_ORDER: Array<{ key: keyof WeeklyRoutine; label: string }> = [
-    { key: 'monday', label: 'Pazartesi' },
-    { key: 'tuesday', label: 'Salı' },
-    { key: 'wednesday', label: 'Çarşamba' },
-    { key: 'thursday', label: 'Perşembe' },
-    { key: 'friday', label: 'Cuma' },
-    { key: 'saturday', label: 'Cumartesi' },
-    { key: 'sunday', label: 'Pazar' },
+const DAY_ORDER: Array<keyof WeeklyRoutine> = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
 ];
 
 const DEFAULT_ROUTINES: WeeklyRoutine = {
@@ -64,31 +64,31 @@ const DEFAULT_ROUTINES: WeeklyRoutine = {
 
 const ROUTINE_TYPE_META: Record<RoutineDay['type'], RoutineTypeMeta> = {
     office: {
-        label: 'Ofis',
+        labelKey: 'preferences.routineTypes.office',
         emoji: '🏢',
         tint: colors.surfaceMuted,
         textColor: colors.textSecondary,
     },
     remote: {
-        label: 'Ev',
+        labelKey: 'preferences.routineTypes.remote',
         emoji: '🏠',
         tint: colors.accentSoft,
         textColor: colors.primaryDark,
     },
     gym: {
-        label: 'Spor',
+        labelKey: 'preferences.routineTypes.gym',
         emoji: '💪',
         tint: colors.primaryLight + '20',
         textColor: colors.primaryDark,
     },
     school: {
-        label: 'Okul',
+        labelKey: 'preferences.routineTypes.school',
         emoji: '📚',
         tint: colors.warningLight,
         textColor: colors.warning,
     },
     off: {
-        label: 'Tatil',
+        labelKey: 'preferences.routineTypes.off',
         emoji: '🌴',
         tint: colors.borderLight,
         textColor: colors.textMuted,
@@ -96,60 +96,66 @@ const ROUTINE_TYPE_META: Record<RoutineDay['type'], RoutineTypeMeta> = {
 };
 
 const DIETARY_RESTRICTIONS: LabeledEmojiItem[] = [
-    { key: 'vegetarian', label: 'Vejetaryen', emoji: '🥬' },
-    { key: 'vegan', label: 'Vegan', emoji: '🌱' },
-    { key: 'pescatarian', label: 'Pesketaryen', emoji: '🐟' },
-    { key: 'gluten-free', label: 'Glütensiz', emoji: '🌾' },
-    { key: 'dairy-free', label: 'Süt Ürünsüz', emoji: '🥛' },
-    { key: 'low-carb', label: 'Düşük Karbonhidrat', emoji: '🍞' },
-    { key: 'keto', label: 'Keto', emoji: '🥑' },
-    { key: 'high-protein', label: 'Protein Ağırlıklı', emoji: '💪' },
+    { key: 'vegetarian', labelKey: 'preferences.dietary.vegetarian', emoji: '🥬' },
+    { key: 'vegan', labelKey: 'preferences.dietary.vegan', emoji: '🌱' },
+    { key: 'pescatarian', labelKey: 'preferences.dietary.pescatarian', emoji: '🐟' },
+    { key: 'gluten-free', labelKey: 'preferences.dietary.glutenFree', emoji: '🌾' },
+    { key: 'dairy-free', labelKey: 'preferences.dietary.dairyFree', emoji: '🥛' },
+    { key: 'low-carb', labelKey: 'preferences.dietary.lowCarb', emoji: '🍞' },
+    { key: 'keto', labelKey: 'preferences.dietary.keto', emoji: '🥑' },
+    { key: 'high-protein', labelKey: 'preferences.dietary.highProtein', emoji: '💪' },
 ];
 
 const COMMON_ALLERGIES: LabeledEmojiItem[] = [
-    { key: 'nuts', label: 'Kuruyemiş', emoji: '🥜' },
-    { key: 'shellfish', label: 'Kabuklu Deniz', emoji: '🦐' },
-    { key: 'eggs', label: 'Yumurta', emoji: '🥚' },
-    { key: 'soy', label: 'Soya', emoji: '🫘' },
-    { key: 'wheat', label: 'Buğday', emoji: '🌾' },
-    { key: 'fish', label: 'Balık', emoji: '🐠' },
-    { key: 'sesame', label: 'Susam', emoji: '🌰' },
+    { key: 'nuts', labelKey: 'preferences.allergies.nuts', emoji: '🥜' },
+    { key: 'shellfish', labelKey: 'preferences.allergies.shellfish', emoji: '🦐' },
+    { key: 'eggs', labelKey: 'preferences.allergies.eggs', emoji: '🥚' },
+    { key: 'soy', labelKey: 'preferences.allergies.soy', emoji: '🫘' },
+    { key: 'wheat', labelKey: 'preferences.allergies.wheat', emoji: '🌾' },
+    { key: 'fish', labelKey: 'preferences.allergies.fish', emoji: '🐠' },
+    { key: 'sesame', labelKey: 'preferences.allergies.sesame', emoji: '🌰' },
 ];
 
 const CUISINES: LabeledEmojiItem[] = [
-    { key: 'turkish', label: 'Türk', emoji: '🇹🇷' },
-    { key: 'mediterranean', label: 'Akdeniz', emoji: '🫒' },
-    { key: 'italian', label: 'İtalyan', emoji: '🍝' },
-    { key: 'asian', label: 'Asya', emoji: '🍜' },
-    { key: 'middle-eastern', label: 'Ortadoğu', emoji: '🧆' },
-    { key: 'mexican', label: 'Meksika', emoji: '🌮' },
-    { key: 'indian', label: 'Hint', emoji: '🍛' },
-    { key: 'french', label: 'Fransız', emoji: '🥐' },
-    { key: 'japanese', label: 'Japon', emoji: '🍱' },
-    { key: 'chinese', label: 'Çin', emoji: '🥡' },
-    { key: 'thai', label: 'Tayland', emoji: '🍜' },
-    { key: 'american', label: 'Amerikan', emoji: '🍔' },
+    { key: 'turkish', labelKey: 'preferences.cuisines.turkish', emoji: '🇹🇷' },
+    { key: 'mediterranean', labelKey: 'preferences.cuisines.mediterranean', emoji: '🫒' },
+    { key: 'italian', labelKey: 'preferences.cuisines.italian', emoji: '🍝' },
+    { key: 'asian', labelKey: 'preferences.cuisines.asian', emoji: '🍜' },
+    { key: 'middle-eastern', labelKey: 'preferences.cuisines.middleEastern', emoji: '🧆' },
+    { key: 'mexican', labelKey: 'preferences.cuisines.mexican', emoji: '🌮' },
+    { key: 'indian', labelKey: 'preferences.cuisines.indian', emoji: '🍛' },
+    { key: 'french', labelKey: 'preferences.cuisines.french', emoji: '🥐' },
+    { key: 'japanese', labelKey: 'preferences.cuisines.japanese', emoji: '🍱' },
+    { key: 'chinese', labelKey: 'preferences.cuisines.chinese', emoji: '🥡' },
+    { key: 'thai', labelKey: 'preferences.cuisines.thai', emoji: '🍜' },
+    { key: 'american', labelKey: 'preferences.cuisines.american', emoji: '🍔' },
 ];
 
-const TIME_OPTIONS: Record<NonNullable<OnboardingData['cooking']>['timePreference'], LabeledEmojiItem & { description: string }> = {
-    quick: { key: 'quick', label: 'Hızlı', description: '15-30 dk', emoji: '⚡' },
-    balanced: { key: 'balanced', label: 'Dengeli', description: '30-60 dk', emoji: '⏱️' },
-    elaborate: { key: 'elaborate', label: 'Detaylı', description: '60+ dk', emoji: '👨‍🍳' },
+const TIME_OPTIONS: Record<
+    NonNullable<OnboardingData['cooking']>['timePreference'],
+    LabeledEmojiItem & { descriptionKey: string }
+> = {
+    quick: { key: 'quick', labelKey: 'preferences.timeOptions.quick.label', descriptionKey: 'preferences.timeOptions.quick.description', emoji: '⚡' },
+    balanced: { key: 'balanced', labelKey: 'preferences.timeOptions.balanced.label', descriptionKey: 'preferences.timeOptions.balanced.description', emoji: '⏱️' },
+    elaborate: { key: 'elaborate', labelKey: 'preferences.timeOptions.elaborate.label', descriptionKey: 'preferences.timeOptions.elaborate.description', emoji: '👨‍🍳' },
 };
 
-const SKILL_LEVELS: Record<NonNullable<OnboardingData['cooking']>['skillLevel'], LabeledEmojiItem & { description: string }> = {
-    beginner: { key: 'beginner', label: 'Başlangıç', description: 'Temel tarifler', emoji: '🌱' },
-    intermediate: { key: 'intermediate', label: 'Orta', description: 'Çoğu tarif', emoji: '🌿' },
-    expert: { key: 'expert', label: 'Uzman', description: 'Her şey olur', emoji: '🌳' },
+const SKILL_LEVELS: Record<
+    NonNullable<OnboardingData['cooking']>['skillLevel'],
+    LabeledEmojiItem & { descriptionKey: string }
+> = {
+    beginner: { key: 'beginner', labelKey: 'preferences.skillLevels.beginner.label', descriptionKey: 'preferences.skillLevels.beginner.description', emoji: '🌱' },
+    intermediate: { key: 'intermediate', labelKey: 'preferences.skillLevels.intermediate.label', descriptionKey: 'preferences.skillLevels.intermediate.description', emoji: '🌿' },
+    expert: { key: 'expert', labelKey: 'preferences.skillLevels.expert.label', descriptionKey: 'preferences.skillLevels.expert.description', emoji: '🌳' },
 };
 
 const EQUIPMENT: LabeledEmojiItem[] = [
-    { key: 'oven', label: 'Fırın', emoji: '🔥' },
-    { key: 'blender', label: 'Blender', emoji: '🫙' },
-    { key: 'airfryer', label: 'Airfryer', emoji: '🍟' },
-    { key: 'pressure-cooker', label: 'Düdüklü', emoji: '♨️' },
-    { key: 'mixer', label: 'Mikser', emoji: '🥣' },
-    { key: 'grill', label: 'Izgara', emoji: '🥩' },
+    { key: 'oven', labelKey: 'preferences.equipment.oven', emoji: '🔥' },
+    { key: 'blender', labelKey: 'preferences.equipment.blender', emoji: '🫙' },
+    { key: 'airfryer', labelKey: 'preferences.equipment.airfryer', emoji: '🍟' },
+    { key: 'pressure-cooker', labelKey: 'preferences.equipment.pressureCooker', emoji: '♨️' },
+    { key: 'mixer', labelKey: 'preferences.equipment.mixer', emoji: '🥣' },
+    { key: 'grill', labelKey: 'preferences.equipment.grill', emoji: '🥩' },
 ];
 
 export default function ProfileScreen() {
@@ -282,7 +288,7 @@ export default function ProfileScreen() {
 
         const nextName = nameDraft.trim();
         if (!nextName) {
-            Alert.alert('İsim gerekli', 'Lütfen geçerli bir isim girin.');
+            Alert.alert(t('profile.nameRequiredTitle'), t('profile.nameRequiredMessage'));
             return;
         }
 
@@ -296,7 +302,7 @@ export default function ProfileScreen() {
             setIsEditingName(false);
         } catch (error) {
             console.warn('Failed to save profile name:', error);
-            Alert.alert('Güncelleme başarısız', 'İsim güncellenirken bir hata oluştu.');
+            Alert.alert(t('profile.updateFailedTitle'), t('profile.updateFailedMessage'));
         } finally {
             setIsSavingName(false);
         }
@@ -356,28 +362,48 @@ export default function ProfileScreen() {
         [onboardingData?.routines]
     );
 
-    const profileName = onboardingData?.profile?.name?.trim() || 'Kullanıcı';
+    const profileName = onboardingData?.profile?.name?.trim() || t('profile.defaultName');
     useEffect(() => {
         if (!isEditingName) {
             setNameDraft(profileName);
         }
     }, [isEditingName, profileName]);
 
-    const members = useMemo(() => buildProfileMembers(onboardingData, profileName, normalizedRoutines), [
-        onboardingData,
-        profileName,
-        normalizedRoutines,
-    ]);
+    const members = useMemo(
+        () =>
+            buildProfileMembers(
+                onboardingData,
+                profileName,
+                normalizedRoutines,
+                (index) => t('profile.memberName', { index })
+            ),
+        [onboardingData, profileName, normalizedRoutines, t]
+    );
 
-    const dietaryRestrictions = mapSelectedItems(onboardingData?.dietary?.restrictions, DIETARY_RESTRICTIONS);
-    const allergies = mapSelectedItems(onboardingData?.dietary?.allergies, COMMON_ALLERGIES);
-    const selectedCuisines = mapSelectedItems(onboardingData?.cuisine?.selected, CUISINES);
-    const selectedEquipment = mapSelectedItems(onboardingData?.cooking?.equipment, EQUIPMENT);
+    const resolveCatalogItems = useCallback(
+        (items: LabeledEmojiItem[]) =>
+            items.map((item) => ({
+                key: item.key,
+                label: t(item.labelKey),
+                emoji: item.emoji,
+            })),
+        [t]
+    );
 
-    const timePreferenceMeta =
-        onboardingData?.cooking?.timePreference ? TIME_OPTIONS[onboardingData.cooking.timePreference] : TIME_OPTIONS.balanced;
-    const skillLevelMeta =
-        onboardingData?.cooking?.skillLevel ? SKILL_LEVELS[onboardingData.cooking.skillLevel] : SKILL_LEVELS.intermediate;
+    const dietaryCatalog = useMemo(() => resolveCatalogItems(DIETARY_RESTRICTIONS), [resolveCatalogItems]);
+    const allergyCatalog = useMemo(() => resolveCatalogItems(COMMON_ALLERGIES), [resolveCatalogItems]);
+    const cuisineCatalog = useMemo(() => resolveCatalogItems(CUISINES), [resolveCatalogItems]);
+    const equipmentCatalog = useMemo(() => resolveCatalogItems(EQUIPMENT), [resolveCatalogItems]);
+
+    const dietaryRestrictions = mapSelectedItems(onboardingData?.dietary?.restrictions, dietaryCatalog);
+    const allergies = mapSelectedItems(onboardingData?.dietary?.allergies, allergyCatalog);
+    const selectedCuisines = mapSelectedItems(onboardingData?.cuisine?.selected, cuisineCatalog);
+    const selectedEquipment = mapSelectedItems(onboardingData?.cooking?.equipment, equipmentCatalog);
+
+    const timePreferenceKey = onboardingData?.cooking?.timePreference ?? 'balanced';
+    const skillLevelKey = onboardingData?.cooking?.skillLevel ?? 'intermediate';
+    const timePreferenceMeta = TIME_OPTIONS[timePreferenceKey];
+    const skillLevelMeta = SKILL_LEVELS[skillLevelKey];
 
     const hasAnyOnboardingData = Boolean(
         onboardingData?.profile?.name ||
@@ -390,12 +416,12 @@ export default function ProfileScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <TabScreenHeader title="Profil" />
+            <TabScreenHeader title={t('profile.title')} />
 
             {isLoadingProfile ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="small" color={colors.primary} />
-                    <Text style={styles.loadingText}>Profil bilgileri yükleniyor...</Text>
+                    <Text style={styles.loadingText}>{t('profile.loading')}</Text>
                 </View>
             ) : (
                 <ScrollView
@@ -412,7 +438,7 @@ export default function ProfileScreen() {
                                 <TextInput
                                     value={nameDraft}
                                     onChangeText={setNameDraft}
-                                    placeholder="İsminiz"
+                                    placeholder={t('profile.namePlaceholder')}
                                     placeholderTextColor={colors.textMuted}
                                     style={styles.nameInput}
                                     editable={!isSavingName}
@@ -462,9 +488,9 @@ export default function ProfileScreen() {
                                 <MaterialCommunityIcons name="clipboard-text-outline" size={18} color={colors.primary} />
                             </View>
                             <View style={styles.emptyContent}>
-                                <Text style={styles.emptyTitle}>Onboarding verisi bulunamadı</Text>
+                                <Text style={styles.emptyTitle}>{t('profile.emptyTitle')}</Text>
                                 <Text style={styles.emptyText}>
-                                    Onboarding&apos;i tekrar tamamladığınızda tüm tercihlerinizi burada görebileceksiniz.
+                                    {t('profile.emptyText')}
                                 </Text>
                             </View>
                         </View>
@@ -480,21 +506,23 @@ export default function ProfileScreen() {
                                 <View style={styles.editPreferencesIconBadge}>
                                     <MaterialCommunityIcons name="tune-variant" size={18} color={colors.primary} />
                                 </View>
-                                <Text style={styles.editPreferencesText}>Tercihleri Değiştir</Text>
+                                <Text style={styles.editPreferencesText}>{t('profile.editPreferences')}</Text>
                                 <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
                             </TouchableOpacity>
 
-                            <SectionCard title="Haftalık Rutinler" icon="calendar-check-outline">
+                            <SectionCard title={t('profile.weeklyRoutines')} icon="calendar-check-outline">
                                 <View style={styles.routineList}>
                                     {members.map((member) => (
                                         <View key={`${member.id}-routine`} style={styles.routineMemberBlock}>
                                             <View style={styles.routineDays}>
-                                                {DAY_ORDER.map((day) => {
-                                                    const routineForDay = member.routines[day.key];
+                                                {DAY_ORDER.map((dayKey) => {
+                                                    const routineForDay = member.routines[dayKey];
                                                     const type = routineForDay?.type ?? 'remote';
                                                     return (
-                                                        <View key={`${member.id}-${day.key}`} style={styles.routineRow}>
-                                                            <Text style={styles.routineDayLabel}>{day.label}</Text>
+                                                        <View key={`${member.id}-${dayKey}`} style={styles.routineRow}>
+                                                            <Text style={styles.routineDayLabel}>
+                                                                {t(`preferences.days.${dayKey}`)}
+                                                            </Text>
                                                             <RoutinePill type={type} />
                                                         </View>
                                                     );
@@ -505,42 +533,46 @@ export default function ProfileScreen() {
                                 </View>
                             </SectionCard>
 
-                            <SectionCard title="Diyet & Alerji" icon="food-apple-outline">
+                            <SectionCard title={t('profile.dietary')} icon="food-apple-outline">
                                 <PreferenceBlock
-                                    title="Beslenme tercihleri"
+                                    title={t('profile.dietaryPreferences')}
                                     items={dietaryRestrictions}
-                                    emptyText="Belirtilmedi"
+                                    emptyText={t('profile.empty.unspecified')}
                                 />
-                                <PreferenceBlock title="Alerjiler" items={allergies} emptyText="Belirtilmedi" />
-                            </SectionCard>
-
-                            <SectionCard title="Mutfak Tercihleri" icon="silverware-fork-knife">
                                 <PreferenceBlock
-                                    title="Seçilen mutfaklar"
-                                    items={selectedCuisines}
-                                    emptyText="Farketmez"
+                                    title={t('profile.allergies')}
+                                    items={allergies}
+                                    emptyText={t('profile.empty.unspecified')}
                                 />
                             </SectionCard>
 
-                            <SectionCard title="Yemek Yapma Tercihleri" icon="chef-hat">
+                            <SectionCard title={t('profile.cuisine')} icon="silverware-fork-knife">
+                                <PreferenceBlock
+                                    title={t('profile.selectedCuisines')}
+                                    items={selectedCuisines}
+                                    emptyText={t('profile.empty.any')}
+                                />
+                            </SectionCard>
+
+                            <SectionCard title={t('profile.cooking')} icon="chef-hat">
                                 <View style={styles.cookingMetaRow}>
                                     <OptionSummaryCard
-                                        label="Süre"
+                                        label={t('profile.cookingTime')}
                                         emoji={timePreferenceMeta.emoji}
-                                        value={timePreferenceMeta.label}
-                                        description={timePreferenceMeta.description}
+                                        value={t(timePreferenceMeta.labelKey)}
+                                        description={t(timePreferenceMeta.descriptionKey)}
                                     />
                                     <OptionSummaryCard
-                                        label="Deneyim"
+                                        label={t('profile.cookingSkill')}
                                         emoji={skillLevelMeta.emoji}
-                                        value={skillLevelMeta.label}
-                                        description={skillLevelMeta.description}
+                                        value={t(skillLevelMeta.labelKey)}
+                                        description={t(skillLevelMeta.descriptionKey)}
                                     />
                                 </View>
                                 <PreferenceBlock
-                                    title="Ekipmanlar"
+                                    title={t('profile.equipment')}
                                     items={selectedEquipment}
-                                    emptyText="Standart ekipmanlar"
+                                    emptyText={t('profile.empty.standardEquipment')}
                                 />
                             </SectionCard>
                         </>
@@ -676,7 +708,7 @@ function SectionCard({ title, icon, children }: { title: string; icon: IconName;
     );
 }
 
-function PreferenceBlock({ title, items, emptyText }: { title: string; items: LabeledEmojiItem[]; emptyText: string }) {
+function PreferenceBlock({ title, items, emptyText }: { title: string; items: ResolvedEmojiItem[]; emptyText: string }) {
     return (
         <View style={styles.preferenceBlock}>
             <Text style={styles.preferenceTitle}>{title}</Text>
@@ -704,10 +736,13 @@ function TagChip({ label, emoji }: { label: string; emoji?: string }) {
 
 function RoutinePill({ type }: { type: RoutineDay['type'] }) {
     const meta = ROUTINE_TYPE_META[type];
+    const { t } = useLanguage();
     return (
         <View style={[styles.routinePill, { backgroundColor: meta.tint }]}>
             <Text style={styles.routinePillEmoji}>{meta.emoji}</Text>
-            <Text style={[styles.routinePillLabel, { color: meta.textColor }]}>{meta.label}</Text>
+            <Text style={[styles.routinePillLabel, { color: meta.textColor }]}>
+                {t(meta.labelKey)}
+            </Text>
         </View>
     );
 }
@@ -735,7 +770,13 @@ function OptionSummaryCard({
     );
 }
 
-function mapSelectedItems(selectedKeys: string[] | undefined, catalog: LabeledEmojiItem[]): LabeledEmojiItem[] {
+type ResolvedEmojiItem = {
+    key: string;
+    label: string;
+    emoji?: string;
+};
+
+function mapSelectedItems(selectedKeys: string[] | undefined, catalog: ResolvedEmojiItem[]): ResolvedEmojiItem[] {
     if (!selectedKeys?.length) {
         return [];
     }
@@ -773,7 +814,8 @@ function normalizeWeeklyRoutine(routine: WeeklyRoutine | undefined): WeeklyRouti
 function buildProfileMembers(
     data: Partial<OnboardingData> | null,
     fallbackName: string,
-    fallbackRoutine: WeeklyRoutine
+    fallbackRoutine: WeeklyRoutine,
+    resolveMemberName: (index: number) => string
 ): ProfileMember[] {
     const members = data?.members ?? [];
     if (!members.length) {
@@ -787,7 +829,7 @@ function buildProfileMembers(
     }
 
     return members.map((member, index) => {
-        const resolvedName = member.name?.trim() || `Kişi ${index + 1}`;
+        const resolvedName = member.name?.trim() || resolveMemberName(index + 1);
         const memberRoutine = normalizeWeeklyRoutine(member.routines ?? data?.routines ?? fallbackRoutine);
 
         return {

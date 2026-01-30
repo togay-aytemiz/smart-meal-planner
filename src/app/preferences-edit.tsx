@@ -21,6 +21,7 @@ import firestore, { doc, getDoc, serverTimestamp, setDoc } from '@react-native-f
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, SelectableTag } from '../components/ui';
 import { useUser } from '../contexts/user-context';
+import { useLanguage } from '../contexts/language-context';
 import type { HouseholdMember, RoutineDay, WeeklyRoutine } from '../contexts/onboarding-context';
 import { colors } from '../theme/colors';
 import { radius, spacing, shadows } from '../theme/spacing';
@@ -57,25 +58,25 @@ type DayKey = keyof WeeklyRoutine;
 
 type RoutineOption = {
     key: RoutineDay['type'];
-    label: string;
+    labelKey: string;
     emoji: string;
 };
 
 type LabeledEmojiItem = {
     key: string;
-    label: string;
+    labelKey: string;
     emoji?: string;
     popular?: boolean;
 };
 
-const DAY_ORDER: Array<{ key: DayKey; label: string }> = [
-    { key: 'monday', label: 'Pazartesi' },
-    { key: 'tuesday', label: 'Salı' },
-    { key: 'wednesday', label: 'Çarşamba' },
-    { key: 'thursday', label: 'Perşembe' },
-    { key: 'friday', label: 'Cuma' },
-    { key: 'saturday', label: 'Cumartesi' },
-    { key: 'sunday', label: 'Pazar' },
+const DAY_ORDER: DayKey[] = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
 ];
 
 const DEFAULT_ROUTINES: WeeklyRoutine = {
@@ -89,74 +90,81 @@ const DEFAULT_ROUTINES: WeeklyRoutine = {
 };
 
 const ROUTINE_OPTIONS: RoutineOption[] = [
-    { key: 'office', label: 'Ofis', emoji: '🏢' },
-    { key: 'remote', label: 'Ev', emoji: '🏠' },
-    { key: 'gym', label: 'Spor', emoji: '💪' },
-    { key: 'school', label: 'Okul', emoji: '📚' },
-    { key: 'off', label: 'Tatil', emoji: '🌴' },
+    { key: 'office', labelKey: 'preferences.routineTypes.office', emoji: '🏢' },
+    { key: 'remote', labelKey: 'preferences.routineTypes.remote', emoji: '🏠' },
+    { key: 'gym', labelKey: 'preferences.routineTypes.gym', emoji: '💪' },
+    { key: 'school', labelKey: 'preferences.routineTypes.school', emoji: '📚' },
+    { key: 'off', labelKey: 'preferences.routineTypes.off', emoji: '🌴' },
 ];
 
 const DIETARY_RESTRICTIONS: LabeledEmojiItem[] = [
-    { key: 'vegetarian', label: 'Vejetaryen', emoji: '🥬' },
-    { key: 'vegan', label: 'Vegan', emoji: '🌱' },
-    { key: 'pescatarian', label: 'Pesketaryen', emoji: '🐟' },
-    { key: 'gluten-free', label: 'Glütensiz', emoji: '🌾' },
-    { key: 'dairy-free', label: 'Süt Ürünsüz', emoji: '🥛' },
-    { key: 'low-carb', label: 'Düşük Karbonhidrat', emoji: '🍞' },
-    { key: 'keto', label: 'Keto', emoji: '🥑' },
-    { key: 'high-protein', label: 'Protein Ağırlıklı', emoji: '💪' },
+    { key: 'vegetarian', labelKey: 'preferences.dietary.vegetarian', emoji: '🥬' },
+    { key: 'vegan', labelKey: 'preferences.dietary.vegan', emoji: '🌱' },
+    { key: 'pescatarian', labelKey: 'preferences.dietary.pescatarian', emoji: '🐟' },
+    { key: 'gluten-free', labelKey: 'preferences.dietary.glutenFree', emoji: '🌾' },
+    { key: 'dairy-free', labelKey: 'preferences.dietary.dairyFree', emoji: '🥛' },
+    { key: 'low-carb', labelKey: 'preferences.dietary.lowCarb', emoji: '🍞' },
+    { key: 'keto', labelKey: 'preferences.dietary.keto', emoji: '🥑' },
+    { key: 'high-protein', labelKey: 'preferences.dietary.highProtein', emoji: '💪' },
 ];
 
 const COMMON_ALLERGIES: LabeledEmojiItem[] = [
-    { key: 'nuts', label: 'Kuruyemiş', emoji: '🥜' },
-    { key: 'shellfish', label: 'Kabuklu Deniz', emoji: '🦐' },
-    { key: 'eggs', label: 'Yumurta', emoji: '🥚' },
-    { key: 'soy', label: 'Soya', emoji: '🫘' },
-    { key: 'wheat', label: 'Buğday', emoji: '🌾' },
-    { key: 'fish', label: 'Balık', emoji: '🐠' },
-    { key: 'sesame', label: 'Susam', emoji: '🌰' },
+    { key: 'nuts', labelKey: 'preferences.allergies.nuts', emoji: '🥜' },
+    { key: 'shellfish', labelKey: 'preferences.allergies.shellfish', emoji: '🦐' },
+    { key: 'eggs', labelKey: 'preferences.allergies.eggs', emoji: '🥚' },
+    { key: 'soy', labelKey: 'preferences.allergies.soy', emoji: '🫘' },
+    { key: 'wheat', labelKey: 'preferences.allergies.wheat', emoji: '🌾' },
+    { key: 'fish', labelKey: 'preferences.allergies.fish', emoji: '🐠' },
+    { key: 'sesame', labelKey: 'preferences.allergies.sesame', emoji: '🌰' },
 ];
 
 const CUISINES: LabeledEmojiItem[] = [
-    { key: 'turkish', label: 'Türk', emoji: '🇹🇷', popular: true },
-    { key: 'mediterranean', label: 'Akdeniz', emoji: '🫒', popular: true },
-    { key: 'italian', label: 'İtalyan', emoji: '🍝', popular: true },
-    { key: 'asian', label: 'Asya', emoji: '🍜', popular: true },
-    { key: 'middle-eastern', label: 'Ortadoğu', emoji: '🧆', popular: false },
-    { key: 'mexican', label: 'Meksika', emoji: '🌮', popular: false },
-    { key: 'indian', label: 'Hint', emoji: '🍛', popular: false },
-    { key: 'french', label: 'Fransız', emoji: '🥐', popular: false },
-    { key: 'japanese', label: 'Japon', emoji: '🍱', popular: false },
-    { key: 'chinese', label: 'Çin', emoji: '🥡', popular: false },
-    { key: 'thai', label: 'Tayland', emoji: '🍜', popular: false },
-    { key: 'american', label: 'Amerikan', emoji: '🍔', popular: false },
+    { key: 'turkish', labelKey: 'preferences.cuisines.turkish', emoji: '🇹🇷', popular: true },
+    { key: 'mediterranean', labelKey: 'preferences.cuisines.mediterranean', emoji: '🫒', popular: true },
+    { key: 'italian', labelKey: 'preferences.cuisines.italian', emoji: '🍝', popular: true },
+    { key: 'asian', labelKey: 'preferences.cuisines.asian', emoji: '🍜', popular: true },
+    { key: 'middle-eastern', labelKey: 'preferences.cuisines.middleEastern', emoji: '🧆', popular: false },
+    { key: 'mexican', labelKey: 'preferences.cuisines.mexican', emoji: '🌮', popular: false },
+    { key: 'indian', labelKey: 'preferences.cuisines.indian', emoji: '🍛', popular: false },
+    { key: 'french', labelKey: 'preferences.cuisines.french', emoji: '🥐', popular: false },
+    { key: 'japanese', labelKey: 'preferences.cuisines.japanese', emoji: '🍱', popular: false },
+    { key: 'chinese', labelKey: 'preferences.cuisines.chinese', emoji: '🥡', popular: false },
+    { key: 'thai', labelKey: 'preferences.cuisines.thai', emoji: '🍜', popular: false },
+    { key: 'american', labelKey: 'preferences.cuisines.american', emoji: '🍔', popular: false },
 ];
 
-const TIME_OPTIONS: Array<{ key: 'quick' | 'balanced' | 'elaborate'; label: string; description: string; emoji: string }> = [
-    { key: 'quick', label: 'Hızlı', description: '15-30 dk', emoji: '⚡' },
-    { key: 'balanced', label: 'Dengeli', description: '30-60 dk', emoji: '⏱️' },
-    { key: 'elaborate', label: 'Detaylı', description: '60+ dk', emoji: '👨‍🍳' },
-];
+const TIME_OPTIONS: Record<
+    'quick' | 'balanced' | 'elaborate',
+    { key: 'quick' | 'balanced' | 'elaborate'; labelKey: string; descriptionKey: string; emoji: string }
+> = {
+    quick: { key: 'quick', labelKey: 'preferences.timeOptions.quick.label', descriptionKey: 'preferences.timeOptions.quick.description', emoji: '⚡' },
+    balanced: { key: 'balanced', labelKey: 'preferences.timeOptions.balanced.label', descriptionKey: 'preferences.timeOptions.balanced.description', emoji: '⏱️' },
+    elaborate: { key: 'elaborate', labelKey: 'preferences.timeOptions.elaborate.label', descriptionKey: 'preferences.timeOptions.elaborate.description', emoji: '👨‍🍳' },
+};
 
-const SKILL_LEVELS: Array<{ key: 'beginner' | 'intermediate' | 'expert'; label: string; description: string; emoji: string }> = [
-    { key: 'beginner', label: 'Başlangıç', description: 'Temel tarifler', emoji: '🌱' },
-    { key: 'intermediate', label: 'Orta', description: 'Çoğu tarif', emoji: '🌿' },
-    { key: 'expert', label: 'Uzman', description: 'Her şey olur', emoji: '🌳' },
-];
+const SKILL_LEVELS: Record<
+    'beginner' | 'intermediate' | 'expert',
+    { key: 'beginner' | 'intermediate' | 'expert'; labelKey: string; descriptionKey: string; emoji: string }
+> = {
+    beginner: { key: 'beginner', labelKey: 'preferences.skillLevels.beginner.label', descriptionKey: 'preferences.skillLevels.beginner.description', emoji: '🌱' },
+    intermediate: { key: 'intermediate', labelKey: 'preferences.skillLevels.intermediate.label', descriptionKey: 'preferences.skillLevels.intermediate.description', emoji: '🌿' },
+    expert: { key: 'expert', labelKey: 'preferences.skillLevels.expert.label', descriptionKey: 'preferences.skillLevels.expert.description', emoji: '🌳' },
+};
 
 const EQUIPMENT: LabeledEmojiItem[] = [
-    { key: 'oven', label: 'Fırın', emoji: '🔥' },
-    { key: 'blender', label: 'Blender', emoji: '🫙' },
-    { key: 'airfryer', label: 'Airfryer', emoji: '🍟' },
-    { key: 'pressure-cooker', label: 'Düdüklü', emoji: '♨️' },
-    { key: 'mixer', label: 'Mikser', emoji: '🥣' },
-    { key: 'grill', label: 'Izgara', emoji: '🥩' },
+    { key: 'oven', labelKey: 'preferences.equipment.oven', emoji: '🔥' },
+    { key: 'blender', labelKey: 'preferences.equipment.blender', emoji: '🫙' },
+    { key: 'airfryer', labelKey: 'preferences.equipment.airfryer', emoji: '🍟' },
+    { key: 'pressure-cooker', labelKey: 'preferences.equipment.pressureCooker', emoji: '♨️' },
+    { key: 'mixer', labelKey: 'preferences.equipment.mixer', emoji: '🥣' },
+    { key: 'grill', labelKey: 'preferences.equipment.grill', emoji: '🥩' },
 ];
 
 export default function PreferencesEditScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { state: userState } = useUser();
+    const { t } = useLanguage();
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -213,7 +221,7 @@ export default function PreferencesEditScreen() {
                     }
                 }
 
-                const normalizedSnapshot = resolvedSnapshot ?? buildDefaultSnapshot();
+                const normalizedSnapshot = resolvedSnapshot ?? buildDefaultSnapshot(t('profile.defaultName'));
 
                 if (!isMounted) {
                     return;
@@ -230,7 +238,7 @@ export default function PreferencesEditScreen() {
             } catch (error) {
                 console.warn('Failed to prepare onboarding edit state:', error);
                 if (isMounted) {
-                    const fallback = buildDefaultSnapshot();
+                    const fallback = buildDefaultSnapshot(t('profile.defaultName'));
                     setInitialSnapshot(fallback);
                     setRoutines(fallback.routines ?? DEFAULT_ROUTINES);
                 }
@@ -246,7 +254,7 @@ export default function PreferencesEditScreen() {
         return () => {
             isMounted = false;
         };
-    }, [userState.isLoading, userState.user?.uid]);
+    }, [t, userState.isLoading, userState.user?.uid]);
 
     const initialHash = useMemo(() => buildOnboardingHash(initialSnapshot), [initialSnapshot]);
 
@@ -290,8 +298,8 @@ export default function PreferencesEditScreen() {
         if (!initialSnapshot) {
             return [];
         }
-        return buildRoutineChanges(initialSnapshot.routines, routines);
-    }, [initialSnapshot, routines]);
+        return buildRoutineChanges(initialSnapshot.routines, routines, t);
+    }, [initialSnapshot, routines, t]);
     const preferenceChangeSummaries = useMemo<PreferenceChangeSummary[]>(() => {
         if (!initialSnapshot) {
             return [];
@@ -308,41 +316,45 @@ export default function PreferencesEditScreen() {
         if (!areStringListsEqual(initialRestrictions, restrictions)) {
             summaries.push({
                 key: 'dietary-restrictions',
-                label: 'Beslenme tercihleri',
-                detail: buildSelectionDetail(restrictions.length),
+                label: t('preferences.summary.dietary'),
+                detail: buildSelectionDetail(restrictions.length, t),
             });
         }
 
         if (!areStringListsEqual(initialAllergies, allergies)) {
             summaries.push({
                 key: 'dietary-allergies',
-                label: 'Alerjiler',
-                detail: buildSelectionDetail(allergies.length),
+                label: t('preferences.summary.allergies'),
+                detail: buildSelectionDetail(allergies.length, t),
             });
         }
 
         if (!areStringListsEqual(initialCuisines, selectedCuisines)) {
             summaries.push({
                 key: 'cuisine',
-                label: 'Mutfak tercihleri',
-                detail: buildSelectionDetail(selectedCuisines.length),
+                label: t('preferences.summary.cuisine'),
+                detail: buildSelectionDetail(selectedCuisines.length, t),
             });
         }
 
         if (initialTimePreference !== timePreference) {
-            const timeLabel = TIME_OPTIONS.find((option) => option.key === timePreference)?.label ?? 'Dengeli';
+            const timeLabel = TIME_OPTIONS[timePreference]
+                ? t(TIME_OPTIONS[timePreference].labelKey)
+                : t(TIME_OPTIONS.balanced.labelKey);
             summaries.push({
                 key: 'cooking-time',
-                label: 'Yemek süresi',
+                label: t('preferences.summary.cookingTime'),
                 detail: timeLabel,
             });
         }
 
         if (initialSkillLevel !== skillLevel) {
-            const skillLabel = SKILL_LEVELS.find((option) => option.key === skillLevel)?.label ?? 'Orta';
+            const skillLabel = SKILL_LEVELS[skillLevel]
+                ? t(SKILL_LEVELS[skillLevel].labelKey)
+                : t(SKILL_LEVELS.intermediate.labelKey);
             summaries.push({
                 key: 'cooking-skill',
-                label: 'Beceri seviyesi',
+                label: t('preferences.summary.cookingSkill'),
                 detail: skillLabel,
             });
         }
@@ -350,16 +362,16 @@ export default function PreferencesEditScreen() {
         if (!areStringListsEqual(initialEquipment, equipment)) {
             summaries.push({
                 key: 'cooking-equipment',
-                label: 'Ekipmanlar',
-                detail: buildSelectionDetail(equipment.length),
+                label: t('preferences.summary.equipment'),
+                detail: buildSelectionDetail(equipment.length, t),
             });
         }
 
         if (routineChanges.length > 0) {
             summaries.push({
                 key: 'routines',
-                label: 'Haftalık rutinler',
-                detail: `${routineChanges.length} gün`,
+                label: t('preferences.summary.routines'),
+                detail: t('preferences.routineChangesDetail', { count: routineChanges.length }),
             });
         }
 
@@ -372,6 +384,7 @@ export default function PreferencesEditScreen() {
         routineChanges.length,
         selectedCuisines,
         skillLevel,
+        t,
         timePreference,
     ]);
     const modalPreferenceChanges = pendingRegenerationChanges?.preferenceChanges ?? preferenceChangeSummaries;
@@ -388,18 +401,18 @@ export default function PreferencesEditScreen() {
 
     const confirmDiscardChanges = useCallback(() => {
         Alert.alert(
-            'Kaydedilmemiş değişiklikler',
-            'Kaydedilmemiş değişiklikleriniz var. Çıkmak istediğinize emin misiniz?',
+            t('preferences.discardTitle'),
+            t('preferences.discardMessage'),
             [
-                { text: 'Kal', style: 'cancel' },
+                { text: t('preferences.discardCancel'), style: 'cancel' },
                 {
-                    text: 'Çık',
+                    text: t('preferences.discardConfirm'),
                     style: 'destructive',
                     onPress: navigateBack,
                 },
             ]
         );
-    }, [navigateBack]);
+    }, [navigateBack, t]);
 
     const handleBack = () => {
         if (isRoutineModalVisible) {
@@ -506,12 +519,12 @@ export default function PreferencesEditScreen() {
             return;
         }
         Alert.alert(
-            'Değişikliklerden vazgeç',
-            'Yaptığınız değişiklikler kaydedilmeyecek. Devam etmek istiyor musunuz?',
+            t('preferences.discardChangesTitle'),
+            t('preferences.discardChangesMessage'),
             [
-                { text: 'Kal', style: 'cancel' },
+                { text: t('preferences.discardChangesCancel'), style: 'cancel' },
                 {
-                    text: 'Vazgeç',
+                    text: t('preferences.discardChangesConfirm'),
                     style: 'destructive',
                     onPress: applyDiscardChanges,
                 },
@@ -598,12 +611,15 @@ export default function PreferencesEditScreen() {
             return true;
         } catch (error) {
             const errorMessage =
-                error instanceof Error ? error.message : typeof error === 'string' ? error : 'Bilinmeyen hata';
+                error instanceof Error
+                    ? error.message
+                    : typeof error === 'string'
+                    ? error
+                    : t('preferences.saveErrorUnknown');
             console.warn('Failed to save onboarding preferences:', errorMessage, error);
-            const alertMessage = __DEV__
-                ? `Tercihler kaydedilirken bir hata oluştu.\n\n${errorMessage}`
-                : 'Tercihler kaydedilirken bir hata oluştu.';
-            Alert.alert('Kaydetme başarısız', alertMessage);
+            const baseMessage = t('preferences.saveErrorMessage');
+            const alertMessage = __DEV__ ? `${baseMessage}\n\n${errorMessage}` : baseMessage;
+            Alert.alert(t('preferences.saveErrorTitle'), alertMessage);
             return false;
         }
     };
@@ -687,8 +703,12 @@ export default function PreferencesEditScreen() {
             const isPremium = await loadPremiumStatus(userId);
             if (!isPremium) {
                 const allowed = await requestRewardedAd({
-                    title: 'Haftalık menüyü yenilemek için reklam izle',
-                    message: 'Devam etmek için kısa bir reklam izlemen gerekiyor.',
+                    title: t('ads.rewarded.weeklyRegenerateTitle'),
+                    message: t('ads.rewarded.weeklyRegenerateMessage'),
+                    confirmText: t('ads.rewarded.confirm'),
+                    cancelText: t('ads.rewarded.cancel'),
+                    errorTitle: t('ads.rewarded.errorTitle'),
+                    errorMessage: t('ads.rewarded.errorMessage'),
                 });
                 if (!allowed) {
                     return;
@@ -710,7 +730,7 @@ export default function PreferencesEditScreen() {
             <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="small" color={colors.primary} />
-                    <Text style={styles.loadingText}>Tercihler yükleniyor...</Text>
+                    <Text style={styles.loadingText}>{t('preferences.loading')}</Text>
                 </View>
             </SafeAreaView>
         );
@@ -726,7 +746,7 @@ export default function PreferencesEditScreen() {
                     <TouchableOpacity onPress={handleBack} activeOpacity={0.8} style={styles.iconButton}>
                         <MaterialCommunityIcons name="arrow-left" size={26} color={colors.textPrimary} />
                     </TouchableOpacity>
-                    <Text style={styles.brandText}>Tercihler</Text>
+                    <Text style={styles.brandText}>{t('preferences.title')}</Text>
                     <View style={styles.headerSpacer} />
                 </View>
             </View>
@@ -738,30 +758,32 @@ export default function PreferencesEditScreen() {
             >
                 <View style={styles.content}>
                     <SectionHeader
-                        title="Haftalık Rutinler"
-                        subtitle="Gününüz nerede geçiyor, planı buna göre ayarlayalım"
+                        title={t('preferences.routineSectionTitle')}
+                        subtitle={t('preferences.routineSectionSubtitle')}
                         icon="calendar-check-outline"
                     />
                     <View style={styles.card}>
-                        {DAY_ORDER.map((day, index) => {
-                            const dayRoutine = routines[day.key];
-                            const routineMeta = ROUTINE_OPTIONS.find((item) => item.key === dayRoutine.type) ?? ROUTINE_OPTIONS[1];
-                            const isActive = activeRoutineDay === day.key;
+                        {DAY_ORDER.map((dayKey, index) => {
+                            const dayRoutine = routines[dayKey];
+                            const routineMeta =
+                                ROUTINE_OPTIONS.find((item) => item.key === dayRoutine.type) ?? ROUTINE_OPTIONS[1];
+                            const routineLabel = t(routineMeta.labelKey);
+                            const isActive = activeRoutineDay === dayKey;
                             const isLastDay = index === DAY_ORDER.length - 1;
 
                             return (
                                 <View
-                                    key={day.key}
+                                    key={dayKey}
                                     style={[styles.routineDayBlock, isLastDay && styles.routineDayBlockLast]}
                                 >
                                     <TouchableOpacity
                                         style={[styles.routineRow, isActive && styles.routineRowActive]}
-                                        onPress={() => handleToggleRoutineDay(day.key)}
+                                        onPress={() => handleToggleRoutineDay(dayKey)}
                                         activeOpacity={0.9}
                                     >
-                                        <Text style={styles.routineDayLabel}>{day.label}</Text>
+                                        <Text style={styles.routineDayLabel}>{t(`preferences.days.${dayKey}`)}</Text>
                                         <View style={styles.routineRight}>
-                                            <RoutinePill label={routineMeta.label} emoji={routineMeta.emoji} />
+                                            <RoutinePill label={routineLabel} emoji={routineMeta.emoji} />
                                             <MaterialCommunityIcons
                                                 name={isActive ? 'chevron-up' : 'chevron-down'}
                                                 size={20}
@@ -774,10 +796,10 @@ export default function PreferencesEditScreen() {
                                         <View style={styles.routineOptions}>
                                             {ROUTINE_OPTIONS.map((option) => (
                                                 <SelectableTag
-                                                    key={`${day.key}-${option.key}`}
-                                                    label={option.label}
+                                                    key={`${dayKey}-${option.key}`}
+                                                    label={t(option.labelKey)}
                                                     selected={dayRoutine.type === option.key}
-                                                    onPress={() => handleUpdateRoutineType(day.key, option.key)}
+                                                    onPress={() => handleUpdateRoutineType(dayKey, option.key)}
                                                     icon={<Text style={styles.tagEmoji}>{option.emoji}</Text>}
                                                 />
                                             ))}
@@ -789,16 +811,16 @@ export default function PreferencesEditScreen() {
                     </View>
 
                     <SectionHeader
-                        title="Diyet & Alerji"
-                        subtitle="İstemediğiniz içerikleri netleştirelim"
+                        title={t('preferences.dietaryTitle')}
+                        subtitle={t('preferences.dietarySubtitle')}
                         icon="food-apple-outline"
                     />
                     <View style={styles.card}>
-                        <PreferenceBlock title="Beslenme tercihleri">
+                        <PreferenceBlock title={t('preferences.summary.dietary')}>
                             {DIETARY_RESTRICTIONS.map((item) => (
                                 <SelectableTag
                                     key={`restriction-${item.key}`}
-                                    label={item.label}
+                                    label={t(item.labelKey)}
                                     selected={restrictions.includes(item.key)}
                                     onPress={() => toggleRestriction(item.key)}
                                     icon={<Text style={styles.tagEmoji}>{item.emoji}</Text>}
@@ -806,11 +828,11 @@ export default function PreferencesEditScreen() {
                             ))}
                         </PreferenceBlock>
 
-                        <PreferenceBlock title="Alerjiler">
+                        <PreferenceBlock title={t('preferences.summary.allergies')}>
                             {COMMON_ALLERGIES.map((item) => (
                                 <SelectableTag
                                     key={`allergy-${item.key}`}
-                                    label={item.label}
+                                    label={t(item.labelKey)}
                                     selected={allergies.includes(item.key)}
                                     onPress={() => toggleAllergy(item.key)}
                                     icon={<Text style={styles.tagEmoji}>{item.emoji}</Text>}
@@ -820,19 +842,19 @@ export default function PreferencesEditScreen() {
                     </View>
 
                     <SectionHeader
-                        title="Mutfak Tercihleri"
-                        subtitle="Sevdiğiniz mutfaklara öncelik verelim"
+                        title={t('preferences.cuisineTitle')}
+                        subtitle={t('preferences.cuisineSubtitle')}
                         icon="silverware-fork-knife"
                     />
                     <View style={styles.card}>
                         <CuisineGrid
-                            title="Popüler"
+                            title={t('preferences.cuisinePopularTitle')}
                             cuisines={CUISINES.filter((item) => item.popular)}
                             selectedKeys={selectedCuisines}
                             onToggle={toggleCuisine}
                         />
                         <CuisineGrid
-                            title="Diğer mutfaklar"
+                            title={t('preferences.cuisineOtherTitle')}
                             cuisines={CUISINES.filter((item) => !item.popular)}
                             selectedKeys={selectedCuisines}
                             onToggle={toggleCuisine}
@@ -840,18 +862,18 @@ export default function PreferencesEditScreen() {
                     </View>
 
                     <SectionHeader
-                        title="Yemek Yapma Tercihleri"
-                        subtitle="Süre, deneyim ve ekipmanları güncelleyin"
+                        title={t('preferences.cookingTitle')}
+                        subtitle={t('preferences.cookingSubtitle')}
                         icon="chef-hat"
                     />
                     <View style={styles.card}>
-                        <Text style={styles.blockTitle}>Yemek süresi</Text>
+                        <Text style={styles.blockTitle}>{t('preferences.cookingTimeTitle')}</Text>
                         <View style={styles.optionRow}>
-                            {TIME_OPTIONS.map((option) => (
+                            {Object.values(TIME_OPTIONS).map((option) => (
                                 <OptionCard
                                     key={`time-${option.key}`}
-                                    label={option.label}
-                                    description={option.description}
+                                    label={t(option.labelKey)}
+                                    description={t(option.descriptionKey)}
                                     emoji={option.emoji}
                                     selected={timePreference === option.key}
                                     onPress={() => setTimePreference(option.key)}
@@ -859,13 +881,13 @@ export default function PreferencesEditScreen() {
                             ))}
                         </View>
 
-                        <Text style={styles.blockTitle}>Mutfak deneyimi</Text>
+                        <Text style={styles.blockTitle}>{t('preferences.cookingSkillTitle')}</Text>
                         <View style={styles.optionRow}>
-                            {SKILL_LEVELS.map((option) => (
+                            {Object.values(SKILL_LEVELS).map((option) => (
                                 <OptionCard
                                     key={`skill-${option.key}`}
-                                    label={option.label}
-                                    description={option.description}
+                                    label={t(option.labelKey)}
+                                    description={t(option.descriptionKey)}
                                     emoji={option.emoji}
                                     selected={skillLevel === option.key}
                                     onPress={() => setSkillLevel(option.key)}
@@ -873,7 +895,7 @@ export default function PreferencesEditScreen() {
                             ))}
                         </View>
 
-                        <PreferenceBlock title="Ekipmanlar (opsiyonel)">
+                        <PreferenceBlock title={t('preferences.equipmentOptional')}>
                             {EQUIPMENT.map((item) => (
                                 <TouchableOpacity
                                     key={`equipment-${item.key}`}
@@ -888,7 +910,7 @@ export default function PreferencesEditScreen() {
                                             equipment.includes(item.key) && styles.equipmentLabelSelected,
                                         ]}
                                     >
-                                        {item.label}
+                                        {t(item.labelKey)}
                                     </Text>
                                 </TouchableOpacity>
                             ))}
@@ -912,29 +934,29 @@ export default function PreferencesEditScreen() {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalCard}>
-                        <View style={styles.modalHeader}>
-                            <View style={styles.modalIconBadge}>
-                                <Image source={require('../../assets/onboarding-ready.png')} style={styles.modalIconImage} />
+                            <View style={styles.modalHeader}>
+                                <View style={styles.modalIconBadge}>
+                                    <Image source={require('../../assets/onboarding-ready.png')} style={styles.modalIconImage} />
+                                </View>
+                                <Text style={styles.modalTitle}>{t('preferences.routineModalTitle')}</Text>
                             </View>
-                            <Text style={styles.modalTitle}>Tercihler Güncellendi</Text>
-                        </View>
 
-                        <View style={styles.modalChangeList}>
-                            <Text style={styles.modalChangeTitle}>Neler değişti?</Text>
-                            {modalPreferenceChanges.length ? (
-                                <View style={styles.modalSummaryList}>
-                                    {modalPreferenceChanges.map((change) => (
-                                        <View key={`summary-${change.key}`} style={styles.modalSummaryRow}>
-                                            <Text style={styles.modalSummaryLabel}>{change.label}</Text>
+                            <View style={styles.modalChangeList}>
+                                <Text style={styles.modalChangeTitle}>{t('preferences.routineModalChangesTitle')}</Text>
+                                {modalPreferenceChanges.length ? (
+                                    <View style={styles.modalSummaryList}>
+                                        {modalPreferenceChanges.map((change) => (
+                                            <View key={`summary-${change.key}`} style={styles.modalSummaryRow}>
+                                                <Text style={styles.modalSummaryLabel}>{change.label}</Text>
                                             {change.detail ? (
                                                 <Text style={styles.modalSummaryDetail}>{change.detail}</Text>
                                             ) : null}
                                         </View>
                                     ))}
                                 </View>
-                            ) : (
-                                <Text style={styles.modalSummaryFallback}>Tercihleriniz güncellendi.</Text>
-                            )}
+                                ) : (
+                                    <Text style={styles.modalSummaryFallback}>{t('preferences.routineModalFallback')}</Text>
+                                )}
 
                             {modalRoutineChanges.length > 0 ? (
                                 <View style={styles.modalRoutineDetailList}>
@@ -946,7 +968,7 @@ export default function PreferencesEditScreen() {
                                                 <Text style={styles.modalChangeDay}>{change.dayLabel}</Text>
                                                 <View style={styles.modalChangeMetaRow}>
                                                     <RoutineChangePill
-                                                        label={previousMeta.label}
+                                                        label={t(previousMeta.labelKey)}
                                                         emoji={previousMeta.emoji}
                                                         tone="muted"
                                                     />
@@ -957,7 +979,7 @@ export default function PreferencesEditScreen() {
                                                         style={styles.modalChangeArrow}
                                                     />
                                                     <RoutineChangePill
-                                                        label={nextMeta.label}
+                                                        label={t(nextMeta.labelKey)}
                                                         emoji={nextMeta.emoji}
                                                         tone="highlight"
                                                     />
@@ -971,14 +993,14 @@ export default function PreferencesEditScreen() {
 
                         <View style={styles.modalQuestionBlock}>
                             <Text style={styles.modalQuestionText}>
-                                Bu haftanın geri kalan günleri için menüyü yeniden oluşturmak ister misiniz?
+                                {t('preferences.routineModalQuestion')}
                             </Text>
                         </View>
 
                         <View style={styles.modalActions}>
                             <View style={styles.modalActionButtonSlot}>
                                 <Button
-                                    title="Şimdilik Değiştirme"
+                                    title={t('preferences.routineModalSecondary')}
                                     variant="secondary"
                                     onPress={handleSaveWithoutRegeneration}
                                     disabled={isSaving}
@@ -988,7 +1010,7 @@ export default function PreferencesEditScreen() {
                             </View>
                             <View style={styles.modalActionButtonSlot}>
                                 <Button
-                                    title="Kalan Haftayı Yenile"
+                                    title={t('preferences.routineModalPrimary')}
                                     variant="primary"
                                     onPress={handleSaveWithRegeneration}
                                     disabled={isSaving}
@@ -1005,7 +1027,7 @@ export default function PreferencesEditScreen() {
                 <View style={styles.footerContent}>
                     <View style={styles.footerButtonSlot}>
                         <Button
-                            title="Vazgeç"
+                            title={t('preferences.discardChangesConfirm')}
                             variant="secondary"
                             onPress={handleDiscardChanges}
                             disabled={!isDirty || isSaving}
@@ -1014,7 +1036,7 @@ export default function PreferencesEditScreen() {
                     </View>
                     <View style={styles.footerButtonSlot}>
                         <Button
-                            title="Kaydet"
+                            title={t('preferences.save')}
                             variant="primary"
                             onPress={handleSaveChanges}
                             disabled={!isDirty || isSaving}
@@ -1071,6 +1093,7 @@ function CuisineGrid({
     selectedKeys: string[];
     onToggle: (key: string) => void;
 }) {
+    const { t } = useLanguage();
     return (
         <View style={styles.cuisineBlock}>
             <Text style={styles.blockTitle}>{title}</Text>
@@ -1086,7 +1109,7 @@ function CuisineGrid({
                         >
                             {cuisine.emoji ? <Text style={styles.cuisineEmoji}>{cuisine.emoji}</Text> : null}
                             <Text style={[styles.cuisineLabel, isSelected && styles.cuisineLabelSelected]} numberOfLines={1}>
-                                {cuisine.label}
+                                {t(cuisine.labelKey)}
                             </Text>
                             {isSelected ? (
                                 <View style={styles.cuisineCheck}>
@@ -1150,19 +1173,23 @@ function getRoutineOption(type: RoutineDay['type']): RoutineOption {
     return ROUTINE_OPTIONS.find((option) => option.key === type) ?? ROUTINE_OPTIONS[1];
 }
 
-function buildRoutineChanges(initialRoutine: WeeklyRoutine | undefined, nextRoutine: WeeklyRoutine): RoutineChange[] {
+function buildRoutineChanges(
+    initialRoutine: WeeklyRoutine | undefined,
+    nextRoutine: WeeklyRoutine,
+    t: (key: string, params?: Record<string, string | number>) => string
+): RoutineChange[] {
     const baseRoutine = normalizeWeeklyRoutine(initialRoutine);
     const changes: RoutineChange[] = [];
 
-    for (const day of DAY_ORDER) {
-        const previousType = baseRoutine[day.key].type;
-        const nextType = nextRoutine[day.key].type;
+    for (const dayKey of DAY_ORDER) {
+        const previousType = baseRoutine[dayKey].type;
+        const nextType = nextRoutine[dayKey].type;
         if (previousType === nextType) {
             continue;
         }
         changes.push({
-            dayKey: day.key,
-            dayLabel: day.label,
+            dayKey,
+            dayLabel: t(`preferences.days.${dayKey}`),
             previousType,
             nextType,
         });
@@ -1202,8 +1229,11 @@ function areStringListsEqual(left: string[], right: string[]): boolean {
     return normalizedLeft.every((value, index) => value === normalizedRight[index]);
 }
 
-function buildSelectionDetail(count: number): string {
-    return count > 0 ? `${count} seçim` : 'Seçilmedi';
+function buildSelectionDetail(
+    count: number,
+    t: (key: string, params?: Record<string, string | number>) => string
+): string {
+    return count > 0 ? t('preferences.selectionCount', { count }) : t('preferences.selectionEmpty');
 }
 
 function buildSnapshotForPersistence(
@@ -1274,7 +1304,7 @@ function sanitizeForFirestore(value: unknown): unknown {
     return value;
 }
 
-function buildDefaultSnapshot(): OnboardingSnapshot {
+function buildDefaultSnapshot(defaultName: string): OnboardingSnapshot {
     return {
         householdSize: 1,
         dietary: { restrictions: [], allergies: [] },
@@ -1285,7 +1315,7 @@ function buildDefaultSnapshot(): OnboardingSnapshot {
             equipment: [],
         },
         routines: DEFAULT_ROUTINES,
-        profile: { name: 'Kullanıcı' },
+        profile: { name: defaultName },
     };
 }
 

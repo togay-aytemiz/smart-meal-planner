@@ -5,37 +5,39 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { Button } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 
 const CUISINES = [
-    { key: 'turkish', label: 'Türk' },
-    { key: 'mediterranean', label: 'Akdeniz' },
-    { key: 'italian', label: 'İtalyan' },
-    { key: 'asian', label: 'Asya' },
-    { key: 'middle-eastern', label: 'Ortadoğu' },
-    { key: 'mexican', label: 'Meksika' },
-    { key: 'indian', label: 'Hint' },
-    { key: 'french', label: 'Fransız' },
-    { key: 'japanese', label: 'Japon' },
-    { key: 'chinese', label: 'Çin' },
-    { key: 'thai', label: 'Tayland' },
-    { key: 'american', label: 'Amerikan' },
+    { key: 'turkish', labelKey: 'preferences.cuisines.turkish' },
+    { key: 'mediterranean', labelKey: 'preferences.cuisines.mediterranean' },
+    { key: 'italian', labelKey: 'preferences.cuisines.italian' },
+    { key: 'asian', labelKey: 'preferences.cuisines.asian' },
+    { key: 'middle-eastern', labelKey: 'preferences.cuisines.middleEastern' },
+    { key: 'mexican', labelKey: 'preferences.cuisines.mexican' },
+    { key: 'indian', labelKey: 'preferences.cuisines.indian' },
+    { key: 'french', labelKey: 'preferences.cuisines.french' },
+    { key: 'japanese', labelKey: 'preferences.cuisines.japanese' },
+    { key: 'chinese', labelKey: 'preferences.cuisines.chinese' },
+    { key: 'thai', labelKey: 'preferences.cuisines.thai' },
+    { key: 'american', labelKey: 'preferences.cuisines.american' },
 ];
 
 const EQUIPMENT = [
-    { key: 'oven', label: 'Fırın' },
-    { key: 'blender', label: 'Blender' },
-    { key: 'airfryer', label: 'Airfryer' },
-    { key: 'pressure-cooker', label: 'Düdüklü' },
-    { key: 'mixer', label: 'Mikser' },
-    { key: 'grill', label: 'Izgara' },
+    { key: 'oven', labelKey: 'preferences.equipment.oven' },
+    { key: 'blender', labelKey: 'preferences.equipment.blender' },
+    { key: 'airfryer', labelKey: 'preferences.equipment.airfryer' },
+    { key: 'pressure-cooker', labelKey: 'preferences.equipment.pressureCooker' },
+    { key: 'mixer', labelKey: 'preferences.equipment.mixer' },
+    { key: 'grill', labelKey: 'preferences.equipment.grill' },
 ];
 
 export default function ReadyScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
+    const { t } = useLanguage();
 
     // Animations
     const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -105,16 +107,23 @@ export default function ReadyScreen() {
         router.back();
     };
 
-    const userName = state.data.profile?.name || 'Merhaba';
+    const userName = state.data.profile?.name || t('profile.defaultName');
     const selectedCuisines = state.data.cuisine?.selected || [];
     const dietaryRestrictions = state.data.dietary?.restrictions?.length || 0;
     const allergies = state.data.dietary?.allergies?.length || 0;
     const selectedEquipment = state.data.cooking?.equipment || [];
 
     // Helper function to format list with +N
-    const formatListWithMore = (keys: string[], lookup: { key: string; label: string }[], maxShow: number = 2) => {
+    const formatListWithMore = (
+        keys: string[],
+        lookup: { key: string; labelKey: string }[],
+        maxShow: number = 2
+    ) => {
         if (keys.length === 0) return '';
-        const labels = keys.map(key => lookup.find(item => item.key === key)?.label || key);
+        const labels = keys.map(key => {
+            const match = lookup.find(item => item.key === key);
+            return match ? t(match.labelKey) : key;
+        });
         const shown = labels.slice(0, maxShow).join(', ');
         const remaining = labels.length - maxShow;
         return remaining > 0 ? `${shown} +${remaining}` : shown;
@@ -122,11 +131,11 @@ export default function ReadyScreen() {
 
     const cuisineDisplay = selectedCuisines.length > 0
         ? formatListWithMore(selectedCuisines, CUISINES, 2)
-        : 'Farketmez';
+        : t('onboarding.ready.cuisineFallback');
 
     const equipmentDisplay = selectedEquipment.length > 0
         ? formatListWithMore(selectedEquipment, EQUIPMENT, 3)
-        : 'Standart ekipmanlar';
+        : t('onboarding.ready.equipmentFallback');
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -151,9 +160,9 @@ export default function ReadyScreen() {
 
                     {/* Message */}
                     <Animated.View style={[styles.textContainer, { opacity: fadeAnim }]}>
-                        <Text style={styles.title}>Hazırsınız, {userName}!</Text>
+                        <Text style={styles.title}>{t('onboarding.ready.title', { name: userName })}</Text>
                         <Text style={styles.subtitle}>
-                            Tercihleriniz kaydedildi. Artık size özel yemek planları oluşturmaya hazırız.
+                            {t('onboarding.ready.subtitle')}
                         </Text>
                     </Animated.View>
 
@@ -162,30 +171,36 @@ export default function ReadyScreen() {
                         <SummaryCard
                             anim={card1Anim}
                             emoji="🍽️"
-                            label="Mutfak tercihleri"
+                            label={t('onboarding.ready.cuisineLabel')}
                             value={cuisineDisplay}
                         />
                         <SummaryCard
                             anim={card2Anim}
                             emoji="🥗"
-                            label="Diyet & Alerji"
+                            label={t('onboarding.ready.dietaryLabel')}
                             value={
                                 dietaryRestrictions + allergies > 0
-                                    ? `${dietaryRestrictions} kısıtlama, ${allergies} alerji`
-                                    : 'Herhangi bir kısıtlama yok'
+                                    ? t('onboarding.ready.dietarySummary.withCounts', {
+                                        dietary: dietaryRestrictions,
+                                        allergies,
+                                    })
+                                    : t('onboarding.ready.dietarySummary.empty')
                             }
                         />
                         <SummaryCard
                             anim={card3Anim}
                             emoji="⏱️"
-                            label="Yemek Süresi"
-                            value={state.data.cooking?.timePreference === 'quick' ? 'Hızlı ve Pratik' :
-                                state.data.cooking?.timePreference === 'elaborate' ? 'Detaylı ve Gurme' : 'Dengeli'}
+                            label={t('onboarding.ready.timeLabel')}
+                            value={state.data.cooking?.timePreference === 'quick'
+                                ? t('onboarding.ready.timeSummary.quick')
+                                : state.data.cooking?.timePreference === 'elaborate'
+                                    ? t('onboarding.ready.timeSummary.elaborate')
+                                    : t('onboarding.ready.timeSummary.balanced')}
                         />
                         <SummaryCard
                             anim={card4Anim}
                             emoji="🍳"
-                            label="Mutfak Ekipmanı"
+                            label={t('onboarding.ready.equipmentLabel')}
                             value={equipmentDisplay}
                         />
                     </View>
@@ -193,7 +208,7 @@ export default function ReadyScreen() {
 
                 <View style={styles.footer}>
                     <Button
-                        title="Planlamaya Başla"
+                        title={t('onboarding.ready.cta')}
                         onPress={handleStart}
                         fullWidth
                         size="large"

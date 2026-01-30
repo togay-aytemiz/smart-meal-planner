@@ -2,9 +2,9 @@ import { View, Text, StyleSheet, Animated, Easing, Dimensions, ScrollView, Image
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useRef } from 'react';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
@@ -15,6 +15,7 @@ const { width, height } = Dimensions.get('window');
 export default function WelcomeScreen() {
     const router = useRouter();
     const { dispatch } = useOnboarding();
+    const { t } = useLanguage();
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -105,9 +106,9 @@ export default function WelcomeScreen() {
                         resizeMode="contain"
                     />
 
-                    <Text style={styles.title}>Akıllı Yemek Planlama</Text>
+                    <Text style={styles.title}>{t('onboarding.welcome.title')}</Text>
                     <Text style={styles.subtitle}>
-                        Haftalık menünü akıllıca planla, "ne pişirsem" derdinden kurtul
+                        {t('onboarding.welcome.subtitle')}
                     </Text>
                 </Animated.View>
 
@@ -116,20 +117,20 @@ export default function WelcomeScreen() {
                     <FeatureRow
                         anim={item1Anim}
                         imageSource={require('../../../assets/cal.png')}
-                        title="Rutinlerinize Göre Plan"
-                        desc="Ofis, ev veya tatil günlerinize göre otomatik ayarlanan dinamik listeler."
+                        title={t('onboarding.welcome.features.routineTitle')}
+                        desc={t('onboarding.welcome.features.routineDesc')}
                     />
                     <FeatureRow
                         anim={item2Anim}
                         imageSource={require('../../../assets/fam.png')}
-                        title="Tüm Aile İçin Uyumlu"
-                        desc="Eşiniz, çocuklarınız ve evdeki herkes için ortak, sevilen tarifler."
+                        title={t('onboarding.welcome.features.familyTitle')}
+                        desc={t('onboarding.welcome.features.familyDesc')}
                     />
                     <FeatureRow
                         anim={item3Anim}
                         imageSource={require('../../../assets/ai.png')}
-                        title="Yapay Zeka Destekli"
-                        desc="Damak tadınıza ve tercihlerinize göre sürekli öğrenen kişisel asistan."
+                        title={t('onboarding.welcome.features.aiTitle')}
+                        desc={t('onboarding.welcome.features.aiDesc')}
                     />
                 </View>
             </ScrollView>
@@ -138,7 +139,7 @@ export default function WelcomeScreen() {
             {/* Footer */}
             <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
                 <Button
-                    title="Yolculuğa Başla"
+                    title={t('onboarding.welcome.cta')}
                     onPress={handleStart}
                     fullWidth
                     size="large"

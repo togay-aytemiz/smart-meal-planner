@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { TabScreenHeader } from '../../components/ui';
 import { useCookbook } from '../../hooks/use-cookbook';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { spacing, radius, shadows } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -24,42 +25,44 @@ type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const COURSE_ORDER: MenuRecipeCourse[] = ['main', 'side', 'soup', 'salad', 'meze', 'dessert', 'pastry'];
 
-const COURSE_META: Record<
+type CourseMeta = { label: string; icon: IconName; mediaTone: string };
+
+const COURSE_META_BASE: Record<
     MenuRecipeCourse,
-    { label: string; icon: IconName; mediaTone: string }
+    { labelKey: string; icon: IconName; mediaTone: string }
 > = {
     main: {
-        label: 'Ana Yemek',
+        labelKey: 'cookbook.categories.main',
         icon: 'silverware-fork-knife',
         mediaTone: colors.surfaceAlt,
     },
     side: {
-        label: 'Yan Yemek',
+        labelKey: 'cookbook.categories.side',
         icon: 'food-variant',
         mediaTone: colors.borderLight,
     },
     soup: {
-        label: 'Çorba',
+        labelKey: 'cookbook.categories.soup',
         icon: 'pot-steam-outline',
         mediaTone: colors.accentSoft,
     },
     salad: {
-        label: 'Salata',
+        labelKey: 'cookbook.categories.salad',
         icon: 'leaf',
         mediaTone: colors.successLight,
     },
     meze: {
-        label: 'Meze',
+        labelKey: 'cookbook.categories.meze',
         icon: 'food',
         mediaTone: colors.surfaceMuted,
     },
     dessert: {
-        label: 'Tatlı',
+        labelKey: 'cookbook.categories.dessert',
         icon: 'cupcake',
         mediaTone: colors.errorLight,
     },
     pastry: {
-        label: 'Hamur İşi',
+        labelKey: 'cookbook.categories.pastry',
         icon: 'bread-slice-outline',
         mediaTone: colors.surfaceAlt,
     },
@@ -67,21 +70,40 @@ const COURSE_META: Record<
 
 type CategoryFilter = 'all' | MenuRecipeCourse;
 
-const CATEGORY_FILTERS: Array<{ key: CategoryFilter; label: string }> = [
-    { key: 'all', label: 'Tümü' },
-    ...COURSE_ORDER.map((course) => ({ key: course, label: COURSE_META[course].label })),
-];
-
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function CookbookScreen() {
     const router = useRouter();
     const { favorites, isLoading, error } = useCookbook();
+    const { t } = useLanguage();
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const courseMeta = useMemo<Record<MenuRecipeCourse, CourseMeta>>(
+        () =>
+            Object.fromEntries(
+                Object.entries(COURSE_META_BASE).map(([key, meta]) => [
+                    key,
+                    {
+                        label: t(meta.labelKey),
+                        icon: meta.icon,
+                        mediaTone: meta.mediaTone,
+                    },
+                ])
+            ) as Record<MenuRecipeCourse, CourseMeta>,
+        [t]
+    );
+
+    const categoryFilters = useMemo<Array<{ key: CategoryFilter; label: string }>>(
+        () => [
+            { key: 'all', label: t('cookbook.categories.all') },
+            ...COURSE_ORDER.map((course) => ({ key: course, label: courseMeta[course].label })),
+        ],
+        [courseMeta, t]
+    );
 
     // Debounce search
     useEffect(() => {
@@ -124,8 +146,10 @@ export default function CookbookScreen() {
         );
     }, [favorites, debouncedQuery, activeCategory]);
 
+    const errorMessage = error ? t(error) : null;
+
     const recipeCount = filteredRecipes.length;
-    const recipeCountText = `${recipeCount} tarif`;
+    const recipeCountText = t('cookbook.recipeCount', { count: recipeCount });
 
     const handleOpenRecipe = useCallback((savedRecipe: SavedRecipe) => {
         router.push({
@@ -152,7 +176,7 @@ export default function CookbookScreen() {
             return (
                 <View style={styles.emptyState}>
                     <ActivityIndicator size="small" color={colors.primary} />
-                    <Text style={styles.emptyStateText}>Yükleniyor...</Text>
+                    <Text style={styles.emptyStateText}>{t('cookbook.empty.loading')}</Text>
                 </View>
             );
         }
@@ -165,7 +189,7 @@ export default function CookbookScreen() {
                         size={48}
                         color={colors.textMuted}
                     />
-                    <Text style={styles.emptyStateText}>{error}</Text>
+                    <Text style={styles.emptyStateText}>{errorMessage}</Text>
                 </View>
             );
         }
@@ -180,10 +204,8 @@ export default function CookbookScreen() {
                             color={colors.textMuted}
                         />
                     </View>
-                    <Text style={styles.emptyStateTitle}>Henüz favori yok</Text>
-                    <Text style={styles.emptyStateText}>
-                        Beğendiğin tarifleri kalp ikonuna basarak buraya ekleyebilirsin
-                    </Text>
+                    <Text style={styles.emptyStateTitle}>{t('cookbook.empty.noFavoritesTitle')}</Text>
+                    <Text style={styles.emptyStateText}>{t('cookbook.empty.noFavoritesText')}</Text>
                 </View>
             );
         }
@@ -198,7 +220,7 @@ export default function CookbookScreen() {
                             color={colors.textMuted}
                         />
                     </View>
-                    <Text style={styles.emptyStateText}>Bu kategoride kayıtlı tarif yok</Text>
+                    <Text style={styles.emptyStateText}>{t('cookbook.empty.noCategory')}</Text>
                 </View>
             );
         }
@@ -208,7 +230,7 @@ export default function CookbookScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <TabScreenHeader title="Tariflerim" />
+            <TabScreenHeader title={t('cookbook.title')} />
 
             <ScrollView
                 contentContainerStyle={styles.contentContainer}
@@ -224,7 +246,7 @@ export default function CookbookScreen() {
                     />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Tarif ara..."
+                        placeholder={t('cookbook.searchPlaceholder')}
                         placeholderTextColor={colors.textMuted}
                         value={searchQuery}
                         onChangeText={handleSearchChange}
@@ -255,7 +277,7 @@ export default function CookbookScreen() {
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.categoryContainer}
                 >
-                    {CATEGORY_FILTERS.map((filter) => {
+                    {categoryFilters.map((filter) => {
                         const isActive = activeCategory === filter.key;
                         return (
                             <TouchableOpacity
@@ -294,7 +316,7 @@ export default function CookbookScreen() {
                 {filteredRecipes.length > 0 && (
                     <View style={styles.recipeList}>
                         {filteredRecipes.map((savedRecipe) => {
-                            const meta = COURSE_META[savedRecipe.course];
+                            const meta = courseMeta[savedRecipe.course];
                             const calories = savedRecipe.recipe?.macrosPerServing?.calories ?? 0;
 
                             return (

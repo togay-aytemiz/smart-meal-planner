@@ -5,34 +5,36 @@ import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { Button } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 
 const TIME_OPTIONS = [
-    { key: 'quick', label: 'Hızlı', description: '15-30 dk', emoji: '⚡' },
-    { key: 'balanced', label: 'Dengeli', description: '30-60 dk', emoji: '⏱️' },
-    { key: 'elaborate', label: 'Detaylı', description: '60+ dk', emoji: '👨‍🍳' },
+    { key: 'quick', labelKey: 'preferences.timeOptions.quick.label', descriptionKey: 'preferences.timeOptions.quick.description', emoji: '⚡' },
+    { key: 'balanced', labelKey: 'preferences.timeOptions.balanced.label', descriptionKey: 'preferences.timeOptions.balanced.description', emoji: '⏱️' },
+    { key: 'elaborate', labelKey: 'preferences.timeOptions.elaborate.label', descriptionKey: 'preferences.timeOptions.elaborate.description', emoji: '👨‍🍳' },
 ] as const;
 
 const SKILL_LEVELS = [
-    { key: 'beginner', label: 'Başlangıç', description: 'Temel tarifler', emoji: '🌱' },
-    { key: 'intermediate', label: 'Orta', description: 'Çoğu tarif', emoji: '🌿' },
-    { key: 'expert', label: 'Uzman', description: 'Her şey olur', emoji: '🌳' },
+    { key: 'beginner', labelKey: 'preferences.skillLevels.beginner.label', descriptionKey: 'preferences.skillLevels.beginner.description', emoji: '🌱' },
+    { key: 'intermediate', labelKey: 'preferences.skillLevels.intermediate.label', descriptionKey: 'preferences.skillLevels.intermediate.description', emoji: '🌿' },
+    { key: 'expert', labelKey: 'preferences.skillLevels.expert.label', descriptionKey: 'preferences.skillLevels.expert.description', emoji: '🌳' },
 ] as const;
 
 const EQUIPMENT = [
-    { key: 'oven', label: 'Fırın', emoji: '🔥' },
-    { key: 'blender', label: 'Blender', emoji: '🫙' },
-    { key: 'airfryer', label: 'Airfryer', emoji: '🍟' },
-    { key: 'pressure-cooker', label: 'Düdüklü', emoji: '♨️' },
-    { key: 'mixer', label: 'Mikser', emoji: '🥣' },
-    { key: 'grill', label: 'Izgara', emoji: '🥩' },
+    { key: 'oven', labelKey: 'preferences.equipment.oven', emoji: '🔥' },
+    { key: 'blender', labelKey: 'preferences.equipment.blender', emoji: '🫙' },
+    { key: 'airfryer', labelKey: 'preferences.equipment.airfryer', emoji: '🍟' },
+    { key: 'pressure-cooker', labelKey: 'preferences.equipment.pressureCooker', emoji: '♨️' },
+    { key: 'mixer', labelKey: 'preferences.equipment.mixer', emoji: '🥣' },
+    { key: 'grill', labelKey: 'preferences.equipment.grill', emoji: '🥩' },
 ];
 
 export default function CookingScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
+    const { t } = useLanguage();
     const [timePreference, setTimePreference] = useState<'quick' | 'balanced' | 'elaborate'>(
         state.data.cooking?.timePreference || 'balanced'
     );
@@ -63,15 +65,15 @@ export default function CookingScreen() {
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>Yemek yapma tercihleri</Text>
+                    <Text style={styles.title}>{t('onboarding.cooking.title')}</Text>
                     <Text style={styles.subtitle}>
-                        Mutfakta ne kadar zaman harcamak istersiniz?
+                        {t('onboarding.cooking.subtitle')}
                     </Text>
                 </View>
 
                 {/* Time Preference */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Yemek Süresi</Text>
+                    <Text style={styles.sectionTitle}>{t('onboarding.cooking.timeTitle')}</Text>
                     <View style={styles.optionsRow}>
                         {TIME_OPTIONS.map((option) => (
                             <TouchableOpacity
@@ -90,9 +92,9 @@ export default function CookingScreen() {
                                     styles.optionLabel,
                                     timePreference === option.key && styles.optionLabelSelected,
                                 ]}>
-                                    {option.label}
+                                    {t(option.labelKey)}
                                 </Text>
-                                <Text style={styles.optionDescription}>{option.description}</Text>
+                                <Text style={styles.optionDescription}>{t(option.descriptionKey)}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -100,7 +102,7 @@ export default function CookingScreen() {
 
                 {/* Skill Level */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Mutfak Deneyimi</Text>
+                    <Text style={styles.sectionTitle}>{t('onboarding.cooking.skillTitle')}</Text>
                     <View style={styles.optionsRow}>
                         {SKILL_LEVELS.map((option) => (
                             <TouchableOpacity
@@ -119,9 +121,9 @@ export default function CookingScreen() {
                                     styles.optionLabel,
                                     skillLevel === option.key && styles.optionLabelSelected,
                                 ]}>
-                                    {option.label}
+                                    {t(option.labelKey)}
                                 </Text>
-                                <Text style={styles.optionDescription}>{option.description}</Text>
+                                <Text style={styles.optionDescription}>{t(option.descriptionKey)}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -129,7 +131,7 @@ export default function CookingScreen() {
 
                 {/* Equipment */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Mutfak Ekipmanları (opsiyonel)</Text>
+                    <Text style={styles.sectionTitle}>{t('onboarding.cooking.equipmentTitle')}</Text>
                     <View style={styles.equipmentGrid}>
                         {EQUIPMENT.map((item) => (
                             <TouchableOpacity
@@ -145,7 +147,7 @@ export default function CookingScreen() {
                                     styles.equipmentLabel,
                                     equipment.includes(item.key) && styles.equipmentLabelSelected,
                                 ]}>
-                                    {item.label}
+                                    {t(item.labelKey)}
                                 </Text>
                             </TouchableOpacity>
                         ))}
@@ -155,7 +157,7 @@ export default function CookingScreen() {
 
             <View style={styles.footer}>
                 <Button
-                    title="Tamamla"
+                    title={t('onboarding.cooking.cta')}
                     onPress={handleContinue}
                     fullWidth
                     size="large"

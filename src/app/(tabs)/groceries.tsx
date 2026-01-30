@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { TabScreenHeader, Input, Button } from '../../components/ui';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows } from '../../theme/spacing';
@@ -18,29 +19,17 @@ import { consumeMenuChangeSignal } from '../../utils/menu-change-signal';
 import type { MenuMealType, MenuRecipe, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
-// Category configuration (must match Cloud Function)
-const CATEGORY_TITLES: Record<string, string> = {
-    produce: 'Meyve & Sebze',
-    proteins: 'Et & Protein',
-    dairy: 'Süt Ürünleri',
-    grains: 'Tahıllar & Bakliyat',
-    spices: 'Baharatlar',
-    sauces: 'Sos & Çeşni',
-    bakery: 'Fırın & Ekmek',
-    frozen: 'Dondurulmuş',
-    beverages: 'İçecekler',
-    other: 'Diğer',
-};
-
 type MealUsage = {
     recipeName: string;
     course: 'main' | 'side' | 'appetizer' | 'soup' | 'salad' | 'dessert' | 'drink' | 'other';
-    day: string;
-    mealType: 'Kahvaltı' | 'Öğle' | 'Akşam';
+    dayKey: DayKey;
+    mealType: MenuMealType;
     amountLabel?: string;
     amountValue?: number;
     unit?: string;
 };
+
+type DayKey = keyof WeeklyRoutine;
 
 type GroceryStatus = 'to-buy' | 'pantry';
 type GroceryItem = {
@@ -89,13 +78,11 @@ type GroceryCategory = {
 
 type FilterKey = 'all' | 'to-buy' | 'pantry';
 
-const FILTERS: Array<{ key: FilterKey; label: string }> = [
-    { key: 'all', label: 'Tümü' },
-    { key: 'to-buy', label: 'Alınacaklar' },
-    { key: 'pantry', label: 'Dolapta' },
-];
-
-
+const MEAL_TYPE_ORDER: Record<MenuMealType, number> = {
+    breakfast: 0,
+    lunch: 1,
+    dinner: 2,
+};
 
 type PantryItem = {
     name: string;
@@ -115,73 +102,70 @@ const getCourseIcon = (course: MealUsage['course']): keyof typeof MaterialCommun
     }
 };
 
-const CATEGORY_CONFIG = [
+const CATEGORY_CONFIG: Array<{ id: string; titleKey: string; keywords: string[] }> = [
     {
         id: 'produce',
-        title: 'Meyve & Sebze',
+        titleKey: 'groceries.categories.produce',
         keywords: ['domates', 'salatalık', 'biber', 'soğan', 'sarımsak', 'patates', 'havuç', 'roka', 'marul', 'limon', 'elma', 'muz'],
     },
     {
         id: 'dairy',
-        title: 'Süt Ürünleri',
+        titleKey: 'groceries.categories.dairy',
         keywords: ['süt', 'yoğurt', 'peynir', 'tereyağı', 'kaymak', 'krema'],
     },
     {
         id: 'proteins',
-        title: 'Et & Protein',
+        titleKey: 'groceries.categories.proteins',
         keywords: ['tavuk', 'et', 'kıyma', 'balık', 'yumurta', 'hindi'],
     },
     {
         id: 'pantry',
-        title: 'Kuru Gıdalar',
+        titleKey: 'groceries.categories.pantry',
         keywords: ['mercimek', 'pirinç', 'bulgur', 'makarna', 'un', 'şeker', 'tuz', 'zeytinyağı', 'nohut', 'fasulye'],
     },
     {
         id: 'bakery',
-        title: 'Fırın & Ekmek',
+        titleKey: 'groceries.categories.bakery',
         keywords: ['ekmek', 'baget', 'lavaş', 'simit'],
     },
     {
         id: 'frozen',
-        title: 'Dondurulmuş',
+        titleKey: 'groceries.categories.frozen',
         keywords: ['dondurulmuş', 'buzluk'],
     },
     {
         id: 'beverages',
-        title: 'İçecekler',
+        titleKey: 'groceries.categories.beverages',
         keywords: ['su', 'maden suyu', 'soda', 'çay', 'kahve', 'meşrubat'],
     },
     {
         id: 'spices',
-        title: 'Baharat & Soslar',
+        titleKey: 'groceries.categories.spicesAndSauces',
         keywords: ['baharat', 'karabiber', 'kimyon', 'pul biber', 'ketçap', 'mayonez'],
     },
 ];
 
-const DAY_ORDER: Record<string, number> = {
-    Pazartesi: 0,
-    Pzt: 0,
-    Salı: 1,
-    Sal: 1,
-    Çarşamba: 2,
-    Çar: 2,
-    Perşembe: 3,
-    Per: 3,
-    Cuma: 4,
-    Cum: 4,
-    Cumartesi: 5,
-    Cmt: 5,
-    Pazar: 6,
-    Paz: 6,
+const WEEK_DAY_KEYS: DayKey[] = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
+];
+
+const DAY_ORDER_INDEX: Record<DayKey, number> = {
+    monday: 0,
+    tuesday: 1,
+    wednesday: 2,
+    thursday: 3,
+    friday: 4,
+    saturday: 5,
+    sunday: 6,
 };
 
-const MEAL_TYPE_ORDER: Record<MealUsage['mealType'], number> = {
-    Kahvaltı: 0,
-    Öğle: 1,
-    Akşam: 2,
-};
-
-const buildWeekRange = () => {
+const buildWeekRange = (locale: string, t: (key: string, params?: Record<string, string | number>) => string) => {
     const now = new Date();
     const dayIndex = (now.getDay() + 6) % 7;
     const start = new Date(now);
@@ -190,9 +174,9 @@ const buildWeekRange = () => {
     end.setDate(start.getDate() + 6);
 
     const format = (date: Date) =>
-        date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+        date.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 
-    return `${format(start)} - ${format(end)} Plan`;
+    return t('groceries.weekRange', { range: `${format(start)} - ${format(end)}` });
 };
 
 const buildWeekDateKeys = (startDate?: Date) => {
@@ -202,8 +186,7 @@ const buildWeekDateKeys = (startDate?: Date) => {
     const start = new Date(reference);
     start.setDate(reference.getDate() - dayIndex);
 
-    const keys: { dateKey: string; label: string }[] = [];
-    const labels = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+    const keys: { dateKey: string; dayKey: DayKey }[] = [];
 
     for (let i = 0; i < 7; i++) {
         const d = new Date(start);
@@ -217,7 +200,7 @@ const buildWeekDateKeys = (startDate?: Date) => {
         const labelIndex = (d.getDay() + 6) % 7;
         keys.push({
             dateKey: `${year}-${month}-${day}`,
-            label: labels[labelIndex]
+            dayKey: WEEK_DAY_KEYS[labelIndex],
         });
     }
     return keys;
@@ -387,6 +370,7 @@ type MenuRecipeParamsPayload = {
     date: string;
     dayOfWeek: string;
     onboardingHash?: string;
+    language?: 'tr' | 'en';
     dietaryRestrictions: string[];
     allergies: string[];
     cuisinePreferences: string[];
@@ -411,6 +395,7 @@ type WeeklyMenuRequest = {
     startDate?: string;
     onboarding?: OnboardingSnapshot | null;
     onboardingHash?: string;
+    language?: 'tr' | 'en';
     generateImage?: boolean;
 };
 
@@ -429,14 +414,22 @@ type LoadGroceriesResult = {
     ingredientCount: number;
 };
 
-const categorizeItems = (items: GroceryItem[]): GroceryCategory[] => {
+const categorizeItems = (
+    items: GroceryItem[],
+    resolveCategoryTitle: (id: string, titleKey: string) => string,
+    otherTitle: string
+): GroceryCategory[] => {
     const buckets = new Map<string, GroceryCategory>();
     // Pre-fill all categories to order them as per config
     CATEGORY_CONFIG.forEach((config) => {
-        buckets.set(config.id, { id: config.id, title: config.title, items: [] });
+        buckets.set(config.id, {
+            id: config.id,
+            title: resolveCategoryTitle(config.id, config.titleKey),
+            items: [],
+        });
     });
     // Add 'other' category for unmatched items
-    buckets.set('other', { id: 'other', title: 'Diğer', items: [] });
+    buckets.set('other', { id: 'other', title: otherTitle, items: [] });
 
     items.forEach((item) => {
         const normalized = item.normalizedName || normalizeName(item.name);
@@ -537,10 +530,17 @@ const buildUsageAmountLabel = (amountValue: number | null, unitLabel?: string) =
     return `${amountText} ${abbreviatedUnit}`;
 };
 
-const categorizePantryItems = (items: PantryItem[]): GroceryCategory[] => {
+const categorizePantryItems = (
+    items: PantryItem[],
+    resolveCategoryTitle: (id: string, titleKey: string) => string
+): GroceryCategory[] => {
     const buckets = new Map<string, GroceryCategory>();
     CATEGORY_CONFIG.forEach((config) => {
-        buckets.set(config.id, { id: config.id, title: config.title, items: [] });
+        buckets.set(config.id, {
+            id: config.id,
+            title: resolveCategoryTitle(config.id, config.titleKey),
+            items: [],
+        });
     });
 
     items.forEach((item) => {
@@ -564,6 +564,7 @@ const categorizePantryItems = (items: PantryItem[]): GroceryCategory[] => {
 
 export default function GroceriesScreen() {
     const { state: userState } = useUser();
+    const { t, locale, language } = useLanguage();
     const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
     const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
     const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
@@ -583,6 +584,20 @@ export default function GroceriesScreen() {
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [isCheckingOut, setIsCheckingOut] = useState(false);
     const floatingButtonAnim = useRef(new Animated.Value(0)).current;
+
+    const filters = useMemo(
+        () => [
+            { key: 'all' as const, label: t('groceries.filters.all') },
+            { key: 'to-buy' as const, label: t('groceries.filters.toBuy') },
+            { key: 'pantry' as const, label: t('groceries.filters.pantry') },
+        ],
+        [t]
+    );
+
+    const resolveCategoryTitle = useCallback(
+        (_id: string, titleKey: string) => t(titleKey),
+        [t]
+    );
 
     // Animate floating button when selection changes
     useEffect(() => {
@@ -724,8 +739,8 @@ export default function GroceriesScreen() {
                 };
 
                 const processMeal = (
-                    dateLabel: string,
-                    mealType: 'Kahvaltı' | 'Öğle' | 'Akşam',
+                    dayKey: DayKey,
+                    mealType: MenuMealType,
                     recipeName: string,
                     course: string,
                     items: { name: string; amount?: string | number; unit?: string }[]
@@ -755,7 +770,7 @@ export default function GroceriesScreen() {
                         const mealUsage: MealUsage = {
                             recipeName,
                             course: (course as MealUsage['course']) || 'other',
-                            day: dateLabel,
+                            dayKey,
                             mealType,
                             amountLabel: usageAmountLabel,
                             amountValue: amountValue ?? undefined,
@@ -764,7 +779,7 @@ export default function GroceriesScreen() {
 
                         if (existing) {
                             const existingUsage = existing.meals.find(
-                                (m) => m.recipeName === recipeName && m.day === dateLabel && m.mealType === mealType
+                                (m) => m.recipeName === recipeName && m.dayKey === dayKey && m.mealType === mealType
                             );
                             if (existingUsage) {
                                 if (amountValue !== null) {
@@ -893,6 +908,7 @@ export default function GroceriesScreen() {
                         skillLevel: onboardingSnapshot?.cooking?.skillLevel ?? 'intermediate',
                         equipment: onboardingSnapshot?.cooking?.equipment ?? [],
                         householdSize: onboardingSnapshot?.householdSize ?? 1,
+                        language,
                         routine: routineForDay
                             ? {
                                 type: routineForDay.type,
@@ -935,11 +951,6 @@ export default function GroceriesScreen() {
                 };
 
                 const mealTypes: MenuMealType[] = ['breakfast', 'lunch', 'dinner'];
-                const mealLabels: Record<MenuMealType, 'Kahvaltı' | 'Öğle' | 'Akşam'> = {
-                    breakfast: 'Kahvaltı',
-                    lunch: 'Öğle',
-                    dinner: 'Akşam',
-                };
                 const runWithConcurrencyLimit = async (tasks: Array<() => Promise<void>>, limit: number) => {
                     const queue = [...tasks];
                     const workerCount = Math.min(limit, queue.length);
@@ -955,13 +966,12 @@ export default function GroceriesScreen() {
                     await Promise.all(workers);
                 };
                 const recipeTasks: Array<() => Promise<void>> = [];
-                for (const { dateKey, label } of weekDates) {
+                for (const { dateKey, dayKey } of weekDates) {
                     for (const mealType of mealTypes) {
                         recipeTasks.push(async () => {
                             const recipes = await loadRecipesForMeal(dateKey, mealType);
-                            const mealLabel = mealLabels[mealType];
                             recipes.forEach((recipe) =>
-                                processMeal(label, mealLabel, recipe.name, recipe.course, recipe.ingredients || [])
+                                processMeal(dayKey, mealType, recipe.name, recipe.course, recipe.ingredients || [])
                             );
                         });
                     }
@@ -982,6 +992,7 @@ export default function GroceriesScreen() {
                                 weekStart,
                                 startDate: todayKey,
                                 generateImage: false,
+                                language,
                                 ...(onboardingSnapshot ? { onboarding: onboardingSnapshot } : {}),
                                 ...(typeof onboardingHash === 'string' ? { onboardingHash } : {}),
                             },
@@ -993,7 +1004,7 @@ export default function GroceriesScreen() {
                 }
 
                 const items = Array.from(allIngredients.values());
-                const categorized = categorizeItems(items);
+                const categorized = categorizeItems(items, resolveCategoryTitle, t('groceries.categories.other'));
                 setGroceryCategories(categorized);
                 if (clearGeneratingAfterLoadRef.current && hasAnyMenu) {
                     clearGeneratingAfterLoadRef.current = false;
@@ -1106,7 +1117,7 @@ export default function GroceriesScreen() {
 
     const filteredCategories = useMemo(() => {
         if (activeFilter === 'pantry') {
-            return categorizePantryItems(pantryItems);
+            return categorizePantryItems(pantryItems, resolveCategoryTitle);
         }
 
         return groceryCategories.map((category) => {
@@ -1167,7 +1178,7 @@ export default function GroceriesScreen() {
             }
             if (maybeError.message) return maybeError.message;
         }
-        return 'Ürün eklenirken bir hata oluştu. Lütfen tekrar deneyin.';
+        return t('groceries.errors.addItem');
     };
 
     const handleAddPantryItem = async () => {
@@ -1183,10 +1194,10 @@ export default function GroceriesScreen() {
             let normalizedItems: Array<{ canonical: string; normalized: string }> = [];
             try {
                 const normalizePantry = functions.httpsCallable<
-                    { items: string[] },
+                    { items: string[]; language?: 'tr' | 'en'; locale?: string },
                     { success: boolean; items: Array<{ input: string; canonical: string; normalized: string }> }
                 >('normalizePantryItems');
-                const response = await normalizePantry({ items: tokens });
+                const response = await normalizePantry({ items: tokens, language, locale });
                 normalizedItems = (response.data?.items ?? []).map((item) => ({
                     canonical: item.canonical?.trim() || '',
                     normalized: item.normalized || normalizeName(item.canonical || ''),
@@ -1378,7 +1389,7 @@ export default function GroceriesScreen() {
                         <View style={styles.itemMeta}>
                             {activeFilter === 'all' && inPantry ? (
                                 <View style={styles.pantryBadge}>
-                                    <Text style={styles.pantryBadgeText}>Mevcut</Text>
+                                    <Text style={styles.pantryBadgeText}>{t('groceries.pantryBadge')}</Text>
                                 </View>
                             ) : null}
                             {showUsage ? (
@@ -1392,13 +1403,13 @@ export default function GroceriesScreen() {
                         {[...item.meals]
                             .sort((first, second) => {
                                 const dayOrder =
-                                    (DAY_ORDER[first.day] ?? 99) - (DAY_ORDER[second.day] ?? 99);
+                                    (DAY_ORDER_INDEX[first.dayKey] ?? 99) - (DAY_ORDER_INDEX[second.dayKey] ?? 99);
                                 if (dayOrder !== 0) return dayOrder;
                                 const mealOrder =
                                     (MEAL_TYPE_ORDER[first.mealType] ?? 99) -
                                     (MEAL_TYPE_ORDER[second.mealType] ?? 99);
                                 if (mealOrder !== 0) return mealOrder;
-                                return first.recipeName.localeCompare(second.recipeName, 'tr-TR');
+                                return first.recipeName.localeCompare(second.recipeName, locale);
                             })
                             .map((meal, idx) => {
                                 const courseIcon = getCourseIcon(meal.course);
@@ -1413,7 +1424,7 @@ export default function GroceriesScreen() {
                                             {meal.amountLabel ? `${meal.amountLabel} x ${meal.recipeName}` : meal.recipeName}
                                         </Text>
                                         <Text style={styles.usageDay}>
-                                            {meal.day}
+                                            {t(`preferences.days.${meal.dayKey}`)}
                                         </Text>
                                     </View>
                                 );
@@ -1448,19 +1459,19 @@ export default function GroceriesScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <TabScreenHeader
-                title="Alışveriş Listem"
-                subtitle={buildWeekRange()}
+                title={t('groceries.title')}
+                subtitle={buildWeekRange(locale, t)}
                 rightSlot={(
                     <View style={styles.headerMeta}>
                         <Text style={styles.headerCount}>{totalItemCount}</Text>
-                        <Text style={styles.headerCountLabel}>ÜRÜN</Text>
+                        <Text style={styles.headerCountLabel}>{t('groceries.itemCountLabel')}</Text>
                     </View>
                 )}
             />
 
             <View style={styles.content}>
                 <View style={styles.filterRow}>
-                    {FILTERS.map((filter) => {
+                    {filters.map((filter) => {
                         const isActive = filter.key === activeFilter;
                         return (
                             <TouchableOpacity
@@ -1489,8 +1500,8 @@ export default function GroceriesScreen() {
                             {showQuickAdd ? (
                                 <>
                                     <Input
-                                        label="Yeni ürün ekle"
-                                        placeholder="Örn: Nane, sirke, bulgur"
+                                        label={t('groceries.quickAdd.title')}
+                                        placeholder={t('groceries.quickAdd.placeholder')}
                                         value={newPantryItem}
                                         onChangeText={(value) => {
                                             setNewPantryItem(value);
@@ -1505,7 +1516,7 @@ export default function GroceriesScreen() {
                                     ) : null}
                                     <View style={styles.quickAddActions}>
                                         <Button
-                                            title="Vazgeç"
+                                            title={t('groceries.quickAdd.cancel')}
                                             variant="ghost"
                                             onPress={() => {
                                                 toggleQuickAdd(false);
@@ -1514,7 +1525,7 @@ export default function GroceriesScreen() {
                                             size="small"
                                         />
                                         <Button
-                                            title="Ekle"
+                                            title={t('groceries.quickAdd.add')}
                                             onPress={handleAddPantryItem}
                                             size="small"
                                             disabled={!newPantryItem.trim().length || isSaving}
@@ -1529,7 +1540,7 @@ export default function GroceriesScreen() {
                                     activeOpacity={0.9}
                                 >
                                     <MaterialCommunityIcons name="plus" size={18} color={colors.primary} />
-                                    <Text style={styles.quickAddText}>Yeni ürün ekle</Text>
+                                    <Text style={styles.quickAddText}>{t('groceries.quickAdd.title')}</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -1540,15 +1551,13 @@ export default function GroceriesScreen() {
                             {loading ? (
                                 <View style={styles.loadingContainer}>
                                     <ActivityIndicator size="large" color={colors.primary} />
-                                    <Text style={styles.loadingText}>Liste hazırlanıyor...</Text>
+                                    <Text style={styles.loadingText}>{t('groceries.loadingList')}</Text>
                                 </View>
                             ) : isMenuGenerating ? (
                                 <View style={styles.loadingContainer}>
                                     <MaterialCommunityIcons name="chef-hat" size={56} color={colors.accent} />
-                                    <Text style={styles.placeholderTitle}>Haftalık Menü Hazırlanıyor</Text>
-                                    <Text style={styles.placeholderText}>
-                                        Menünüz arka planda oluşturuluyor...
-                                    </Text>
+                                    <Text style={styles.placeholderTitle}>{t('groceries.menuGeneratingTitle')}</Text>
+                                    <Text style={styles.placeholderText}>{t('groceries.menuGeneratingText')}</Text>
                                     {menuStatus && (
                                         <View style={styles.progressContainer}>
                                             <View style={styles.progressBar}>
@@ -1560,7 +1569,10 @@ export default function GroceriesScreen() {
                                                 />
                                             </View>
                                             <Text style={styles.progressText}>
-                                                {menuStatus.completedDays}/{menuStatus.totalDays} gün tamamlandı
+                                                {t('groceries.menuGeneratingProgress', {
+                                                    completed: menuStatus.completedDays,
+                                                    total: menuStatus.totalDays,
+                                                })}
                                             </Text>
                                         </View>
                                     )}
@@ -1568,9 +1580,9 @@ export default function GroceriesScreen() {
                             ) : (
                                 <>
                                     <MaterialCommunityIcons name="cart-outline" size={56} color={colors.iconMuted} />
-                                    <Text style={styles.placeholderTitle}>Liste boş</Text>
+                                    <Text style={styles.placeholderTitle}>{t('groceries.emptyTitle')}</Text>
                                     <Text style={styles.placeholderText}>
-                                        Bu filtre için henüz malzeme yok.
+                                        {t('groceries.emptyText')}
                                     </Text>
                                 </>
                             )}
@@ -1623,7 +1635,7 @@ export default function GroceriesScreen() {
                         <>
                             <MaterialCommunityIcons name="check-circle" size={20} color={colors.textInverse} />
                             <Text style={styles.floatingButtonText}>
-                                Satın alındı işaretle ({selectedItems.size})
+                                {t('groceries.markPurchased', { count: selectedItems.size })}
                             </Text>
                         </>
                     )}

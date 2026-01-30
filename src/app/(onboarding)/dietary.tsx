@@ -4,34 +4,36 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { Button, SelectableTag } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 
 const DIETARY_RESTRICTIONS = [
-    { key: 'vegetarian', label: 'Vejetaryen', emoji: '🥬' },
-    { key: 'vegan', label: 'Vegan', emoji: '🌱' },
-    { key: 'pescatarian', label: 'Pesketaryen', emoji: '🐟' },
-    { key: 'gluten-free', label: 'Glütensiz', emoji: '🌾' },
-    { key: 'dairy-free', label: 'Süt Ürünsüz', emoji: '🥛' },
-    { key: 'low-carb', label: 'Düşük Karbonhidrat', emoji: '🍞' },
-    { key: 'keto', label: 'Keto', emoji: '🥑' },
-    { key: 'high-protein', label: 'Protein Ağırlıklı', emoji: '💪' },
+    { key: 'vegetarian', labelKey: 'preferences.dietary.vegetarian', emoji: '🥬' },
+    { key: 'vegan', labelKey: 'preferences.dietary.vegan', emoji: '🌱' },
+    { key: 'pescatarian', labelKey: 'preferences.dietary.pescatarian', emoji: '🐟' },
+    { key: 'gluten-free', labelKey: 'preferences.dietary.glutenFree', emoji: '🌾' },
+    { key: 'dairy-free', labelKey: 'preferences.dietary.dairyFree', emoji: '🥛' },
+    { key: 'low-carb', labelKey: 'preferences.dietary.lowCarb', emoji: '🍞' },
+    { key: 'keto', labelKey: 'preferences.dietary.keto', emoji: '🥑' },
+    { key: 'high-protein', labelKey: 'preferences.dietary.highProtein', emoji: '💪' },
 ];
 
 const COMMON_ALLERGIES = [
-    { key: 'nuts', label: 'Kuruyemiş', emoji: '🥜' },
-    { key: 'shellfish', label: 'Kabuklu Deniz', emoji: '🦐' },
-    { key: 'eggs', label: 'Yumurta', emoji: '🥚' },
-    { key: 'soy', label: 'Soya', emoji: '🫘' },
-    { key: 'wheat', label: 'Buğday', emoji: '🌾' },
-    { key: 'fish', label: 'Balık', emoji: '🐠' },
-    { key: 'sesame', label: 'Susam', emoji: '🌰' },
+    { key: 'nuts', labelKey: 'preferences.allergies.nuts', emoji: '🥜' },
+    { key: 'shellfish', labelKey: 'preferences.allergies.shellfish', emoji: '🦐' },
+    { key: 'eggs', labelKey: 'preferences.allergies.eggs', emoji: '🥚' },
+    { key: 'soy', labelKey: 'preferences.allergies.soy', emoji: '🫘' },
+    { key: 'wheat', labelKey: 'preferences.allergies.wheat', emoji: '🌾' },
+    { key: 'fish', labelKey: 'preferences.allergies.fish', emoji: '🐠' },
+    { key: 'sesame', labelKey: 'preferences.allergies.sesame', emoji: '🌰' },
 ];
 
 export default function DietaryScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
+    const { t } = useLanguage();
     const [restrictions, setRestrictions] = useState<string[]>(
         state.data.dietary?.restrictions || []
     );
@@ -61,20 +63,20 @@ export default function DietaryScreen() {
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>Diyet tercihleri</Text>
+                    <Text style={styles.title}>{t('onboarding.dietary.title')}</Text>
                     <Text style={styles.subtitle}>
-                        Varsa özel beslenme tercihlerinizi veya alerjilerinizi belirtin
+                        {t('onboarding.dietary.subtitle')}
                     </Text>
                 </View>
 
                 {/* Dietary Restrictions */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Beslenme Tercihi</Text>
+                    <Text style={styles.sectionTitle}>{t('onboarding.dietary.restrictionsTitle')}</Text>
                     <View style={styles.tagsContainer}>
                         {DIETARY_RESTRICTIONS.map((item) => (
                             <SelectableTag
                                 key={item.key}
-                                label={item.label}
+                                label={t(item.labelKey)}
                                 selected={restrictions.includes(item.key)}
                                 onPress={() => toggleRestriction(item.key)}
                                 icon={<Text style={styles.tagEmoji}>{item.emoji}</Text>}
@@ -85,12 +87,12 @@ export default function DietaryScreen() {
 
                 {/* Allergies */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Alerjiler</Text>
+                    <Text style={styles.sectionTitle}>{t('onboarding.dietary.allergiesTitle')}</Text>
                     <View style={styles.tagsContainer}>
                         {COMMON_ALLERGIES.map((item) => (
                             <SelectableTag
                                 key={item.key}
-                                label={item.label}
+                                label={t(item.labelKey)}
                                 selected={allergies.includes(item.key)}
                                 onPress={() => toggleAllergy(item.key)}
                                 icon={<Text style={styles.tagEmoji}>{item.emoji}</Text>}
@@ -103,14 +105,14 @@ export default function DietaryScreen() {
                 <View style={styles.infoCard}>
                     <Text style={styles.infoEmoji}>💡</Text>
                     <Text style={styles.infoText}>
-                        Bu bilgiler size uygun yemekler oluşturmamıza yardımcı olacak.
+                        {t('onboarding.dietary.info')}
                     </Text>
                 </View>
             </ScrollView>
 
             <View style={styles.footer}>
                 <Button
-                    title="Devam"
+                    title={t('onboarding.common.continue')}
                     onPress={handleContinue}
                     fullWidth
                     size="large"

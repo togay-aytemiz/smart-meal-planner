@@ -8,10 +8,12 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 
 export default function KickstartScreen() {
     const router = useRouter();
     const { nextStep, finishOnboarding, dispatch } = useOnboarding();
+    const { t } = useLanguage();
 
     useFocusEffect(
         useCallback(() => {
@@ -38,16 +40,16 @@ export default function KickstartScreen() {
                 </View>
 
                 <View style={styles.textContainer}>
-                    <Text style={styles.title}>Malzemelerini Ekle</Text>
+                    <Text style={styles.title}>{t('onboarding.kickstart.title')}</Text>
                     <Text style={styles.subtitle}>
-                        Evindeki ürünleri ekleyebilirsin. Omnoo, sana özel tarifler hazırlarken en verimli ve efektif şekilde çalışacak.
+                        {t('onboarding.kickstart.subtitle')}
                     </Text>
                 </View>
             </ScrollView>
 
             <View style={styles.footer}>
                 <Button
-                    title="Eklemeye Başla"
+                    title={t('onboarding.kickstart.ctaStart')}
                     onPress={() => {
                         nextStep();
                         router.push({ pathname: '/(onboarding)/inventory', params: { mode: 'manual' } });
@@ -56,7 +58,7 @@ export default function KickstartScreen() {
                     size="large"
                 />
                 <Button
-                    title="Daha Sonra"
+                    title={t('onboarding.kickstart.ctaLater')}
                     onPress={handleSkip}
                     variant="ghost"
                     fullWidth

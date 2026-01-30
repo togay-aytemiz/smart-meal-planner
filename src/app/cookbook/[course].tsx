@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { useUser } from '../../contexts/user-context';
 import { useCookbook } from '../../hooks/use-cookbook';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -289,6 +290,7 @@ type MenuRecipeParamsPayload = {
     date: string;
     dayOfWeek: string;
     onboardingHash?: string;
+    language?: 'tr' | 'en';
     dietaryRestrictions: string[];
     allergies: string[];
     cuisinePreferences: string[];
@@ -321,6 +323,7 @@ export default function CookbookDetailScreen() {
     }>();
     const { state: userState } = useUser();
     const { isFavorite, toggleFavorite } = useCookbook();
+    const { t, language } = useLanguage();
     const resolvedDate = resolveDate(date);
     const resolvedMealType = resolveMealType(mealType);
     const resolvedRecipeName = resolveRecipeName(recipeName);
@@ -382,7 +385,7 @@ export default function CookbookDetailScreen() {
 
             try {
                 if (!courseKey) {
-                    throw new Error('Tarif bulunamadı');
+                    throw new Error(t('cookbook.detail.errorNotFound'));
                 }
 
                 let hasResolved = Boolean(cachedRecipe);
@@ -432,7 +435,7 @@ export default function CookbookDetailScreen() {
                         setRecipeFromMatch(favoriteRecipe);
                         return;
                     }
-                    throw new Error('Tarif bulunamadı');
+                    throw new Error(t('cookbook.detail.errorNotFound'));
                 }
 
                 const persistRecipeCaches = async (
@@ -502,7 +505,7 @@ export default function CookbookDetailScreen() {
                 }
 
                 if (!menuDecision?.items?.length) {
-                    throw new Error('Menü bulunamadı');
+                    throw new Error(t('cookbook.detail.errorMenuNotFound'));
                 }
 
                 const raw =
@@ -532,7 +535,7 @@ export default function CookbookDetailScreen() {
                 });
 
                 if (!menuItem) {
-                    throw new Error('Tarif bulunamadı');
+                    throw new Error(t('cookbook.detail.errorNotFound'));
                 }
 
                 if (typeof menuItem.recipeId === 'string' && menuItem.recipeId.length > 0) {
@@ -554,6 +557,7 @@ export default function CookbookDetailScreen() {
                     skillLevel: onboardingSnapshot?.cooking?.skillLevel ?? 'intermediate',
                     equipment: onboardingSnapshot?.cooking?.equipment ?? [],
                     householdSize: onboardingSnapshot?.householdSize ?? 1,
+                    language,
                     routine: routineForDay
                         ? {
                             type: routineForDay.type,
@@ -580,12 +584,12 @@ export default function CookbookDetailScreen() {
                     const menuRecipes = response.data?.menuRecipes;
 
                     if (!menuRecipes?.recipes?.length) {
-                        throw new Error('Tarif üretilemedi');
+                        throw new Error(t('cookbook.detail.errorGenerationFailed'));
                     }
 
                     const generatedMatch = findRecipeMatch(menuRecipes.recipes);
                     if (!generatedMatch) {
-                        throw new Error('Tarif bulunamadı');
+                        throw new Error(t('cookbook.detail.errorNotFound'));
                     }
 
                     setRecipeFromMatch(generatedMatch);
@@ -596,11 +600,11 @@ export default function CookbookDetailScreen() {
                 }
 
                 if (!hasResolved) {
-                    throw new Error('Tarif bulunamadı');
+                    throw new Error(t('cookbook.detail.errorNotFound'));
                 }
             } catch (err: unknown) {
                 console.error('Cookbook detail error:', err);
-                const message = err instanceof Error ? err.message : 'Bir hata oluştu';
+                const message = err instanceof Error ? err.message : t('cookbook.detail.errorGeneric');
                 if (isMounted) {
                     setError(message);
                 }
@@ -616,7 +620,7 @@ export default function CookbookDetailScreen() {
         return () => {
             isMounted = false;
         };
-    }, [course, date, mealType, recipeName, userState.isLoading, userState.user?.uid]);
+    }, [course, date, mealType, recipeName, t, userState.isLoading, userState.user?.uid]);
 
     return (
         <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -627,10 +631,8 @@ export default function CookbookDetailScreen() {
                         style={styles.stateLoaderImage}
                         resizeMode="contain"
                     />
-                    <Text style={styles.stateTitle}>Tarif hazırlanıyor...</Text>
-                    <Text style={styles.stateSubtext}>
-                        Omnoo senin için lezzeti ve dengeyi ayarlıyor.
-                    </Text>
+                    <Text style={styles.stateTitle}>{t('cookbook.detail.preparingTitle')}</Text>
+                    <Text style={styles.stateSubtext}>{t('cookbook.detail.preparingSubtitle')}</Text>
                 </View>
             )}
 
@@ -638,7 +640,7 @@ export default function CookbookDetailScreen() {
                 <View style={styles.stateContainer}>
                     <Text style={styles.stateText}>{error}</Text>
                     <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
-                        <Text style={styles.retryButtonText}>Geri Dön</Text>
+                        <Text style={styles.retryButtonText}>{t('cookbook.detail.back')}</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -662,8 +664,8 @@ export default function CookbookDetailScreen() {
                         >
                             <Text style={styles.feedbackText}>
                                 {showFeedback === 'added'
-                                    ? 'Tariflere eklendi'
-                                    : 'Tariflerden kaldırıldı'}
+                                    ? t('cookbook.detail.addedToFavorites')
+                                    : t('cookbook.detail.removedFromFavorites')}
                             </Text>
                         </Animated.View>
                     )}

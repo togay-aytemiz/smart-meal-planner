@@ -4,6 +4,7 @@
  */
 
 import { buildCategoryListForPrompt, CategoryId, GROCERY_CATEGORIES } from './shared-categories';
+import { LanguageCode } from '../../types/menu';
 
 export interface GroceryInputItem {
     name: string;
@@ -24,16 +25,24 @@ export interface CategorizedGroceryResponse {
     items: CategorizedGroceryItem[];
 }
 
-export function buildGroceryCategorizationSystemPrompt(): string {
+export function buildGroceryCategorizationSystemPrompt(language: LanguageCode = 'tr'): string {
+    const isEnglish = language === 'en';
     return [
-        'Sen Omnoo uygulaması için alışveriş listesi malzemelerini kategorize eden bir yapay zekasın.',
-        'Sadece geçerli JSON üret ve şema dışına çıkma.',
-        'Soru sorma; açıklama yazma.',
+        isEnglish
+            ? 'You are an AI that categorizes grocery list items for the Omnoo app.'
+            : 'Sen Omnoo uygulaması için alışveriş listesi malzemelerini kategorize eden bir yapay zekasın.',
+        isEnglish
+            ? 'Output only valid JSON and stay within the schema.'
+            : 'Sadece geçerli JSON üret ve şema dışına çıkma.',
+        isEnglish
+            ? 'Do not ask questions or provide explanations.'
+            : 'Soru sorma; açıklama yazma.',
     ].join('\n');
 }
 
-export function buildGroceryCategorizationPrompt(items: GroceryInputItem[]): string {
-    const categoryList = buildCategoryListForPrompt();
+export function buildGroceryCategorizationPrompt(items: GroceryInputItem[], language: LanguageCode = 'tr'): string {
+    const isEnglish = language === 'en';
+    const categoryList = buildCategoryListForPrompt(language);
     const categoryIds = GROCERY_CATEGORIES.map((c) => c.id).join(', ');
 
     const itemsJson = JSON.stringify(
@@ -46,38 +55,51 @@ export function buildGroceryCategorizationPrompt(items: GroceryInputItem[]): str
     );
 
     return [
-        'Görev: Aşağıdaki alışveriş listesi malzemelerini kategorize et ve birleştir.',
+        isEnglish
+            ? 'Task: Categorize and merge the grocery list items below.'
+            : 'Görev: Aşağıdaki alışveriş listesi malzemelerini kategorize et ve birleştir.',
         '',
-        'Kurallar:',
-        '1. Her malzemeyi aşağıdaki kategorilerden birine ata.',
-        '2. Aynı malzeme farklı isimlerle yazılmışsa (ör: "havuç" ve "taze havuç") birleştir.',
-        '3. Eğer bir malzeme başka malzemeleri içeriyorsa (ör: "sebze karışımı (havuç, brokoli)"), içerikleri zaten ayrı listeleniyorsa ana malzemeyi kaldır.',
-        '4. Yazım hatalarını düzelt.',
-        '5. Her kelimenin baş harfini büyük yap (Title Case).',
-        '6. Miktarları ve yemek bilgilerini koru.',
+        isEnglish ? 'Rules:' : 'Kurallar:',
+        isEnglish
+            ? '1. Assign each item to one of the categories below.'
+            : '1. Her malzemeyi aşağıdaki kategorilerden birine ata.',
+        isEnglish
+            ? '2. If the same item is written with different names (e.g., "carrot" and "fresh carrot"), merge them.'
+            : '2. Aynı malzeme farklı isimlerle yazılmışsa (ör: "havuç" ve "taze havuç") birleştir.',
+        isEnglish
+            ? '3. If an item contains other items (e.g., "mixed vegetables (carrot, broccoli)"), and those contents are already listed, remove the parent item.'
+            : '3. Eğer bir malzeme başka malzemeleri içeriyorsa (ör: "sebze karışımı (havuç, brokoli)"), içerikleri zaten ayrı listeleniyorsa ana malzemeyi kaldır.',
+        isEnglish ? '4. Fix typos.' : '4. Yazım hatalarını düzelt.',
+        isEnglish ? '5. Capitalize each word (Title Case).' : '5. Her kelimenin baş harfini büyük yap (Title Case).',
+        isEnglish ? '6. Preserve amounts and meal info.' : '6. Miktarları ve yemek bilgilerini koru.',
         '',
-        'Kategoriler:',
+        isEnglish ? 'Categories:' : 'Kategoriler:',
         categoryList,
         '',
-        `Geçerli kategori değerleri: ${categoryIds}`,
+        `${isEnglish ? 'Valid category values' : 'Geçerli kategori değerleri'}: ${categoryIds}`,
         '',
-        `Girdiler (JSON Array): ${itemsJson}`,
+        `${isEnglish ? 'Inputs' : 'Girdiler'} (JSON Array): ${itemsJson}`,
         '',
-        'Çıktı formatı (JSON):',
+        isEnglish ? 'Output format (JSON):' : 'Çıktı formatı (JSON):',
         '{',
         '  "items": [',
-        '    { "name": "Malzeme Adı", "amount": "miktar", "unit": "birim", "meals": ["Pzt Akşam"], "categoryId": "produce" }',
+        isEnglish
+            ? '    { "name": "Item Name", "amount": "amount", "unit": "unit", "meals": ["Mon Dinner"], "categoryId": "produce" }'
+            : '    { "name": "Malzeme Adı", "amount": "miktar", "unit": "birim", "meals": ["Pzt Akşam"], "categoryId": "produce" }',
         '  ]',
         '}',
     ].join('\n');
 }
 
-export function buildCompleteGroceryCategorizationPrompt(items: GroceryInputItem[]): {
+export function buildCompleteGroceryCategorizationPrompt(
+    items: GroceryInputItem[],
+    language: LanguageCode = 'tr'
+): {
     systemPrompt: string;
     userPrompt: string;
 } {
     return {
-        systemPrompt: buildGroceryCategorizationSystemPrompt(),
-        userPrompt: buildGroceryCategorizationPrompt(items),
+        systemPrompt: buildGroceryCategorizationSystemPrompt(language),
+        userPrompt: buildGroceryCategorizationPrompt(items, language),
     };
 }

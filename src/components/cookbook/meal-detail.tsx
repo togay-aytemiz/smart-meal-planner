@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { spacing, radius, shadows } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -27,52 +28,48 @@ interface MealDetailProps {
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const HEADER_HEIGHT = 56;
-const BRIEF_FALLBACK =
-    'Taze sebzelerle zenginleştirilmiş hafif bulgur pilavı; pratik, dengeli ve güne iyi gelen bir lezzet.';
-
-
-const COURSE_META: Record<MenuRecipeCourse, { label: string; icon: IconName; tone: string }> = {
+const COURSE_META_BASE: Record<MenuRecipeCourse, { labelKey: string; icon: IconName; tone: string }> = {
     main: {
-        label: 'Ana Yemek',
+        labelKey: 'cookbook.categories.main',
         icon: 'silverware-fork-knife',
         tone: colors.surfaceAlt,
     },
     side: {
-        label: 'Yan Yemek',
+        labelKey: 'cookbook.categories.side',
         icon: 'pot-steam-outline',
         tone: colors.borderLight,
     },
     soup: {
-        label: 'Çorba',
+        labelKey: 'cookbook.categories.soup',
         icon: 'pot-steam-outline',
         tone: colors.accentSoft,
     },
     salad: {
-        label: 'Salata',
+        labelKey: 'cookbook.categories.salad',
         icon: 'leaf',
         tone: colors.successLight,
     },
     meze: {
-        label: 'Meze',
+        labelKey: 'cookbook.categories.meze',
         icon: 'food',
         tone: colors.surfaceMuted,
     },
     dessert: {
-        label: 'Tatlı',
+        labelKey: 'cookbook.categories.dessert',
         icon: 'cupcake',
         tone: colors.errorLight,
     },
     pastry: {
-        label: 'Hamur İşi',
+        labelKey: 'cookbook.categories.pastry',
         icon: 'bread-slice-outline',
         tone: colors.surfaceAlt,
     },
 };
 
-const tabs: Array<{ key: TabKey; label: string }> = [
-    { key: 'ingredients', label: 'Malzemeler' },
-    { key: 'instructions', label: 'Hazırlanış' },
-    { key: 'nutrition', label: 'Besin' },
+const TAB_BASE: Array<{ key: TabKey; labelKey: string }> = [
+    { key: 'ingredients', labelKey: 'cookbook.detail.tabs.ingredients' },
+    { key: 'instructions', labelKey: 'cookbook.detail.tabs.instructions' },
+    { key: 'nutrition', labelKey: 'cookbook.detail.tabs.nutrition' },
 ];
 
 const formatAmount = (value: number) => {
@@ -96,11 +93,11 @@ const formatIngredient = (item: MenuIngredient) => {
 const sortInstructions = (instructions: MenuInstruction[]) =>
     [...instructions].sort((a, b) => a.step - b.step);
 
-const formatTimeValue = (minutes: number) => {
+const formatTimeValue = (minutes: number, t: (key: string) => string) => {
     if (!Number.isFinite(minutes) || minutes <= 0) {
-        return 'N/A';
+        return t('common.notAvailable');
     }
-    return `${minutes} dk`;
+    return `${minutes} ${t('common.minuteShort')}`;
 };
 
 export default function MealDetail({
@@ -111,26 +108,34 @@ export default function MealDetail({
     isFavorited = false,
 }: MealDetailProps) {
     const insets = useSafeAreaInsets();
+    const { t } = useLanguage();
     const [activeTab, setActiveTab] = useState<TabKey>('ingredients');
     const [tabContainerWidth, setTabContainerWidth] = useState(0);
     const [tabContainerY, setTabContainerY] = useState(0);
     const tabIndicatorX = useRef(new Animated.Value(0)).current;
     const scrollViewRef = useRef<ScrollView | null>(null);
 
-    const brief = recipe.brief?.trim() || BRIEF_FALLBACK;
-    const courseMeta = COURSE_META[recipe.course] ?? COURSE_META.main;
+    const brief = recipe.brief?.trim() || t('cookbook.detail.briefFallback');
+    const courseMetaBase = COURSE_META_BASE[recipe.course] ?? COURSE_META_BASE.main;
+    const courseMeta = useMemo(
+        () => ({
+            ...courseMetaBase,
+            label: t(courseMetaBase.labelKey),
+        }),
+        [courseMetaBase, t]
+    );
 
     const headerTextColor = colors.textPrimary;
 
     const nutritionRows = useMemo(() => {
         const { calories, protein, carbs, fat } = recipe.macrosPerServing;
         return [
-            { label: 'Kalori', value: `${calories} kcal` },
-            { label: 'Protein', value: `${protein} g` },
-            { label: 'Karbonhidrat', value: `${carbs} g` },
-            { label: 'Yağ', value: `${fat} g` },
+            { label: t('cookbook.detail.nutrition.calories'), value: `${calories} kcal` },
+            { label: t('cookbook.detail.nutrition.protein'), value: `${protein} g` },
+            { label: t('cookbook.detail.nutrition.carbs'), value: `${carbs} g` },
+            { label: t('cookbook.detail.nutrition.fat'), value: `${fat} g` },
         ];
-    }, [recipe.macrosPerServing]);
+    }, [recipe.macrosPerServing, t]);
 
     const instructions = useMemo(
         () => sortInstructions(recipe.instructions),
@@ -138,9 +143,13 @@ export default function MealDetail({
     );
     const showCookTime =
         Number.isFinite(recipe.cookTimeMinutes) && recipe.cookTimeMinutes > 0;
+    const tabs = useMemo(
+        () => TAB_BASE.map((tab) => ({ key: tab.key, label: t(tab.labelKey) })),
+        [t]
+    );
     const activeTabIndex = useMemo(
         () => tabs.findIndex((tab) => tab.key === activeTab),
-        [activeTab]
+        [activeTab, tabs]
     );
     const indicatorWidth = tabContainerWidth
         ? (tabContainerWidth - spacing.xs * 2) / tabs.length
@@ -225,7 +234,7 @@ export default function MealDetail({
                         <View style={styles.metaPill}>
                             <MaterialCommunityIcons name="account-group" size={18} color={colors.textSecondary} />
                             <Text style={styles.metaValue}>{recipe.servings}</Text>
-                            <Text style={styles.metaLabel}>Porsiyon</Text>
+                            <Text style={styles.metaLabel}>{t('cookbook.detail.servingsLabel')}</Text>
                         </View>
                         <View style={styles.timeGroup}>
                             <View style={styles.timeBlock}>
@@ -235,9 +244,9 @@ export default function MealDetail({
                                         size={16}
                                         color={colors.textSecondary}
                                     />
-                                    <Text style={styles.timeValue}>{formatTimeValue(recipe.prepTimeMinutes)}</Text>
+                                    <Text style={styles.timeValue}>{formatTimeValue(recipe.prepTimeMinutes, t)}</Text>
                                 </View>
-                                <Text style={styles.timeLabel}>Hazırlık</Text>
+                                <Text style={styles.timeLabel}>{t('cookbook.detail.prepLabel')}</Text>
                             </View>
                             {showCookTime && (
                                 <View style={styles.timeBlock}>
@@ -248,10 +257,10 @@ export default function MealDetail({
                                             color={colors.textSecondary}
                                         />
                                         <Text style={styles.timeValue}>
-                                            {formatTimeValue(recipe.cookTimeMinutes)}
+                                            {formatTimeValue(recipe.cookTimeMinutes, t)}
                                         </Text>
                                     </View>
-                                    <Text style={styles.timeLabel}>Pişirme</Text>
+                                    <Text style={styles.timeLabel}>{t('cookbook.detail.cookLabel')}</Text>
                                 </View>
                             )}
                         </View>
@@ -316,7 +325,9 @@ export default function MealDetail({
                                     <View style={styles.stepContent}>
                                         <Text style={styles.stepText}>{step.text}</Text>
                                         {step.durationMinutes > 0 && (
-                                            <Text style={styles.stepDuration}>{step.durationMinutes} dk</Text>
+                                            <Text style={styles.stepDuration}>
+                                                {step.durationMinutes} {t('common.minuteShort')}
+                                            </Text>
                                         )}
                                     </View>
                                 </View>
@@ -326,7 +337,7 @@ export default function MealDetail({
 
                     {activeTab === 'nutrition' && (
                         <View style={styles.listContainer}>
-                            <Text style={styles.nutritionNote}>Porsiyon başına</Text>
+                            <Text style={styles.nutritionNote}>{t('cookbook.detail.perServing')}</Text>
                             {nutritionRows.map((row) => (
                                 <View key={row.label} style={styles.nutritionRow}>
                                     <Text style={styles.nutritionLabel}>{row.label}</Text>

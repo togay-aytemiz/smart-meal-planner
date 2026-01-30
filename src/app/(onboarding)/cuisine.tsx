@@ -5,28 +5,30 @@ import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { Button } from '../../components/ui';
 import { useOnboarding } from '../../contexts/onboarding-context';
+import { useLanguage } from '../../contexts/language-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 
 const CUISINES = [
-    { key: 'turkish', label: 'Türk', emoji: '🇹🇷', popular: true },
-    { key: 'mediterranean', label: 'Akdeniz', emoji: '🫒', popular: true },
-    { key: 'italian', label: 'İtalyan', emoji: '🍝', popular: true },
-    { key: 'asian', label: 'Asya', emoji: '🍜', popular: true },
-    { key: 'middle-eastern', label: 'Ortadoğu', emoji: '🧆', popular: false },
-    { key: 'mexican', label: 'Meksika', emoji: '🌮', popular: false },
-    { key: 'indian', label: 'Hint', emoji: '🍛', popular: false },
-    { key: 'french', label: 'Fransız', emoji: '🥐', popular: false },
-    { key: 'japanese', label: 'Japon', emoji: '🍱', popular: false },
-    { key: 'chinese', label: 'Çin', emoji: '🥡', popular: false },
-    { key: 'thai', label: 'Tayland', emoji: '🍜', popular: false },
-    { key: 'american', label: 'Amerikan', emoji: '🍔', popular: false },
+    { key: 'turkish', labelKey: 'preferences.cuisines.turkish', emoji: '🇹🇷', popular: true },
+    { key: 'mediterranean', labelKey: 'preferences.cuisines.mediterranean', emoji: '🫒', popular: true },
+    { key: 'italian', labelKey: 'preferences.cuisines.italian', emoji: '🍝', popular: true },
+    { key: 'asian', labelKey: 'preferences.cuisines.asian', emoji: '🍜', popular: true },
+    { key: 'middle-eastern', labelKey: 'preferences.cuisines.middleEastern', emoji: '🧆', popular: false },
+    { key: 'mexican', labelKey: 'preferences.cuisines.mexican', emoji: '🌮', popular: false },
+    { key: 'indian', labelKey: 'preferences.cuisines.indian', emoji: '🍛', popular: false },
+    { key: 'french', labelKey: 'preferences.cuisines.french', emoji: '🥐', popular: false },
+    { key: 'japanese', labelKey: 'preferences.cuisines.japanese', emoji: '🍱', popular: false },
+    { key: 'chinese', labelKey: 'preferences.cuisines.chinese', emoji: '🥡', popular: false },
+    { key: 'thai', labelKey: 'preferences.cuisines.thai', emoji: '🍜', popular: false },
+    { key: 'american', labelKey: 'preferences.cuisines.american', emoji: '🍔', popular: false },
 ];
 
 export default function CuisineScreen() {
     const router = useRouter();
     const { state, dispatch } = useOnboarding();
+    const { t } = useLanguage();
     const [selected, setSelected] = useState<string[]>(
         state.data.cuisine?.selected || ['turkish', 'mediterranean']
     );
@@ -48,15 +50,15 @@ export default function CuisineScreen() {
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>Mutfak tercihleri</Text>
+                    <Text style={styles.title}>{t('onboarding.cuisine.title')}</Text>
                     <Text style={styles.subtitle}>
-                        Hangi mutfakların yemeklerini seviyorsunuz?
+                        {t('onboarding.cuisine.subtitle')}
                     </Text>
                 </View>
 
                 {/* Popular Cuisines */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Popüler</Text>
+                    <Text style={styles.sectionTitle}>{t('onboarding.cuisine.popularTitle')}</Text>
                     <View style={styles.cuisineGrid}>
                         {CUISINES.filter(c => c.popular).map((cuisine) => (
                             <TouchableOpacity
@@ -77,7 +79,7 @@ export default function CuisineScreen() {
                                     adjustsFontSizeToFit
                                     minimumFontScale={0.8}
                                 >
-                                    {cuisine.label}
+                                    {t(cuisine.labelKey)}
                                 </Text>
                                 {selected.includes(cuisine.key) && (
                                     <View style={styles.checkmark}>
@@ -91,7 +93,7 @@ export default function CuisineScreen() {
 
                 {/* All Cuisines */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Diğer Mutfaklar</Text>
+                    <Text style={styles.sectionTitle}>{t('onboarding.cuisine.otherTitle')}</Text>
                     <View style={styles.cuisineGrid}>
                         {CUISINES.filter(c => !c.popular).map((cuisine) => (
                             <TouchableOpacity
@@ -112,7 +114,7 @@ export default function CuisineScreen() {
                                     adjustsFontSizeToFit
                                     minimumFontScale={0.8}
                                 >
-                                    {cuisine.label}
+                                    {t(cuisine.labelKey)}
                                 </Text>
                                 {selected.includes(cuisine.key) && (
                                     <View style={styles.checkmark}>
@@ -128,7 +130,7 @@ export default function CuisineScreen() {
                 {selected.length > 0 && (
                     <View style={styles.countBadge}>
                         <Text style={styles.countText}>
-                            {selected.length} mutfak seçildi
+                            {t('onboarding.cuisine.selectedCount', { count: selected.length })}
                         </Text>
                     </View>
                 )}
@@ -136,7 +138,7 @@ export default function CuisineScreen() {
 
             <View style={styles.footer}>
                 <Button
-                    title="Devam"
+                    title={t('onboarding.common.continue')}
                     onPress={handleContinue}
                     fullWidth
                     size="large"

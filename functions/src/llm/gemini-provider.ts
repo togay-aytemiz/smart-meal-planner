@@ -170,7 +170,7 @@ export class GeminiProvider {
      */
     async generateMenu(request: MenuGenerationRequest): Promise<any> {
         try {
-            const systemPrompt = buildMenuSystemPrompt();
+            const systemPrompt = buildMenuSystemPrompt(request.language ?? "tr");
             const userPrompt = buildMenuPrompt(request);
 
             // Combine prompts

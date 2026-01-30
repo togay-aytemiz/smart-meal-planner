@@ -8,6 +8,7 @@ import { Recipe } from "./recipe";
 import { OnboardingData } from "./onboarding";
 
 export type MealType = "breakfast" | "lunch" | "dinner";
+export type LanguageCode = "tr" | "en";
 
 export type ExtraDishType = "soup" | "salad" | "meze" | "dessert" | "pastry";
 
@@ -123,6 +124,7 @@ export interface MenuGenerationRequest {
   dayOfWeek?: string; // Auto-calculated from date if not provided
   onboardingHash?: string;
   cuisinePriority?: "normal" | "high";
+  language?: LanguageCode;
 
   // User preferences (from onboarding)
   dietaryRestrictions: string[];
@@ -187,6 +189,7 @@ export type WeeklyMenuGenerationRequest = {
   maxPrepTime?: number;
   maxCookTime?: number;
   cuisinePriority?: "normal" | "high";
+  language?: LanguageCode;
   generateImage?: boolean;
   forceRegenerate?: boolean;
 };

@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore, { doc, getDoc } from '@react-native-firebase/firestore';
 import { Button } from '../../components/ui';
@@ -11,15 +11,16 @@ import { spacing } from '../../theme/spacing';
 import { useOnboarding, type WeeklyRoutine } from '../../contexts/onboarding-context';
 import { useSampleMenu } from '../../contexts/sample-menu-context';
 import { useUser } from '../../contexts/user-context';
+import { useLanguage } from '../../contexts/language-context';
 
 const STORAGE_KEY = '@onboarding_data';
 
-const LOADING_MESSAGES = [
-    "Rutinleriniz analiz ediliyor...",
-    "Egzersiz günleriniz dengeleniyor...",
-    "Mutfak tercihleri kontrol ediliyor...",
-    "Size özel menü oluşturuluyor...",
-    "Haftalık planınız oluşturuluyor..."
+const LOADING_MESSAGE_KEYS = [
+    'onboarding.processing.messages.routines',
+    'onboarding.processing.messages.workouts',
+    'onboarding.processing.messages.cuisine',
+    'onboarding.processing.messages.menu',
+    'onboarding.processing.messages.weekly',
 ];
 
 type OnboardingSnapshot = {
@@ -40,10 +41,12 @@ export default function ProcessingScreen() {
     const { state, dispatch } = useOnboarding();
     const { state: userState } = useUser();
     const { startLoading, waitForFirstMeal, hasStarted, reset } = useSampleMenu();
+    const { t } = useLanguage();
     const [messageIndex, setMessageIndex] = useState(0);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [isRetrying, setIsRetrying] = useState(false);
     const hasNavigatedRef = useRef(false);
+    const messages = useMemo(() => LOADING_MESSAGE_KEYS.map((key) => t(key)), [t]);
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -67,14 +70,14 @@ export default function ProcessingScreen() {
             ]).start();
 
             setTimeout(() => {
-                setMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+                setMessageIndex((prev) => (prev + 1) % messages.length);
             }, 200);
         }, 3000);
 
         return () => {
             clearInterval(messageInterval);
         };
-    }, []);
+    }, [dispatch, entranceFade, fadeAnim, messages.length]);
 
     const attemptLoad = useCallback(async () => {
         setLoadError(null);
@@ -102,7 +105,7 @@ export default function ProcessingScreen() {
         setIsRetrying(false);
 
         if (!success) {
-            setLoadError('Menü hazırlanamadı. Lütfen tekrar deneyin.');
+            setLoadError(t('onboarding.processing.error'));
             return;
         }
 
@@ -144,7 +147,7 @@ export default function ProcessingScreen() {
                 </View>
 
                 <Animated.Text style={[styles.message, { opacity: fadeAnim }]}>
-                    {LOADING_MESSAGES[messageIndex]}
+                    {messages[messageIndex]}
                 </Animated.Text>
 
                 {loadError ? (
@@ -152,13 +155,13 @@ export default function ProcessingScreen() {
                         <Text style={styles.errorText}>{loadError}</Text>
                         <View style={styles.errorActions}>
                             <Button
-                                title="Tekrar Dene"
+                                title={t('onboarding.processing.retry')}
                                 onPress={handleRetry}
                                 loading={isRetrying}
                                 fullWidth
                             />
                             <Button
-                                title="Geri Dön"
+                                title={t('onboarding.processing.back')}
                                 variant="secondary"
                                 onPress={() => router.back()}
                                 disabled={isRetrying}

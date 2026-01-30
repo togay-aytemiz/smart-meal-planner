@@ -2,12 +2,14 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 import { colors } from '../../theme/colors';
 import { spacing, radius, shadows } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { useLanguage } from '../../contexts/language-context';
 
 interface ReasoningBubbleProps {
     text: string;
 }
 
 export function ReasoningBubble({ text }: ReasoningBubbleProps) {
+    const { t } = useLanguage();
     // Always render to prevent layout jump, use placeholder space if empty
     const displayText = text || " ";
 
@@ -19,7 +21,7 @@ export function ReasoningBubble({ text }: ReasoningBubbleProps) {
                 resizeMode="contain"
             />
             <View style={styles.bubble}>
-                <Text style={styles.title}>Neden bu menü?</Text>
+                <Text style={styles.title}>{t('common.reasoningTitle')}</Text>
                 <Text style={styles.text}>{displayText}</Text>
             </View>
         </View>

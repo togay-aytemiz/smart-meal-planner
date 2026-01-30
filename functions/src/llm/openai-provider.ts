@@ -4,7 +4,7 @@
 
 import OpenAI from "openai";
 import { getLLMConfig } from "../config/secrets";
-import { MenuGenerationRequest } from "../types/menu";
+import { MenuGenerationRequest, LanguageCode } from "../types/menu";
 import { MenuRecipeGenerationParams } from "../types/generation-params";
 import { buildMenuPrompt, buildMenuSystemPrompt } from "./prompts/menu-prompt";
 import { buildRecipePrompt, buildSystemPrompt as buildRecipeSystemPrompt } from "./prompts/recipe-prompt";
@@ -130,7 +130,7 @@ export class OpenAIProvider {
 
     async generateMenu(request: MenuGenerationRequest): Promise<Record<string, unknown>> {
         try {
-            const systemPrompt = buildMenuSystemPrompt();
+            const systemPrompt = buildMenuSystemPrompt(request.language ?? "tr");
             const userPrompt = buildMenuPrompt(request);
             const resolvedMealType = request.mealType ?? "dinner";
 
@@ -147,7 +147,7 @@ export class OpenAIProvider {
 
     async generateRecipe(params: MenuRecipeGenerationParams): Promise<Record<string, unknown>> {
         try {
-            const systemPrompt = buildRecipeSystemPrompt();
+            const systemPrompt = buildRecipeSystemPrompt(params.language ?? "tr");
             const userPrompt = buildRecipePrompt(params);
 
             return await this.generateStructuredResponse(
@@ -161,9 +161,9 @@ export class OpenAIProvider {
         }
     }
 
-    async normalizePantryItems(inputs: string[]): Promise<Record<string, unknown>> {
+    async normalizePantryItems(inputs: string[], language: LanguageCode = "tr"): Promise<Record<string, unknown>> {
         try {
-            const { systemPrompt, userPrompt } = buildCompletePantryPrompt(inputs);
+            const { systemPrompt, userPrompt } = buildCompletePantryPrompt(inputs, language);
 
             return await this.generateStructuredResponse(
                 systemPrompt,
@@ -176,9 +176,12 @@ export class OpenAIProvider {
         }
     }
 
-    async categorizeGroceryItems(items: GroceryInputItem[]): Promise<Record<string, unknown>> {
+    async categorizeGroceryItems(
+        items: GroceryInputItem[],
+        language: LanguageCode = "tr"
+    ): Promise<Record<string, unknown>> {
         try {
-            const { systemPrompt, userPrompt } = buildCompleteGroceryCategorizationPrompt(items);
+            const { systemPrompt, userPrompt } = buildCompleteGroceryCategorizationPrompt(items, language);
 
             return await this.generateStructuredResponse(
                 systemPrompt,

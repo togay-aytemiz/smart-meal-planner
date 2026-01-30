@@ -4,7 +4,7 @@
  */
 
 import { OnboardingData } from "./onboarding";
-import { MenuDecision, MenuGenerationRequest } from "./menu";
+import { MenuDecision, MenuGenerationRequest, LanguageCode } from "./menu";
 import { onboardingToMenuRequest } from "./menu-helpers";
 
 export interface MenuRecipeGenerationParams extends MenuGenerationRequest {
@@ -22,6 +22,7 @@ export function onboardingToMenuRecipeParams(
     maxCookTime?: number;
     generateImage?: boolean;
     onboardingHash?: string;
+    language?: LanguageCode;
     previousPreferences?: {
       likedRecipes?: string[];
       dislikedRecipes?: string[];

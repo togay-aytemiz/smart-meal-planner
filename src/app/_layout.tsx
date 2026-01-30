@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import mobileAds from 'react-native-google-mobile-ads';
 import { UserProvider } from '../contexts/user-context';
 import { PremiumProvider } from '../contexts/premium-context';
+import { LanguageProvider } from '../contexts/language-context';
 import { colors } from '../theme/colors';
 
 export default function RootLayout() {
@@ -22,20 +23,22 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <UserProvider>
-        <PremiumProvider>
-          <SafeAreaProvider>
-            <StatusBar style="dark" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.background },
-                animation: 'slide_from_right',
-              }}
-            />
-          </SafeAreaProvider>
-        </PremiumProvider>
-      </UserProvider>
+      <LanguageProvider>
+        <UserProvider>
+          <PremiumProvider>
+            <SafeAreaProvider>
+              <StatusBar style="dark" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.background },
+                  animation: 'slide_from_right',
+                }}
+              />
+            </SafeAreaProvider>
+          </PremiumProvider>
+        </UserProvider>
+      </LanguageProvider>
     </GestureHandlerRootView>
   );
 }

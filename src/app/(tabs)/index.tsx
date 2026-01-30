@@ -25,7 +25,7 @@ import { useUser } from '../../contexts/user-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius, shadows, hitSlop } from '../../theme/spacing';
-import { formatLongDateTr, getGreeting } from '../../utils/dates';
+import { formatLongDate, getTimeOfDay } from '../../utils/dates';
 import { fetchMenuDecision, type MenuDecisionWithLinks } from '../../utils/menu-storage';
 import { buildOnboardingHash, type OnboardingSnapshot } from '../../utils/onboarding-hash';
 import { clearWeeklyRegenerationRequest, loadWeeklyRegenerationRequest } from '../../utils/week-regeneration';
@@ -34,6 +34,7 @@ import { loadPremiumStatus } from '../../utils/premium-status';
 import { requestRewardedAd } from '../../utils/rewarded-ads';
 import { getWeeklyRecipeViews, incrementWeeklyRecipeViews } from '../../utils/usage-limits';
 import { monetizationConfig } from '../../config/monetization';
+import { useLanguage } from '../../contexts/language-context';
 import type { MenuDecision, MenuRecipeCourse, MenuRecipesResponse } from '../../types/menu-recipes';
 import type { RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 
@@ -450,16 +451,23 @@ const renderSkeletonCards = (sectionId: MealSectionKey) =>
         </View>
     ));
 
-const buildEmptyMessage = (meal: MealSectionKey, isLoading: boolean, error?: string | null) => {
+type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
+
+const buildEmptyMessage = (
+    meal: MealSectionKey,
+    isLoading: boolean,
+    error: string | null,
+    t: TranslateFn
+) => {
     if (error) {
-        return 'Menü oluşturulamadı. Lütfen tekrar deneyin.';
+        return t('home.menuError');
     }
 
     if (isLoading) {
-        return 'Menü hazırlanıyor.';
+        return t('home.menuLoading');
     }
 
-    return 'Menü henüz hazırlanmadı.';
+    return t('home.menuEmpty');
 };
 
 const getFunctionsErrorMessage = (error: unknown) => {
@@ -560,17 +568,19 @@ const ensureWeeklyMenu = async ({
 export default function TodayScreen() {
     const router = useRouter();
     const { state: userState } = useUser();
+    const { t, locale } = useLanguage();
     const now = new Date();
-    const greeting = getGreeting(now);
+    const timeOfDay = getTimeOfDay(now);
+    const greeting = t(`home.greeting.${timeOfDay}`);
     const weekDays = buildWeekDays(now);
     const todayKey = weekDays.find((day) => day.isToday)?.key ?? weekDays[0].key;
     const [selectedDayKey, setSelectedDayKey] = useState(todayKey);
     const selectedDay = weekDays.find((day) => day.key === selectedDayKey) ?? weekDays[0];
-    const selectedDayName = selectedDay.date.toLocaleDateString('tr-TR', { weekday: 'long' });
-    const selectedDayLabel = selectedDay.isToday ? 'Bugün' : selectedDayName;
+    const selectedDayName = selectedDay.date.toLocaleDateString(locale, { weekday: 'long' });
+    const selectedDayLabel = selectedDay.isToday ? t('home.today') : selectedDayName;
     const selectedDaySubtitle = selectedDay.isToday
-        ? formatLongDateTr(selectedDay.date)
-        : selectedDay.date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+        ? formatLongDate(selectedDay.date, locale)
+        : selectedDay.date.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
 
     const [menuBundles, setMenuBundles] = useState<Record<MealSectionKey, MenuDecisionWithLinks | null>>({
         breakfast: null,
@@ -638,7 +648,7 @@ export default function TodayScreen() {
             mealPlan.lunch,
         ]
     );
-    const menuTitle = selectedDay.isToday ? 'Bugünün menüsü' : 'Günün menüsü';
+    const menuTitle = selectedDay.isToday ? t('home.menuTitleToday') : t('home.menuTitle');
     const mealItemsByType = useMemo(() => {
         const buildItems = (mealType: MealSectionKey) => {
             const bundle = menuBundles[mealType];
@@ -664,7 +674,7 @@ export default function TodayScreen() {
                 id: 'breakfast',
                 ...SECTION_META.breakfast,
                 items,
-                emptyMessage: items.length ? undefined : buildEmptyMessage('breakfast', loading, error),
+                emptyMessage: items.length ? undefined : buildEmptyMessage('breakfast', loading, error, t),
             });
         }
 
@@ -674,7 +684,7 @@ export default function TodayScreen() {
                 id: 'lunch',
                 ...SECTION_META.lunch,
                 items,
-                emptyMessage: items.length ? undefined : buildEmptyMessage('lunch', loading, error),
+                emptyMessage: items.length ? undefined : buildEmptyMessage('lunch', loading, error, t),
             });
         }
 
@@ -685,7 +695,7 @@ export default function TodayScreen() {
                 ...SECTION_META.dinner,
                 title: menuTitle,
                 items,
-                emptyMessage: items.length ? undefined : buildEmptyMessage('dinner', loading, error),
+                emptyMessage: items.length ? undefined : buildEmptyMessage('dinner', loading, error, t),
             });
         }
 
@@ -698,6 +708,7 @@ export default function TodayScreen() {
         loading,
         mealItemsByType,
         menuTitle,
+        t,
     ]);
 
     const reasoningText = useMemo(() => {
@@ -1387,7 +1398,7 @@ export default function TodayScreen() {
                         style={{ width: 200, height: 200 }}
                         resizeMode="contain"
                     />
-                    <Text style={styles.loadingText}>Menü hazırlanıyor...</Text>
+                    <Text style={styles.loadingText}>{t('home.menuPreparing')}</Text>
                 </View>
             </SafeAreaView>
         );
@@ -1450,7 +1461,9 @@ export default function TodayScreen() {
                                         {day.dayNumber}
                                     </Text>
                                 </TouchableOpacity>
-                                <Text style={[styles.dayStatus, !day.isToday && styles.dayStatusHidden]}>Bugün</Text>
+                                <Text style={[styles.dayStatus, !day.isToday && styles.dayStatusHidden]}>
+                                    {t('home.todayBadge')}
+                                </Text>
                             </View>
                         );
                     })}
@@ -1482,46 +1495,44 @@ export default function TodayScreen() {
                                 hitSlop={hitSlop}
                                 activeOpacity={0.85}
                             >
-                                <MaterialCommunityIcons
-                                    name="swap-horizontal"
-                                    size={18}
-                                    color={colors.textPrimary}
-                                />
-                                <Text style={styles.changeMenuText}>Menüyü değiştir</Text>
-                            </TouchableOpacity>
-                        ) : null}
-                    </View>
+                            <MaterialCommunityIcons
+                                name="swap-horizontal"
+                                size={18}
+                                color={colors.textPrimary}
+                            />
+                            <Text style={styles.changeMenuText}>{t('home.changeMenu')}</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                </View>
 
-                    {showHolidayEmpty ? (
-                        <View style={styles.holidayEmpty}>
+                {showHolidayEmpty ? (
+                    <View style={styles.holidayEmpty}>
                             <Image
                                 source={require('../../../assets/vacation.png')}
                                 style={styles.holidayEmptyImage}
                                 resizeMode="contain"
                             />
-                            <Text style={styles.holidayEmptyTitle}>Omnoo tatilde</Text>
-                            <Text style={styles.holidayEmptySubtitle}>
-                                Bu günü tatil olarak işaretlediğin için Omnoo menü oluşturmadı.
-                            </Text>
-                            <TouchableOpacity
-                                style={[
-                                    styles.holidayCta,
-                                    (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
-                                        styles.changeMenuButtonDisabled,
-                                ]}
-                                onPress={() => handleOpenChangeSheet('create')}
-                                disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
-                                activeOpacity={0.85}
-                            >
-                                <Image
-                                    source={require('../../../assets/pw-chef.png')}
-                                    style={styles.holidayCtaIcon}
-                                    resizeMode="contain"
-                                />
-                                <Text style={styles.holidayCtaText}>Menü oluştur</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ) : null}
+                        <Text style={styles.holidayEmptyTitle}>{t('home.holidayTitle')}</Text>
+                        <Text style={styles.holidayEmptySubtitle}>{t('home.holidaySubtitle')}</Text>
+                        <TouchableOpacity
+                            style={[
+                                styles.holidayCta,
+                                (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
+                                    styles.changeMenuButtonDisabled,
+                            ]}
+                            onPress={() => handleOpenChangeSheet('create')}
+                            disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
+                            activeOpacity={0.85}
+                        >
+                            <Image
+                                source={require('../../../assets/pw-chef.png')}
+                                style={styles.holidayCtaIcon}
+                                resizeMode="contain"
+                            />
+                            <Text style={styles.holidayCtaText}>{t('home.holidayCta')}</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
 
                     {showReasoning ? (
                         <ReasoningBubble text={reasoningText} />

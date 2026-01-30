@@ -70,8 +70,8 @@ export function getGreeting(date: Date = new Date()): string {
     }
 }
 
-export function formatLongDateTr(date: Date): string {
-    const formatter = new Intl.DateTimeFormat('tr-TR', {
+export function formatLongDate(date: Date, locale: string = 'tr-TR'): string {
+    const formatter = new Intl.DateTimeFormat(locale, {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -91,4 +91,8 @@ export function formatLongDateTr(date: Date): string {
     }
 
     return `${dateParts.day} ${dateParts.month} ${dateParts.year}, ${dateParts.weekday}`;
+}
+
+export function formatLongDateTr(date: Date): string {
+    return formatLongDate(date, 'tr-TR');
 }

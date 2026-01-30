@@ -11,6 +11,7 @@ import { spacing, radius, shadows } from '../../theme/spacing';
 import { useOnboarding } from '../../contexts/onboarding-context';
 import { usePremium } from '../../contexts/premium-context';
 import { revenueCatConfig } from '../../config/revenuecat';
+import { useLanguage } from '../../contexts/language-context';
 
 type ErrorContext = 'pricing' | 'purchase';
 
@@ -20,6 +21,7 @@ export default function PaywallScreen() {
     const isSettingsEntry = source === 'settings';
     const { dispatch } = useOnboarding();
     const { restorePurchases, isPremium } = usePremium();
+    const { t } = useLanguage();
     const [selectedPlan, setSelectedPlan] = useState<'weekly' | 'monthly'>('monthly');
     const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(null);
     const [isPurchasing, setIsPurchasing] = useState(false);
@@ -64,9 +66,9 @@ export default function PaywallScreen() {
             setCurrentOffering(offerings.current ?? null);
         } catch (error) {
             console.warn('RevenueCat offerings error:', error);
-            showErrorModal('pricing', 'Fiyatlar yüklenemedi. Lütfen tekrar deneyin.');
+            showErrorModal('pricing', t('paywall.errorPricing'));
         }
-    }, [showErrorModal]);
+    }, [showErrorModal, t]);
 
     useEffect(() => {
         loadOfferings();
@@ -92,7 +94,7 @@ export default function PaywallScreen() {
         }
         const selectedPackage = selectedPlan === 'weekly' ? weeklyPackage : monthlyPackage;
         if (!selectedPackage) {
-            showErrorModal('pricing', 'Seçilen paket bulunamadı. Lütfen tekrar deneyin.');
+            showErrorModal('pricing', t('paywall.errorPackageMissing'));
             return;
         }
         setIsPurchasing(true);
@@ -108,7 +110,7 @@ export default function PaywallScreen() {
             const purchasesError = error as { code?: PURCHASES_ERROR_CODE };
             if (purchasesError?.code !== PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) {
                 console.warn('RevenueCat purchase error:', error);
-                showErrorModal('purchase', 'Satın alma başarısız oldu. Lütfen tekrar deneyin.');
+                showErrorModal('purchase', t('paywall.errorPurchase'));
             }
         } finally {
             setIsPurchasing(false);
@@ -138,7 +140,7 @@ export default function PaywallScreen() {
                         resizeMode="contain"
                     />
                     <Text style={styles.title}>
-                        Omnoo{'\n'}Premium&apos;a geç
+                        {t('paywall.title')}
                     </Text>
                     <Text style={styles.subtitle}>
                     </Text>
@@ -148,27 +150,27 @@ export default function PaywallScreen() {
                 <View style={styles.benefitsContainer}>
                     <BenefitRow
                         image={require('../../../assets/pw-chef.png')}
-                        title="Sınırsız AI Şef"
-                        desc="Sadece sana özel tarifler."
+                        title={t('paywall.benefits.chefTitle')}
+                        desc={t('paywall.benefits.chefDesc')}
                     />
                     <BenefitRow
                         image={require('../../../assets/pw-plan.png')}
-                        title="Akıllı Haftalık Plan"
-                        desc="Rutinine uygun otomatik plan."
+                        title={t('paywall.benefits.planTitle')}
+                        desc={t('paywall.benefits.planDesc')}
                     />
                     <BenefitRow
                         image={require('../../../assets/pw-groc.png')}
-                        title="Alışveriş Listesi"
-                        desc="Saniyeler içinde hazır alışveriş listesi."
+                        title={t('paywall.benefits.groceriesTitle')}
+                        desc={t('paywall.benefits.groceriesDesc')}
                     />
                     <BenefitRow
                         image={require('../../../assets/adplan.png')}
-                        title="Reklamsız kullanım"
-                        desc="Dikkat dağıtmadan akıcı deneyim."
+                        title={t('paywall.benefits.adsTitle')}
+                        desc={t('paywall.benefits.adsDesc')}
                     />
                 </View>
 
-                <Text style={styles.planLabel}>Plan seçin:</Text>
+                <Text style={styles.planLabel}>{t('paywall.planLabel')}</Text>
 
                 {/* Plans Row */}
                 <View style={styles.plansRow}>
@@ -179,11 +181,11 @@ export default function PaywallScreen() {
                         activeOpacity={0.9}
                     >
                         <Animated.View style={[styles.badgeContainer, { transform: [{ scale: scaleAnim }] }]}>
-                            <Text style={styles.badgeText}>ESNEK</Text>
+                            <Text style={styles.badgeText}>{t('paywall.flexible')}</Text>
                         </Animated.View>
 
                         <View style={styles.cardHeader}>
-                            <Text style={styles.cardTitle}>HAFTALIK</Text>
+                            <Text style={styles.cardTitle}>{t('paywall.weekly')}</Text>
                             {selectedPlan === 'weekly' ? (
                                 <MaterialCommunityIcons name="check-circle" size={24} color={colors.primary} />
                             ) : (
@@ -193,7 +195,7 @@ export default function PaywallScreen() {
 
                         <Text style={styles.priceText}>
                             {resolvePriceLabel(weeklyPackage)}
-                            <Text style={styles.pricePeriod}>/hafta</Text>
+                            <Text style={styles.pricePeriod}>{t('paywall.perWeek')}</Text>
                         </Text>
                     </TouchableOpacity>
 
@@ -204,7 +206,7 @@ export default function PaywallScreen() {
                         activeOpacity={0.9}
                     >
                         <View style={styles.cardHeader}>
-                            <Text style={styles.cardTitle}>AYLIK</Text>
+                            <Text style={styles.cardTitle}>{t('paywall.monthly')}</Text>
                             {selectedPlan === 'monthly' ? (
                                 <MaterialCommunityIcons name="check-circle" size={24} color={colors.primary} />
                             ) : (
@@ -214,19 +216,19 @@ export default function PaywallScreen() {
 
                         <Text style={styles.priceText}>
                             {resolvePriceLabel(monthlyPackage)}
-                            <Text style={styles.pricePeriod}>/ay</Text>
+                            <Text style={styles.pricePeriod}>{t('paywall.perMonth')}</Text>
                         </Text>
                     </TouchableOpacity>
                 </View>
 
-                <Text style={styles.cancelText}>Planı istediğin zaman değiştirebilir veya iptal edebilirsin.</Text>
+                <Text style={styles.cancelText}>{t('paywall.cancelNote')}</Text>
 
             </ScrollView>
 
             {/* Footer */}
             <View style={styles.footer}>
                 <Button
-                    title="Premium'a Geç"
+                    title={t('paywall.cta')}
                     onPress={handlePurchase}
                     fullWidth
                     size="large"
@@ -234,20 +236,20 @@ export default function PaywallScreen() {
                 />
                 <View style={styles.footerLinks}>
                     <TouchableOpacity onPress={restorePurchases} activeOpacity={0.8}>
-                        <Text style={styles.footerLinkText}>Satın alımı geri yükle</Text>
+                        <Text style={styles.footerLinkText}>{t('paywall.restore')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => Linking.openURL('https://omnoo.app/terms')} activeOpacity={0.8}>
-                        <Text style={styles.footerLinkText}>Kullanım Şartları</Text>
+                        <Text style={styles.footerLinkText}>{t('paywall.terms')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => Linking.openURL('https://omnoo.app/privacy')} activeOpacity={0.8}>
-                        <Text style={styles.footerLinkText}>Gizlilik</Text>
+                        <Text style={styles.footerLinkText}>{t('paywall.privacy')}</Text>
                     </TouchableOpacity>
                 </View>
-            {!isSettingsEntry ? (
-                <Button
-                    title="Şimdilik Geç"
-                    onPress={handleContinue}
-                    variant="ghost"
+                {!isSettingsEntry ? (
+                    <Button
+                        title={t('paywall.skip')}
+                        onPress={handleContinue}
+                        variant="ghost"
                         size="small"
                         style={{ marginTop: spacing.xs }}
                     />
@@ -267,13 +269,15 @@ export default function PaywallScreen() {
                                 <MaterialCommunityIcons name="alert-circle-outline" size={28} color={colors.error} />
                             </View>
                             <Text style={styles.modalTitle}>
-                                {errorContext === 'pricing' ? 'Planlar yüklenemedi' : 'Satın alma başarısız'}
+                                {errorContext === 'pricing'
+                                    ? t('paywall.errorTitlePricing')
+                                    : t('paywall.errorTitlePurchase')}
                             </Text>
                         </View>
                         <Text style={styles.modalMessage}>{errorMessage}</Text>
                         <View style={styles.modalActions}>
                             <Button
-                                title="Tamam"
+                                title={t('common.ok')}
                                 onPress={clearErrorModal}
                                 fullWidth
                             />
@@ -298,14 +302,14 @@ export default function PaywallScreen() {
                                     color={colors.success}
                                 />
                             </View>
-                            <Text style={styles.modalTitle}>Başarılı!</Text>
+                            <Text style={styles.modalTitle}>{t('paywall.successTitle')}</Text>
                         </View>
                         <Text style={styles.modalMessage}>
-                            Premium aktif edildi. Artık tüm özelliklere erişebilirsin.
+                            {t('paywall.successMessage')}
                         </Text>
                         <View style={styles.modalActions}>
                             <Button
-                                title={isSettingsEntry ? 'Anasayfaya Git' : 'İlerle'}
+                                title={isSettingsEntry ? t('paywall.successHome') : t('paywall.successContinue')}
                                 onPress={handleSuccessContinue}
                                 fullWidth
                             />

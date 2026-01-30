@@ -1,14 +1,15 @@
 import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, ActivityIndicator, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import firestore, { doc, getDoc, updateDoc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { useRouter } from 'expo-router';
-import { TabScreenHeader } from '../../components/ui';
+import { Button, TabScreenHeader } from '../../components/ui';
 import { useUser } from '../../contexts/user-context';
 import { usePremium } from '../../contexts/premium-context';
+import { useLanguage } from '../../contexts/language-context';
 import type { OnboardingData, RoutineDay, WeeklyRoutine } from '../../contexts/onboarding-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -155,20 +156,31 @@ export default function ProfileScreen() {
     const router = useRouter();
     const { state: userState } = useUser();
     const { isPremium, openCustomerCenter } = usePremium();
+    const { language, setLanguage, t } = useLanguage();
     const [onboardingData, setOnboardingData] = useState<Partial<OnboardingData> | null>(null);
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
     const [isEditingName, setIsEditingName] = useState(false);
     const [nameDraft, setNameDraft] = useState('');
     const [isSavingName, setIsSavingName] = useState(false);
+    const [isLanguageModalVisible, setLanguageModalVisible] = useState(false);
+
+    const languageOptions = useMemo(
+        () => [
+            { key: 'tr' as const, label: t('language.tr') },
+            { key: 'en' as const, label: t('language.en') },
+        ],
+        [t]
+    );
+    const languageLabel = languageOptions.find((option) => option.key === language)?.label ?? language;
 
     const handleResetOnboarding = async () => {
         Alert.alert(
-            'Onboarding Sıfırla',
-            'Onboarding verileriniz silinecek. Devam etmek istiyor musunuz?',
+            t('settings.resetTitle'),
+            t('settings.resetMessage'),
             [
-                { text: 'İptal', style: 'cancel' },
+                { text: t('common.cancel'), style: 'cancel' },
                 {
-                    text: 'Sıfırla',
+                    text: t('settings.resetConfirm'),
                     style: 'destructive',
                     onPress: async () => {
                         try {
@@ -535,7 +547,7 @@ export default function ProfileScreen() {
                     )}
 
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Ayarlar</Text>
+                        <Text style={styles.sectionTitle}>{t('settings.title')}</Text>
 
                         <TouchableOpacity
                             style={styles.menuItem}
@@ -553,10 +565,27 @@ export default function ProfileScreen() {
                                     <MaterialCommunityIcons name="star-circle" size={18} color={colors.primary} />
                                 </View>
                                 <View>
-                                    <Text style={styles.menuItemText}>Üyelik</Text>
+                                    <Text style={styles.menuItemText}>{t('settings.membership')}</Text>
                                     <Text style={styles.menuItemSubtext}>
-                                        {isPremium ? 'Omnoo Unlimited' : 'Ücretsiz plan'}
+                                        {isPremium ? t('settings.premiumPlan') : t('settings.freePlan')}
                                     </Text>
+                                </View>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => setLanguageModalVisible(true)}
+                            activeOpacity={0.9}
+                        >
+                            <View style={styles.menuItemContent}>
+                                <View style={styles.menuIconBadge}>
+                                    <MaterialCommunityIcons name="translate" size={18} color={colors.primary} />
+                                </View>
+                                <View>
+                                    <Text style={styles.menuItemText}>{t('language.title')}</Text>
+                                    <Text style={styles.menuItemSubtext}>{languageLabel}</Text>
                                 </View>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
@@ -567,13 +596,62 @@ export default function ProfileScreen() {
                                 <View style={styles.menuIconBadge}>
                                     <MaterialCommunityIcons name="restart" size={18} color={colors.primary} />
                                 </View>
-                                <Text style={styles.menuItemText}>Onboarding&apos;i Sıfırla</Text>
+                                <Text style={styles.menuItemText}>{t('settings.resetOnboarding')}</Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                     </View>
                 </ScrollView>
             )}
+
+            <Modal
+                visible={isLanguageModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setLanguageModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>{t('language.modalTitle')}</Text>
+                        <Text style={styles.modalSubtitle}>{t('language.description')}</Text>
+
+                        <View style={styles.languageList}>
+                            {languageOptions.map((option) => {
+                                const isSelected = option.key === language;
+                                return (
+                                    <TouchableOpacity
+                                        key={option.key}
+                                        style={[styles.languageRow, isSelected && styles.languageRowSelected]}
+                                        onPress={() => setLanguage(option.key)}
+                                        activeOpacity={0.9}
+                                    >
+                                        <Text style={styles.languageLabel}>{option.label}</Text>
+                                        {isSelected ? (
+                                            <MaterialCommunityIcons
+                                                name="check-circle"
+                                                size={20}
+                                                color={colors.primary}
+                                            />
+                                        ) : (
+                                            <MaterialCommunityIcons
+                                                name="circle-outline"
+                                                size={20}
+                                                color={colors.textMuted}
+                                            />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        <Button
+                            title={t('common.ok')}
+                            onPress={() => setLanguageModalVisible(false)}
+                            fullWidth
+                        />
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -1017,6 +1095,58 @@ const styles = StyleSheet.create({
         ...typography.caption,
         color: colors.textSecondary,
         marginTop: 2,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: colors.overlay,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: spacing.lg,
+    },
+    modalCard: {
+        width: '100%',
+        maxWidth: 420,
+        backgroundColor: colors.surface,
+        borderRadius: radius.xl,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        padding: spacing.lg,
+        gap: spacing.md,
+        ...shadows.md,
+    },
+    modalTitle: {
+        ...typography.h3,
+        color: colors.textPrimary,
+        textAlign: 'center',
+    },
+    modalSubtitle: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        textAlign: 'center',
+    },
+    languageList: {
+        gap: spacing.sm,
+        marginTop: spacing.sm,
+    },
+    languageRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        backgroundColor: colors.surfaceAlt,
+    },
+    languageRowSelected: {
+        borderColor: colors.primaryLight,
+        backgroundColor: colors.primaryLight + '12',
+    },
+    languageLabel: {
+        ...typography.body,
+        color: colors.textPrimary,
+        fontWeight: '600',
     },
     loadingContainer: {
         flex: 1,

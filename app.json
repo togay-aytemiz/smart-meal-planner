@@ -19,10 +19,16 @@
       "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "GADApplicationIdentifier": "ca-app-pub-5638979274291428~7497731810"
+        "GADApplicationIdentifier": "ca-app-pub-5638979274291428~7497731810",
+        "NSUserTrackingUsageDescription": "We use your device identifier to deliver relevant ads and improve the app experience."
       }
     },
     "android": {
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "com.google.android.gms.permission.AD_ID"
+      ],
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

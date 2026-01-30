@@ -144,6 +144,108 @@ Her iki mağazada da şunlar gerekir:
 - Gizlilik politikası linki
 - “Contains Ads” ve “Data Safety” gibi formlar
 
+### 9.1 App Store listing adımları (iOS)
+
+**Nerede?** App Store Connect → My Apps → Smart Meal Planner → App Information / App Privacy / Pricing
+
+**Adım adım:**
+1) **App Information** alanlarını doldur: ad, dil, kategori, sku (kendin verirsin).
+2) **App Privacy** formunu doldur (Data Types).
+3) **Pricing & Availability** bölümünde fiyat/ülke ayarlarını kontrol et.
+4) **App Store Listing** içine metinleri ve görselleri yükle.
+
+**Metin şablonları (kopyala‑yapıştır, sonra düzelt):**
+
+**Subtitle (<= 30 karakter)**  
+TR: `Akıllı haftalık yemek planı`  
+EN: `Smart weekly meal planner`
+
+**Keywords (<= 100 karakter)**  
+TR: `yemek planı,haftalık menü,alışveriş listesi,tarif,AI`  
+EN: `meal planner,weekly menu,grocery list,recipe,AI`
+
+**Description (TR)**  
+```
+Akıllı Yemek Planlayıcı, haftalık menünü kişisel tercihlerin ve rutinlerine göre hazırlar.
+• Haftalık akıllı menü
+• Kişisel tarifler ve öneriler
+• Otomatik alışveriş listesi
+• Pantry (evdeki malzemeler) takibi
+
+Rutinlerine göre planlanan menülerle “bugün ne pişirsem” derdinden kurtul.
+```
+
+**Description (EN)**  
+```
+Smart Meal Planner builds a weekly menu based on your routines and preferences.
+• Smart weekly menu
+• Personalized recipes
+• Automatic grocery list
+• Pantry tracking
+
+Spend less time deciding and more time cooking.
+```
+
+**Görseller (App Store)**  
+- En az iPhone ekran görüntüleri (farklı boyutlar istenebilir).  
+- iPad destekliyorsan iPad görselleri de ekle.  
+- İstersen kısa bir **preview video** ekleyebilirsin (opsiyonel).
+
+---
+
+### 9.2 Google Play listing adımları (Android)
+
+**Nerede?** Play Console → All apps → Smart Meal Planner → Store listing / App content / Data safety
+
+**Adım adım:**
+1) **Store listing** alanlarını doldur: kısa açıklama, tam açıklama, görseller.
+2) **App content** bölümünde “Contains ads”, hedef kitle, ve gerekli formları tamamla.
+3) **Data safety** formunu doldur.
+
+**Metin şablonları (kopyala‑yapıştır, sonra düzelt):**
+
+**Short description (<= 80 karakter)**  
+TR: `Rutinlerine uygun haftalık menü ve alışveriş listesi.`  
+EN: `Weekly menus and grocery lists tailored to your routine.`
+
+**Full description (TR)**  
+```
+Smart Meal Planner, alışkanlıklarına göre haftalık menü oluşturur.
+• Akıllı haftalık plan
+• Kişiye özel tarifler
+• Otomatik alışveriş listesi
+• Pantry takibi
+
+Zaman kazan, daha kolay yemek planla.
+```
+
+**Full description (EN)**  
+```
+Smart Meal Planner creates a weekly menu based on your habits.
+• Smart weekly plan
+• Personalized recipes
+• Automatic grocery list
+• Pantry tracking
+
+Save time and plan meals effortlessly.
+```
+
+**Görseller (Google Play)**  
+- Telefon ekran görüntüleri (en az 2-4 adet).  
+- İstersen tablet görselleri ekleyebilirsin.  
+- Feature graphic (1024x500) gerekiyorsa yükle.
+
+---
+
+### 9.3 URL’ler (Privacy / Terms / Support)
+
+**Bu linkler mağaza formunda zorunlu olabilir:**  
+- Privacy Policy URL  
+- Terms of Use URL  
+- Support URL (mail ya da web sayfası)
+
+Bizim uygulamada paywall ve ayarlar ekranı bu linklere yönlendirecek.
+
 ---
 
 ## 10) Review ve yayın
@@ -177,4 +279,3 @@ Her iki mağazada da şunlar gerekir:
 - Android package: `studio.agent.smart_meal_planner.android`
 - RevenueCat prod key’leri gelince EAS prod env’e yazılacak.
 - EAS prod build ve submit ile mağazalara gönderilecek.
-

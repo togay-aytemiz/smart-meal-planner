@@ -470,6 +470,56 @@ const safeUpdateMenuGenerationStatus = async (
     console.warn("Failed to update menu generation status:", statusError);
   }
 };
+
+const toMillis = (value: unknown): number | null => {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === "number") {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  const possibleTimestamp = value as { toDate?: () => Date };
+  if (typeof possibleTimestamp?.toDate === "function") {
+    return possibleTimestamp.toDate().getTime();
+  }
+  return null;
+};
+
+const assertRateLimit = async (userId: string, key: string, windowMs: number) => {
+  const db = getDb();
+  const ref = db.collection("rate_limits").doc(`${userId}_${key}`);
+
+  await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(ref);
+    const nowMs = Date.now();
+    const lastMs = snap.exists ? toMillis(snap.data()?.lastCalledAt ?? snap.data()?.updatedAt) : null;
+    if (lastMs && nowMs - lastMs < windowMs) {
+      const retryAfterSeconds = Math.ceil((windowMs - (nowMs - lastMs)) / 1000);
+      throw new functions.HttpsError(
+        "resource-exhausted",
+        `Please wait ${retryAfterSeconds}s and try again.`
+      );
+    }
+
+    transaction.set(
+      ref,
+      {
+        userId,
+        key,
+        lastCalledAt: new Date(nowMs).toISOString(),
+        updatedAt: new Date(nowMs).toISOString(),
+      },
+      { merge: true }
+    );
+  });
+};
 const WEEKEND_KEYS = new Set<WeekdayKey>(["saturday", "sunday"]);
 
 const DEFAULT_ROUTINES: WeeklyRoutine = {
@@ -1121,6 +1171,17 @@ export const generateWeeklyMenu = onCall(async (request) => {
     const weekStartDate = resolveWeekStart(payload.weekStart);
     const weekStart = formatISODate(weekStartDate);
     const repeatMode = payload.repeatMode ?? "consecutive";
+
+    const statusDocId = buildStatusDocId(userId, weekStart);
+    const statusSnap = await db.collection("menuGenerationStatus").doc(statusDocId).get();
+    if (statusSnap.exists && statusSnap.data()?.status === "in_progress") {
+      throw new functions.HttpsError(
+        "resource-exhausted",
+        "Weekly menu generation is already in progress"
+      );
+    }
+
+    await assertRateLimit(userId, `weekly_menu_${weekStart}`, 24 * 60 * 60 * 1000);
 
     const weekDays = buildWeekDays(weekStartDate, onboarding.routines);
     const dinnerAssignments = assignDinnerSlots(weekDays, repeatMode);

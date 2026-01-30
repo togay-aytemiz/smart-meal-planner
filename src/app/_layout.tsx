@@ -5,11 +5,21 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useEffect } from 'react';
+import mobileAds from 'react-native-google-mobile-ads';
 import { UserProvider } from '../contexts/user-context';
 import { PremiumProvider } from '../contexts/premium-context';
 import { colors } from '../theme/colors';
 
 export default function RootLayout() {
+  useEffect(() => {
+    mobileAds()
+      .initialize()
+      .catch((error) => {
+        console.warn('AdMob initialize error:', error);
+      });
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <UserProvider>

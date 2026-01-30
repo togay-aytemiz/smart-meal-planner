@@ -405,6 +405,20 @@ Inspired by Ollie.ai's calm, modern aesthetic:
 
 ---
 
+## Prod Öncesi Checklist
+
+### AdMob
+- [ ] `app-ads.txt` yayınla (domain root; AdMob doğrulaması için)
+- [ ] Play Console → “Contains ads” ayarını **Yes** yap
+
+### RevenueCat
+- [ ] Prod API key’lerine geç (iOS/Android)
+- [ ] Store ürünlerini (App Store Connect / Play Console) **prod** olarak oluştur ve RevenueCat’te import et
+- [ ] Offering + entitlement mapping’i doğrula (production)
+- [ ] Paywall / restore akışlarını prod ortamında test et
+
+---
+
 ## Appendix
 
 ### Glossary

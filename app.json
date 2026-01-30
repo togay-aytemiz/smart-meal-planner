@@ -16,7 +16,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "studio.agent.smart-meal-planner",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "GADApplicationIdentifier": "ca-app-pub-5638979274291428~7497731810"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -46,6 +49,13 @@
           "ios": {
             "useFrameworks": "static"
           }
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-5638979274291428~9613992793",
+          "iosAppId": "ca-app-pub-5638979274291428~7497731810"
         }
       ]
     ],

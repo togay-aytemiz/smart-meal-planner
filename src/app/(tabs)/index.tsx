@@ -575,6 +575,10 @@ export default function TodayScreen() {
     const [changeMenuError, setChangeMenuError] = useState<string | null>(null);
     const weeklyGenerationKeyRef = useRef<string | null>(null);
     const regenerationHandledRef = useRef<string | null>(null);
+    const dayMenuCacheRef = useRef<Record<string, Record<MealSectionKey, MenuDecisionWithLinks | null>>>({});
+    const hasMountedRef = useRef(false);
+    const contentOpacity = useRef(new Animated.Value(1)).current;
+    const contentTranslateY = useRef(new Animated.Value(0)).current;
     const { height: windowHeight } = useWindowDimensions();
     const sheetTranslateY = useRef(new Animated.Value(windowHeight)).current;
     const sheetOpacity = useRef(new Animated.Value(0)).current;
@@ -593,14 +597,23 @@ export default function TodayScreen() {
         [menuBundles]
     );
     const hasAnyMenuForDay = hasMenuByType.breakfast || hasMenuByType.lunch || hasMenuByType.dinner;
-    const showHolidayEmpty = isHoliday && !hasAnyMenuForDay;
+    const showHolidayEmpty = isHoliday && !hasAnyMenuForDay && !loading;
     const displayMealPlan = useMemo(
         () => ({
             breakfast: mealPlan.breakfast || hasMenuByType.breakfast,
             lunch: mealPlan.lunch || hasMenuByType.lunch,
-            dinner: mealPlan.dinner || hasMenuByType.dinner,
+            dinner: mealPlan.dinner || hasMenuByType.dinner || (loading && isHoliday),
         }),
-        [hasMenuByType.breakfast, hasMenuByType.dinner, hasMenuByType.lunch, mealPlan.breakfast, mealPlan.dinner, mealPlan.lunch]
+        [
+            hasMenuByType.breakfast,
+            hasMenuByType.dinner,
+            hasMenuByType.lunch,
+            isHoliday,
+            loading,
+            mealPlan.breakfast,
+            mealPlan.dinner,
+            mealPlan.lunch,
+        ]
     );
     const menuTitle = selectedDay.isToday ? 'Bugünün menüsü' : 'Günün menüsü';
     const mealItemsByType = useMemo(() => {
@@ -754,7 +767,11 @@ export default function TodayScreen() {
         let isMounted = true;
 
         const fetchMenu = async () => {
-            setLoading(true);
+            const inMemoryMenu = dayMenuCacheRef.current[selectedDay.key];
+            if (inMemoryMenu) {
+                setMenuBundles(inMemoryMenu);
+            }
+            setLoading(!inMemoryMenu);
             setError(null);
             try {
                 const fallbackRaw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -883,6 +900,9 @@ export default function TodayScreen() {
                 }
 
                 const hasCachedMenu = mealTypes.some((mealType) => Boolean(cachedBundles[mealType]));
+                if (hasCachedMenu) {
+                    dayMenuCacheRef.current[dateKey] = cachedBundles;
+                }
 
                 const updateBundle = (mealType: MealSectionKey, bundle: MenuDecisionWithLinks) => {
                     if (!isMounted) {
@@ -892,6 +912,12 @@ export default function TodayScreen() {
                         ...prev,
                         [mealType]: bundle,
                     }));
+                    const cached = dayMenuCacheRef.current[dateKey] ?? {
+                        breakfast: null,
+                        lunch: null,
+                        dinner: null,
+                    };
+                    dayMenuCacheRef.current[dateKey] = { ...cached, [mealType]: bundle };
                 };
 
                 const loadMenusFromFirestore = async (expectedHash: string | null) => {
@@ -922,7 +948,14 @@ export default function TodayScreen() {
                     return { loadedCount, lastError };
                 };
 
-                let { loadedCount, lastError } = await loadMenusFromFirestore(firestoreExpectedHash);
+                let loadedCount = 0;
+                let lastError: string | null = null;
+                const shouldFetchRemote = !hasCachedMenu || refreshing || shouldForceRegeneration;
+                if (shouldFetchRemote) {
+                    const remoteResult = await loadMenusFromFirestore(firestoreExpectedHash);
+                    loadedCount = remoteResult.loadedCount;
+                    lastError = remoteResult.lastError;
+                }
                 if (regenerationError && loadedCount === 0 && !lastError) {
                     lastError = regenerationError;
                 }
@@ -1021,6 +1054,28 @@ export default function TodayScreen() {
         };
     }, [selectedDayKey, userState.isLoading, userState.user?.uid, refreshKey]);
 
+    useEffect(() => {
+        if (!hasMountedRef.current) {
+            hasMountedRef.current = true;
+            return;
+        }
+
+        contentOpacity.setValue(0);
+        contentTranslateY.setValue(8);
+        Animated.parallel([
+            Animated.timing(contentOpacity, {
+                toValue: 1,
+                duration: 240,
+                useNativeDriver: true,
+            }),
+            Animated.timing(contentTranslateY, {
+                toValue: 0,
+                duration: 240,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, [contentOpacity, contentTranslateY, selectedDayKey]);
+
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         setRefreshKey((prev) => prev + 1);
@@ -1111,6 +1166,25 @@ export default function TodayScreen() {
         }
         setUsePantryOnly((prev) => !prev);
     };
+
+    const handleSelectDay = useCallback(
+        (dayKey: string) => {
+            if (dayKey === selectedDayKey) {
+                return;
+            }
+            const cached = dayMenuCacheRef.current[dayKey];
+            if (cached) {
+                setMenuBundles(cached);
+                setLoading(false);
+            } else {
+                setLoading(true);
+                setMenuBundles({ breakfast: null, lunch: null, dinner: null });
+            }
+            setError(null);
+            setSelectedDayKey(dayKey);
+        },
+        [selectedDayKey]
+    );
 
     const handleRegenerateMenu = async () => {
         if (isRegeneratingMenu) {
@@ -1327,7 +1401,7 @@ export default function TodayScreen() {
                                         isSelectedToday && styles.dayCardSelectedToday,
                                         isSelectedOther && styles.dayCardSelectedOther,
                                     ]}
-                                    onPress={() => setSelectedDayKey(day.key)}
+                                    onPress={() => handleSelectDay(day.key)}
                                     disabled={day.isPast}
                                     hitSlop={hitSlop}
                                     activeOpacity={0.85}
@@ -1359,161 +1433,171 @@ export default function TodayScreen() {
                     })}
                 </View>
 
-                <View style={styles.dayHeader}>
-                    <View>
-                        <Text style={styles.dayTitle}>{selectedDayLabel}</Text>
-                        <Text style={styles.daySubtitle}>{selectedDaySubtitle}</Text>
+                <Animated.View
+                    style={[
+                        styles.dayContent,
+                        {
+                            opacity: contentOpacity,
+                            transform: [{ translateY: contentTranslateY }],
+                        },
+                    ]}
+                >
+                    <View style={styles.dayHeader}>
+                        <View>
+                            <Text style={styles.dayTitle}>{selectedDayLabel}</Text>
+                            <Text style={styles.daySubtitle}>{selectedDaySubtitle}</Text>
+                        </View>
+                        {!showHolidayEmpty ? (
+                            <TouchableOpacity
+                                style={[
+                                    styles.changeMenuButton,
+                                    (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
+                                        styles.changeMenuButtonDisabled,
+                                ]}
+                                onPress={() => handleOpenChangeSheet('change')}
+                                disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
+                                hitSlop={hitSlop}
+                                activeOpacity={0.85}
+                            >
+                                <MaterialCommunityIcons
+                                    name="swap-horizontal"
+                                    size={18}
+                                    color={colors.textPrimary}
+                                />
+                                <Text style={styles.changeMenuText}>Menüyü değiştir</Text>
+                            </TouchableOpacity>
+                        ) : null}
                     </View>
-                    {!showHolidayEmpty ? (
-                        <TouchableOpacity
-                            style={[
-                                styles.changeMenuButton,
-                                (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
-                                    styles.changeMenuButtonDisabled,
-                            ]}
-                            onPress={() => handleOpenChangeSheet('change')}
-                            disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
-                            hitSlop={hitSlop}
-                            activeOpacity={0.85}
-                        >
-                            <MaterialCommunityIcons
-                                name="swap-horizontal"
-                                size={18}
-                                color={colors.textPrimary}
-                            />
-                            <Text style={styles.changeMenuText}>Menüyü değiştir</Text>
-                        </TouchableOpacity>
-                    ) : null}
-                </View>
 
-                {showHolidayEmpty ? (
-                    <View style={styles.holidayEmpty}>
-                        <Image
-                            source={require('../../../assets/vacation.png')}
-                            style={styles.holidayEmptyImage}
-                            resizeMode="contain"
-                        />
-                        <Text style={styles.holidayEmptyTitle}>Omnoo tatilde</Text>
-                        <Text style={styles.holidayEmptySubtitle}>
-                            Bu günü tatil olarak işaretlediğin için Omnoo menü oluşturmadı.
-                        </Text>
-                        <TouchableOpacity
-                            style={[
-                                styles.holidayCta,
-                                (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
-                                    styles.changeMenuButtonDisabled,
-                            ]}
-                            onPress={() => handleOpenChangeSheet('create')}
-                            disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
-                            activeOpacity={0.85}
-                        >
+                    {showHolidayEmpty ? (
+                        <View style={styles.holidayEmpty}>
                             <Image
-                                source={require('../../../assets/pw-chef.png')}
-                                style={styles.holidayCtaIcon}
+                                source={require('../../../assets/vacation.png')}
+                                style={styles.holidayEmptyImage}
                                 resizeMode="contain"
                             />
-                            <Text style={styles.holidayCtaText}>Menü oluştur</Text>
-                        </TouchableOpacity>
-                    </View>
-                ) : null}
-
-                {showReasoning ? (
-                    <ReasoningBubble text={reasoningText} />
-                ) : null}
-
-                {mealSections.map((section) => (
-                    <View key={section.id} style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <View style={[styles.sectionIcon, { backgroundColor: section.tint }]}>
-                                <MaterialCommunityIcons name={section.icon} size={18} color={section.iconColor} />
-                            </View>
-                            <Text style={styles.sectionTitle}>{section.title}</Text>
+                            <Text style={styles.holidayEmptyTitle}>Omnoo tatilde</Text>
+                            <Text style={styles.holidayEmptySubtitle}>
+                                Bu günü tatil olarak işaretlediğin için Omnoo menü oluşturmadı.
+                            </Text>
+                            <TouchableOpacity
+                                style={[
+                                    styles.holidayCta,
+                                    (userState.isLoading || !userState.user?.uid || isRegeneratingMenu) &&
+                                        styles.changeMenuButtonDisabled,
+                                ]}
+                                onPress={() => handleOpenChangeSheet('create')}
+                                disabled={userState.isLoading || !userState.user?.uid || isRegeneratingMenu}
+                                activeOpacity={0.85}
+                            >
+                                <Image
+                                    source={require('../../../assets/pw-chef.png')}
+                                    style={styles.holidayCtaIcon}
+                                    resizeMode="contain"
+                                />
+                                <Text style={styles.holidayCtaText}>Menü oluştur</Text>
+                            </TouchableOpacity>
                         </View>
+                    ) : null}
 
-                        <View style={styles.sectionCards}>
-                            {section.items.length ? (
-                                section.items.map((item) => (
-                                    <TouchableOpacity
-                                        key={item.id}
-                                        activeOpacity={0.85}
-                                        style={styles.mealCard}
-                                        onPress={() => handleOpenMeal(section.id, item.course, item.title)}
-                                    >
-                                        <View
-                                            pointerEvents="none"
-                                            style={[
-                                                styles.mealAccent,
-                                                { backgroundColor: item.mediaTone },
-                                            ]}
-                                        />
-                                        <View style={styles.mealCardHeader}>
+                    {showReasoning ? (
+                        <ReasoningBubble text={reasoningText} />
+                    ) : null}
+
+                    {mealSections.map((section) => (
+                        <View key={section.id} style={styles.section}>
+                            <View style={styles.sectionHeader}>
+                                <View style={[styles.sectionIcon, { backgroundColor: section.tint }]}>
+                                    <MaterialCommunityIcons name={section.icon} size={18} color={section.iconColor} />
+                                </View>
+                                <Text style={styles.sectionTitle}>{section.title}</Text>
+                            </View>
+
+                            <View style={styles.sectionCards}>
+                                {section.items.length ? (
+                                    section.items.map((item) => (
+                                        <TouchableOpacity
+                                            key={item.id}
+                                            activeOpacity={0.85}
+                                            style={styles.mealCard}
+                                            onPress={() => handleOpenMeal(section.id, item.course, item.title)}
+                                        >
                                             <View
+                                                pointerEvents="none"
                                                 style={[
-                                                    styles.mealBadge,
+                                                    styles.mealAccent,
                                                     { backgroundColor: item.mediaTone },
                                                 ]}
-                                            >
-                                                <MaterialCommunityIcons
-                                                    name={item.icon}
-                                                    size={22}
-                                                    color={colors.textPrimary}
-                                                />
+                                            />
+                                            <View style={styles.mealCardHeader}>
+                                                <View
+                                                    style={[
+                                                        styles.mealBadge,
+                                                        { backgroundColor: item.mediaTone },
+                                                    ]}
+                                                >
+                                                    <MaterialCommunityIcons
+                                                        name={item.icon}
+                                                        size={22}
+                                                        color={colors.textPrimary}
+                                                    />
+                                                </View>
+                                                <View style={styles.mealMetaRow}>
+                                                    {typeof item.timeMinutes === 'number' && item.timeMinutes > 0 && (
+                                                        <View style={styles.mealMetaChip}>
+                                                            <MaterialCommunityIcons
+                                                                name="clock-outline"
+                                                                size={12}
+                                                                color={colors.textSecondary}
+                                                            />
+                                                            <Text style={styles.mealMetaText}>
+                                                                {item.timeMinutes} dk
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                    {typeof item.calories === 'number' && item.calories > 0 && (
+                                                        <View style={styles.mealMetaChip}>
+                                                            <MaterialCommunityIcons
+                                                                name="fire"
+                                                                size={12}
+                                                                color={colors.textSecondary}
+                                                            />
+                                                            <Text style={styles.mealMetaText}>
+                                                                {item.calories} kcal
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                </View>
                                             </View>
-                                            <View style={styles.mealMetaRow}>
-                                                {typeof item.timeMinutes === 'number' && item.timeMinutes > 0 && (
-                                                    <View style={styles.mealMetaChip}>
-                                                        <MaterialCommunityIcons
-                                                            name="clock-outline"
-                                                            size={12}
-                                                            color={colors.textSecondary}
-                                                        />
-                                                        <Text style={styles.mealMetaText}>
-                                                            {item.timeMinutes} dk
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                                {typeof item.calories === 'number' && item.calories > 0 && (
-                                                    <View style={styles.mealMetaChip}>
-                                                        <MaterialCommunityIcons
-                                                            name="fire"
-                                                            size={12}
-                                                            color={colors.textSecondary}
-                                                        />
-                                                        <Text style={styles.mealMetaText}>
-                                                            {item.calories} kcal
-                                                        </Text>
-                                                    </View>
-                                                )}
+                                            <View style={styles.mealCardBody}>
+                                                <Text style={styles.mealTitle} numberOfLines={2}>
+                                                    {item.title}
+                                                </Text>
+                                                <View style={styles.mealCategoryRow}>
+                                                    <MaterialCommunityIcons
+                                                        name={item.categoryIcon}
+                                                        size={14}
+                                                        color={colors.textSecondary}
+                                                    />
+                                                    <Text style={styles.mealCategoryText}>{item.category}</Text>
+                                                </View>
                                             </View>
-                                        </View>
-                                        <View style={styles.mealCardBody}>
-                                            <Text style={styles.mealTitle} numberOfLines={2}>
-                                                {item.title}
-                                            </Text>
-                                            <View style={styles.mealCategoryRow}>
-                                                <MaterialCommunityIcons
-                                                    name={item.categoryIcon}
-                                                    size={14}
-                                                    color={colors.textSecondary}
-                                                />
-                                                <Text style={styles.mealCategoryText}>{item.category}</Text>
-                                            </View>
-                                        </View>
-                                    </TouchableOpacity>
-                                ))
-                            ) : (
-                                <View style={styles.emptyMealCard}>
-                                    <MaterialCommunityIcons
-                                        name="calendar-blank-outline"
-                                        size={16}
-                                        color={colors.textMuted}
-                                    />
-                                    <Text style={styles.emptyMealText}>{section.emptyMessage}</Text>
-                                </View>
-                            )}
+                                        </TouchableOpacity>
+                                    ))
+                                ) : (
+                                    <View style={styles.emptyMealCard}>
+                                        <MaterialCommunityIcons
+                                            name="calendar-blank-outline"
+                                            size={16}
+                                            color={colors.textMuted}
+                                        />
+                                        <Text style={styles.emptyMealText}>{section.emptyMessage}</Text>
+                                    </View>
+                                )}
+                            </View>
                         </View>
-                    </View>
-                ))}
+                    ))}
+                </Animated.View>
             </ScrollView>
 
             <Modal
@@ -1769,6 +1853,9 @@ const styles = StyleSheet.create({
     contentContainer: {
         paddingHorizontal: spacing.lg,
         paddingBottom: spacing.lg,
+        gap: spacing.md,
+    },
+    dayContent: {
         gap: spacing.md,
     },
     calendarRow: {

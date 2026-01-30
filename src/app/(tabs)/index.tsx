@@ -593,10 +593,10 @@ export default function TodayScreen() {
     const router = useRouter();
     const { state: userState } = useUser();
     const { t, locale, language } = useLanguage();
-    const now = new Date();
+    const now = useMemo(() => new Date(), []);
     const timeOfDay = getTimeOfDay(now);
     const greeting = t(`home.greeting.${timeOfDay}`);
-    const weekDays = buildWeekDays(now, t);
+    const weekDays = useMemo(() => buildWeekDays(now, t), [now, t]);
     const todayKey = weekDays.find((day) => day.isToday)?.key ?? weekDays[0].key;
     const [selectedDayKey, setSelectedDayKey] = useState(todayKey);
     const selectedDay = weekDays.find((day) => day.key === selectedDayKey) ?? weekDays[0];
